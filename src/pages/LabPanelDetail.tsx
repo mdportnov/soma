@@ -1,0 +1,137 @@
+import * as React from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Sparkles, TestTubes, Trash2 } from "lucide-react";
+import { useQuery } from "@/hooks/useQuery";
+import { deletePanel, getPanel, getPanelResults } from "@/db/repos";
+import { PageHeader } from "@/components/app/PageHeader";
+import { Loading } from "@/components/app/Loading";
+import { EmptyState } from "@/components/app/EmptyState";
+import { FlagBadge } from "@/components/app/FlagBadge";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatDate, formatValue } from "@/lib/utils";
+
+export function LabPanelDetail() {
+  const { id } = useParams();
+  const panelId = Number(id);
+  const navigate = useNavigate();
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+
+  const { data, loading } = useQuery(async () => {
+    const [panel, results] = await Promise.all([getPanel(panelId), getPanelResults(panelId)]);
+    return { panel, results };
+  }, [panelId]);
+
+  if (loading || !data) return <Loading />;
+  if (!data.panel) return <EmptyState icon={TestTubes} title="Panel not found" />;
+
+  const { panel, results } = data;
+  const outOfRange = results.filter((r) => r.outOfRange).length;
+
+  return (
+    <>
+      <Link
+        to="/labs"
+        className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="size-3.5" /> Lab results
+      </Link>
+      <PageHeader
+        title={`${formatDate(panel.date)}${panel.labName ? ` — ${panel.labName}` : ""}`}
+        description={[
+          [panel.city, panel.country].filter(Boolean).join(", "),
+          `${results.length} results`,
+          outOfRange ? `${outOfRange} out of range` : "all in range",
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        actions={
+          <>
+            {panel.importMethod === "ai" && (
+              <Badge>
+                <Sparkles className="size-3" /> AI imported
+              </Badge>
+            )}
+            <Badge variant="secondary">{panel.panelType}</Badge>
+            <Button variant="outline" size="icon" onClick={() => setConfirmDelete(true)} aria-label="Delete panel">
+              <Trash2 className="text-destructive" />
+            </Button>
+          </>
+        }
+      />
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Biomarker</TableHead>
+                <TableHead>Value</TableHead>
+                <TableHead>Normalized</TableHead>
+                <TableHead>Reference</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Source label</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {results.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <Link to={`/biomarkers/${r.biomarkerId}`} className="font-medium text-primary hover:underline">
+                      {r.biomarker.canonicalName}
+                    </Link>
+                    <p className="text-[11px] text-muted-foreground">{r.biomarker.category}</p>
+                  </TableCell>
+                  <TableCell className="tabular-nums">
+                    {formatValue(r.value)} {r.unit}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {r.valueNormalized != null && r.unitNormalized !== r.unit
+                      ? `${formatValue(r.valueNormalized)} ${r.unitNormalized}`
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {r.biomarker.refLow != null || r.biomarker.refHigh != null
+                      ? `${formatValue(r.biomarker.refLow) ?? ""}–${formatValue(r.biomarker.refHigh) ?? ""} ${r.biomarker.defaultUnit}`
+                      : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <FlagBadge flag={r.outOfRange ? r.flag : null} />
+                  </TableCell>
+                  <TableCell className="max-w-44 truncate text-xs text-muted-foreground" title={r.rawLabel ?? undefined}>
+                    {r.rawLabel ?? "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete this panel?"
+        description="The panel and all its results will be removed. This cannot be undone."
+      >
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={async () => {
+              await deletePanel(panelId);
+              navigate("/labs");
+            }}
+          >
+            Delete panel
+          </Button>
+        </div>
+      </Dialog>
+    </>
+  );
+}

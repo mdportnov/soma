@@ -33,8 +33,8 @@ export const db = drizzle<typeof schema>(
       await conn.execute(sql, params);
       return { rows: [] };
     }
-    const rows = (await conn.select<Record<string, unknown>[]>(sql, params)).map(
-      (row) => Object.values(row),
+    const rows = (await conn.select<Record<string, unknown>[]>(sql, params)).map((row) =>
+      Object.values(row),
     );
     return { rows: method === "get" ? (rows[0] ?? []) : rows };
   },

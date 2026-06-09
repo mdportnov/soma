@@ -34,7 +34,10 @@ const ACTIVE_PROFILE_KEY = "soma.activeProfileId";
 export async function ensureActiveProfile(): Promise<number> {
   const stored = localStorage.getItem(ACTIVE_PROFILE_KEY);
   if (stored) {
-    const existing = await db.select().from(profile).where(eq(profile.id, Number(stored)));
+    const existing = await db
+      .select()
+      .from(profile)
+      .where(eq(profile.id, Number(stored)));
     if (existing.length) return existing[0].id;
   }
   const all = await db.select().from(profile).limit(1);
@@ -57,7 +60,11 @@ export async function getProfile(id: number) {
 
 export async function updateProfile(
   id: number,
-  data: Partial<{ name: string; birthDate: string | null; sex: "male" | "female" | "other" | null }>,
+  data: Partial<{
+    name: string;
+    birthDate: string | null;
+    sex: "male" | "female" | "other" | null;
+  }>,
 ) {
   await db.update(profile).set(data).where(eq(profile.id, id));
 }
@@ -98,7 +105,11 @@ export async function listPanels(profileId: number): Promise<PanelWithCount[]> {
     .where(eq(labPanel.profileId, profileId))
     .groupBy(labPanel.id)
     .orderBy(desc(labPanel.date), desc(labPanel.id));
-  return rows.map((r) => ({ ...r.panel, resultCount: r.resultCount, outOfRangeCount: Number(r.outOfRangeCount) }));
+  return rows.map((r) => ({
+    ...r.panel,
+    resultCount: r.resultCount,
+    outOfRangeCount: Number(r.outOfRangeCount),
+  }));
 }
 
 export type ResultWithBiomarker = LabResult & { biomarker: Biomarker };
@@ -318,10 +329,33 @@ export async function updateAttachment(id: number, data: Partial<NewAttachment>)
 // ── unified timeline (§3: query union, no dedicated table) ────────────────
 
 export type TimelineEvent =
-  | { kind: "lab_panel"; id: number; date: string; title: string; subtitle: string | null; outOfRangeCount: number; resultCount: number }
+  | {
+      kind: "lab_panel";
+      id: number;
+      date: string;
+      title: string;
+      subtitle: string | null;
+      outOfRangeCount: number;
+      resultCount: number;
+    }
   | { kind: "visit"; id: number; date: string; title: string; subtitle: string | null }
-  | { kind: "diagnosis"; id: number; date: string; title: string; subtitle: string | null; status: string }
-  | { kind: "medication"; id: number; date: string; endDate: string | null; title: string; subtitle: string | null; type: "drug" | "supplement" };
+  | {
+      kind: "diagnosis";
+      id: number;
+      date: string;
+      title: string;
+      subtitle: string | null;
+      status: string;
+    }
+  | {
+      kind: "medication";
+      id: number;
+      date: string;
+      endDate: string | null;
+      title: string;
+      subtitle: string | null;
+      type: "drug" | "supplement";
+    };
 
 export async function getTimeline(profileId: number): Promise<TimelineEvent[]> {
   const [panels, visits, diagnoses, meds] = await Promise.all([
@@ -332,39 +366,49 @@ export async function getTimeline(profileId: number): Promise<TimelineEvent[]> {
   ]);
 
   const events: TimelineEvent[] = [
-    ...panels.map((p): TimelineEvent => ({
-      kind: "lab_panel",
-      id: p.id,
-      date: p.date,
-      title: p.labName ? `Labs — ${p.labName}` : "Lab panel",
-      subtitle: [p.city, p.country].filter(Boolean).join(", ") || null,
-      outOfRangeCount: p.outOfRangeCount,
-      resultCount: p.resultCount,
-    })),
-    ...visits.map((v): TimelineEvent => ({
-      kind: "visit",
-      id: v.id,
-      date: v.date,
-      title: v.doctorName ? `Visit — ${v.doctorName}` : `Visit${v.specialty ? ` — ${v.specialty}` : ""}`,
-      subtitle: [v.clinic, v.city].filter(Boolean).join(", ") || v.specialty,
-    })),
-    ...diagnoses.map((d): TimelineEvent => ({
-      kind: "diagnosis",
-      id: d.id,
-      date: d.date,
-      title: d.name,
-      subtitle: d.icdCode,
-      status: d.status,
-    })),
-    ...meds.map((m): TimelineEvent => ({
-      kind: "medication",
-      id: m.id,
-      date: m.startDate,
-      endDate: m.endDate,
-      title: m.name,
-      subtitle: m.doseAmount ? `${m.doseAmount} ${m.doseUnit ?? ""}`.trim() : null,
-      type: m.type,
-    })),
+    ...panels.map(
+      (p): TimelineEvent => ({
+        kind: "lab_panel",
+        id: p.id,
+        date: p.date,
+        title: p.labName ? `Labs — ${p.labName}` : "Lab panel",
+        subtitle: [p.city, p.country].filter(Boolean).join(", ") || null,
+        outOfRangeCount: p.outOfRangeCount,
+        resultCount: p.resultCount,
+      }),
+    ),
+    ...visits.map(
+      (v): TimelineEvent => ({
+        kind: "visit",
+        id: v.id,
+        date: v.date,
+        title: v.doctorName
+          ? `Visit — ${v.doctorName}`
+          : `Visit${v.specialty ? ` — ${v.specialty}` : ""}`,
+        subtitle: [v.clinic, v.city].filter(Boolean).join(", ") || v.specialty,
+      }),
+    ),
+    ...diagnoses.map(
+      (d): TimelineEvent => ({
+        kind: "diagnosis",
+        id: d.id,
+        date: d.date,
+        title: d.name,
+        subtitle: d.icdCode,
+        status: d.status,
+      }),
+    ),
+    ...meds.map(
+      (m): TimelineEvent => ({
+        kind: "medication",
+        id: m.id,
+        date: m.startDate,
+        endDate: m.endDate,
+        title: m.name,
+        subtitle: m.doseAmount ? `${m.doseAmount} ${m.doseUnit ?? ""}`.trim() : null,
+        type: m.type,
+      }),
+    ),
   ];
 
   return events.sort((a, b) => b.date.localeCompare(a.date));

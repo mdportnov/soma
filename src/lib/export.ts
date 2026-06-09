@@ -73,9 +73,7 @@ export async function exportLabsCsv(profileId: number): Promise<boolean> {
     .where(eq(labPanel.profileId, profileId))
     .orderBy(asc(labPanel.date));
 
-  const header = Object.keys(
-    rows[0] ?? { date: "", lab: "", biomarker: "", value: "", unit: "" },
-  );
+  const header = Object.keys(rows[0] ?? { date: "", lab: "", biomarker: "", value: "", unit: "" });
   const csv = [
     header.join(","),
     ...rows.map((r) => header.map((h) => csvEscape((r as Record<string, unknown>)[h])).join(",")),

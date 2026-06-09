@@ -82,7 +82,11 @@ export abstract class BaseProvider implements AIProvider {
     await this.complete({ parts: [{ type: "text", text: TEST_PROMPT }], maxTokens: 16 });
   }
 
-  protected async postJson(url: string, headers: Record<string, string>, body: unknown): Promise<any> {
+  protected async postJson(
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+  ): Promise<any> {
     let res: Response;
     try {
       res = await fetch(url, {

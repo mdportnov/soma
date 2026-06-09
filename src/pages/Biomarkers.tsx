@@ -24,10 +24,7 @@ export function Biomarkers() {
   const [createOpen, setCreateOpen] = React.useState(false);
 
   const { data, loading, reload } = useQuery(async () => {
-    const [biomarkers, latest] = await Promise.all([
-      listBiomarkers(),
-      getLatestResults(profileId),
-    ]);
+    const [biomarkers, latest] = await Promise.all([listBiomarkers(), getLatestResults(profileId)]);
     return { biomarkers, latest };
   }, [profileId]);
 
@@ -37,9 +34,7 @@ export function Biomarkers() {
   const filtered = data.biomarkers.filter((b) => {
     if (onlyTracked && !data.latest.has(b.id)) return false;
     if (!q) return true;
-    return [b.canonicalName, ...(b.aliases ?? [])].some((n) =>
-      normalizeLabel(n).includes(q),
-    );
+    return [b.canonicalName, ...(b.aliases ?? [])].some((n) => normalizeLabel(n).includes(q));
   });
 
   const byCategory = new Map<string, typeof filtered>();
@@ -81,7 +76,11 @@ export function Biomarkers() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={Activity} title="Nothing matches" description="Try another search term." />
+        <EmptyState
+          icon={Activity}
+          title="Nothing matches"
+          description="Try another search term."
+        />
       ) : (
         <div className="space-y-6">
           {[...byCategory.entries()].map(([category, items]) => (
@@ -161,7 +160,9 @@ export function CreateBiomarkerDialog({
   const [refLow, setRefLow] = React.useState("");
   const [refHigh, setRefHigh] = React.useState("");
   const [aliases, setAliases] = React.useState("");
-  const [direction, setDirection] = React.useState<"range" | "higher_better" | "lower_better">("range");
+  const [direction, setDirection] = React.useState<"range" | "higher_better" | "lower_better">(
+    "range",
+  );
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
@@ -200,11 +201,19 @@ export function CreateBiomarkerDialog({
     >
       <div className="grid gap-3">
         <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Omega-3 Index" />
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Omega-3 Index"
+          />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Category">
-            <Input value={category} onChange={(e) => setCategory(e.target.value)} list="bio-categories" />
+            <Input
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              list="bio-categories"
+            />
             <datalist id="bio-categories">
               {existingCategories.map((c) => (
                 <option key={c} value={c} />
@@ -223,7 +232,10 @@ export function CreateBiomarkerDialog({
             <Input type="number" value={refHigh} onChange={(e) => setRefHigh(e.target.value)} />
           </Field>
           <Field label="Direction">
-            <Select value={direction} onChange={(e) => setDirection(e.target.value as typeof direction)}>
+            <Select
+              value={direction}
+              onChange={(e) => setDirection(e.target.value as typeof direction)}
+            >
               <option value="range">In range</option>
               <option value="higher_better">Higher better</option>
               <option value="lower_better">Lower better</option>

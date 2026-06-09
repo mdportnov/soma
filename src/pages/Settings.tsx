@@ -1,5 +1,13 @@
 import * as React from "react";
-import { CheckCircle2, Download, KeyRound, Loader2, ShieldCheck, Trash2, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Download,
+  KeyRound,
+  Loader2,
+  ShieldCheck,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getProfile, updateProfile } from "@/db/repos";
@@ -129,7 +137,10 @@ function AiSettingsCard() {
           </Field>
           {provider && (
             <Field label="Model (multimodal only)">
-              <Select value={settings.modelId} onChange={(e) => update({ modelId: e.target.value })}>
+              <Select
+                value={settings.modelId}
+                onChange={(e) => update({ modelId: e.target.value })}
+              >
                 <option value="">Select model…</option>
                 {usableModels.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -183,7 +194,11 @@ function AiSettingsCard() {
                 </Button>
                 {hasStoredKey && (
                   <>
-                    <Button variant="outline" onClick={testKey} disabled={testState.kind === "testing"}>
+                    <Button
+                      variant="outline"
+                      onClick={testKey}
+                      disabled={testState.kind === "testing"}
+                    >
                       {testState.kind === "testing" ? <Loader2 className="animate-spin" /> : null}
                       Test key
                     </Button>
@@ -240,7 +255,9 @@ function ProfileCard() {
     <Card>
       <CardHeader>
         <CardTitle>Profile</CardTitle>
-        <CardDescription>Single profile for now; multi-profile sharing comes later.</CardDescription>
+        <CardDescription>
+          Single profile for now; multi-profile sharing comes later.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-3">
         <Field label="Name">
@@ -299,7 +316,11 @@ function ExportCard() {
         <CardDescription>Everything is yours — full dump anytime, no lock-in.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={busy !== null} onClick={() => run("json", exportAllJson)}>
+        <Button
+          variant="outline"
+          disabled={busy !== null}
+          onClick={() => run("json", exportAllJson)}
+        >
           <Download /> {busy === "json" ? "Exporting…" : "Export all (JSON)"}
         </Button>
         <Button

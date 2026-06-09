@@ -13,12 +13,23 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatDate, todayISO } from "@/lib/utils";
 
 export function Diagnoses() {
   const { profileId } = useApp();
-  const { data: diagnoses, loading, reload } = useQuery(() => listDiagnoses(profileId), [profileId]);
+  const {
+    data: diagnoses,
+    loading,
+    reload,
+  } = useQuery(() => listDiagnoses(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Diagnosis | null>(null);
 
@@ -67,7 +78,13 @@ export function Diagnoses() {
                   <TableCell>{formatDate(d.date)}</TableCell>
                   <TableCell>
                     <Badge
-                      variant={d.status === "active" ? "warning" : d.status === "resolved" ? "success" : "secondary"}
+                      variant={
+                        d.status === "active"
+                          ? "warning"
+                          : d.status === "resolved"
+                            ? "success"
+                            : "secondary"
+                      }
                     >
                       {d.status}
                     </Badge>
@@ -175,11 +192,19 @@ export function DiagnosisForm({
     <Dialog open={open} onClose={onClose} title={editing ? "Edit diagnosis" : "Add diagnosis"}>
       <div className="grid gap-3">
         <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Subclinical hypothyroidism" />
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Subclinical hypothyroidism"
+          />
         </Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label="ICD code (optional)">
-            <Input value={icdCode} onChange={(e) => setIcdCode(e.target.value)} placeholder="E03.9" />
+            <Input
+              value={icdCode}
+              onChange={(e) => setIcdCode(e.target.value)}
+              placeholder="E03.9"
+            />
           </Field>
           <Field label="Date">
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />

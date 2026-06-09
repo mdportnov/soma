@@ -64,7 +64,9 @@ export function Timeline() {
             <ul className="divide-y">
               {events.map((e) => (
                 <li key={`${e.kind}-${e.id}`} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="w-24 shrink-0 text-xs text-muted-foreground">{formatDate(e.date)}</span>
+                  <span className="w-24 shrink-0 text-xs text-muted-foreground">
+                    {formatDate(e.date)}
+                  </span>
                   <Badge
                     variant={
                       e.kind === "lab_panel"

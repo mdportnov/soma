@@ -10,7 +10,14 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { TrendChart, OVERLAY_COLORS, type MedOverlay } from "@/components/charts/TrendChart";
 import { cn, formatDate, formatValue } from "@/lib/utils";
 

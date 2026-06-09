@@ -56,7 +56,11 @@ export function VisitDetail() {
       </Link>
       <PageHeader
         title={`${formatDate(visit.date)}${visit.doctorName ? ` — ${visit.doctorName}` : ""}`}
-        description={[visit.specialty, visit.clinic, [visit.city, visit.country].filter(Boolean).join(", ")]
+        description={[
+          visit.specialty,
+          visit.clinic,
+          [visit.city, visit.country].filter(Boolean).join(", "),
+        ]
           .filter(Boolean)
           .join(" · ")}
         actions={
@@ -64,7 +68,12 @@ export function VisitDetail() {
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil /> Edit
             </Button>
-            <Button variant="outline" size="icon" onClick={() => setConfirmDelete(true)} aria-label="Delete visit">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="Delete visit"
+            >
               <Trash2 className="text-destructive" />
             </Button>
           </>
@@ -92,17 +101,27 @@ export function VisitDetail() {
           </CardHeader>
           <CardContent>
             {diagnoses.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">No diagnoses linked to this visit.</p>
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                No diagnoses linked to this visit.
+              </p>
             ) : (
               <ul className="divide-y">
                 {diagnoses.map((d) => (
                   <li key={d.id} className="flex items-center justify-between gap-2 py-2.5">
                     <div>
                       <p className="text-sm font-medium">{d.name}</p>
-                      {d.icdCode && <p className="text-[11px] text-muted-foreground">ICD {d.icdCode}</p>}
+                      {d.icdCode && (
+                        <p className="text-[11px] text-muted-foreground">ICD {d.icdCode}</p>
+                      )}
                     </div>
                     <Badge
-                      variant={d.status === "active" ? "warning" : d.status === "resolved" ? "success" : "secondary"}
+                      variant={
+                        d.status === "active"
+                          ? "warning"
+                          : d.status === "resolved"
+                            ? "success"
+                            : "secondary"
+                      }
                     >
                       {d.status}
                     </Badge>
@@ -122,7 +141,9 @@ export function VisitDetail() {
           </CardHeader>
           <CardContent>
             {prescriptions.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">No prescriptions recorded.</p>
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                No prescriptions recorded.
+              </p>
             ) : (
               <ul className="divide-y">
                 {prescriptions.map((p) => (

@@ -21,14 +21,10 @@ export async function runMigrations(conn: Database): Promise<void> {
     )`,
   );
   const applied = new Set(
-    (await conn.select<{ name: string }[]>("SELECT name FROM __migrations")).map(
-      (r) => r.name,
-    ),
+    (await conn.select<{ name: string }[]>("SELECT name FROM __migrations")).map((r) => r.name),
   );
 
-  const entries = Object.entries(migrationFiles).sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
+  const entries = Object.entries(migrationFiles).sort(([a], [b]) => a.localeCompare(b));
 
   for (const [path, contents] of entries) {
     const name = path.split("/").pop()!;

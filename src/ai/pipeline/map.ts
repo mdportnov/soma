@@ -127,7 +127,14 @@ export async function mapExtractions(
         duplicate: false,
       };
     }
-    return { raw, biomarkerId: null, confidence: "none" as const, candidates, conversion: null, duplicate: false };
+    return {
+      raw,
+      biomarkerId: null,
+      confidence: "none" as const,
+      candidates,
+      conversion: null,
+      duplicate: false,
+    };
   });
 
   // 4. Narrow AI disambiguation for leftovers that have candidates.

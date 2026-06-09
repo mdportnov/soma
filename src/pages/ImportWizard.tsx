@@ -39,7 +39,14 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { CreateBiomarkerDialog } from "./Biomarkers";
 import { formatValue, todayISO } from "@/lib/utils";
 import type { Biomarker } from "@/db/schema";
@@ -56,7 +63,11 @@ export function ImportWizard() {
   const { profileId } = useApp();
   const navigate = useNavigate();
 
-  const { data: boot, loading: booting, reload: reloadBoot } = useQuery(async () => {
+  const {
+    data: boot,
+    loading: booting,
+    reload: reloadBoot,
+  } = useQuery(async () => {
     const [provider, biomarkers] = await Promise.all([getConfiguredProvider(), listBiomarkers()]);
     return { provider, biomarkers };
   }, []);
@@ -227,7 +238,9 @@ export function ImportWizard() {
             </div>
             {filePath ? (
               <>
-                <p className="max-w-sm truncate text-sm font-medium">{filePath.split(/[/\\]/).pop()}</p>
+                <p className="max-w-sm truncate text-sm font-medium">
+                  {filePath.split(/[/\\]/).pop()}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Any language, any lab, any country — scans and photos included.
                 </p>
@@ -365,7 +378,13 @@ function ReviewStep({
   onChangeRow: (key: number, biomarkerId: number | null) => void;
   onToggleInclude: (key: number) => void;
   onCreateCustom: (key: number) => void;
-  meta: { date: string; labName: string; city: string; country: string; panelType: "blood" | "urine" | "other" };
+  meta: {
+    date: string;
+    labName: string;
+    city: string;
+    country: string;
+    panelType: "blood" | "urine" | "other";
+  };
   setMeta: {
     setDate: (v: string) => void;
     setLabName: (v: string) => void;
@@ -426,7 +445,9 @@ function ReviewStep({
                         {row.raw.raw_label}
                       </p>
                       {row.raw.ref_range_text && (
-                        <p className="text-[10px] text-muted-foreground">ref: {row.raw.ref_range_text}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          ref: {row.raw.ref_range_text}
+                        </p>
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums">
@@ -487,7 +508,10 @@ function ReviewStep({
                           {formatValue(row.conversion.value)} {row.conversion.unit}
                         </span>
                       ) : (
-                        <Badge variant="warning" title={`No known conversion ${row.raw.unit} → ${bio?.defaultUnit}`}>
+                        <Badge
+                          variant="warning"
+                          title={`No known conversion ${row.raw.unit} → ${bio?.defaultUnit}`}
+                        >
                           unit?
                         </Badge>
                       )}
@@ -509,7 +533,11 @@ function ReviewStep({
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Field label="Date">
-            <Input type="date" value={meta.date} onChange={(e) => setMeta.setDate(e.target.value)} />
+            <Input
+              type="date"
+              value={meta.date}
+              onChange={(e) => setMeta.setDate(e.target.value)}
+            />
           </Field>
           <Field label="Lab name">
             <Input value={meta.labName} onChange={(e) => setMeta.setLabName(e.target.value)} />

@@ -1,11 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  sqliteTable,
-  integer,
-  text,
-  real,
-  index,
-} from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, real, index } from "drizzle-orm/sqlite-core";
 
 /**
  * Drizzle schema — single source of truth for the local SQLite database.
@@ -172,7 +166,9 @@ export const medication = sqliteTable(
       .notNull()
       .references(() => profile.id),
     name: text("name").notNull(),
-    type: text("type", { enum: ["drug", "supplement"] }).notNull().default("supplement"),
+    type: text("type", { enum: ["drug", "supplement"] })
+      .notNull()
+      .default("supplement"),
     doseAmount: real("dose_amount"),
     doseUnit: text("dose_unit"),
     schedule: text("schedule", { mode: "json" }).$type<MedicationSchedule>(),

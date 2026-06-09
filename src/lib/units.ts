@@ -107,7 +107,12 @@ const MOLAR_FACTORS: Record<string, Record<string, number>> = {
   // Folate (MW 441.4)
   "2284-8": { "nmol/l->ng/ml": 0.4413, "ng/ml->nmol/l": 2.266 },
   // Testosterone (MW 288.42)
-  "2986-8": { "ng/dl->nmol/l": 0.0347, "nmol/l->ng/dl": 28.84, "ng/ml->nmol/l": 3.47, "nmol/l->ng/ml": 0.288 },
+  "2986-8": {
+    "ng/dl->nmol/l": 0.0347,
+    "nmol/l->ng/dl": 28.84,
+    "ng/ml->nmol/l": 3.47,
+    "nmol/l->ng/ml": 0.288,
+  },
   // Estradiol (MW 272.38)
   "14715-7": { "pg/ml->pmol/l": 3.671, "pmol/l->pg/ml": 0.2724 },
   // Cortisol (MW 362.46)

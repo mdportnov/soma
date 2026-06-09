@@ -48,7 +48,10 @@ export const AI_DISCLAIMER =
 
 /** Robustly pulls a JSON value out of a model response (fences, preamble). */
 export function extractJson<T>(text: string): T {
-  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "");
   try {
     return JSON.parse(cleaned) as T;
   } catch {

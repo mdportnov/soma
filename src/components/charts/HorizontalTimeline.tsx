@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { TimelineEvent } from "@/db/repos";
 import { OVERLAY_COLORS } from "./TrendChart";
@@ -27,7 +28,8 @@ export function HorizontalTimeline({
   rangeMonths: number | null; // null = all time
 }) {
   const navigate = useNavigate();
-  const now = Date.now();
+  // Captured once per mount: keeps render pure and positions stable.
+  const [now] = useState(() => Date.now());
 
   const allTs = events.map((e) => ts(e.date));
   const dataMin = allTs.length ? Math.min(...allTs) : now - 180 * DAY;

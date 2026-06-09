@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -52,7 +53,8 @@ export function TrendChart({
   overlays?: MedOverlay[];
 }) {
   const data = series.map((p) => ({ ...p, t: ts(p.date) }));
-  const now = Date.now();
+  // Captured once per mount: keeps render pure and the domain stable.
+  const [now] = useState(() => Date.now());
 
   const tMin = Math.min(...data.map((d) => d.t), ...overlays.map((o) => ts(o.start)));
   const tMax = Math.max(...data.map((d) => d.t), now);

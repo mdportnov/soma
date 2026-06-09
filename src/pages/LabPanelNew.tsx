@@ -92,7 +92,11 @@ export function LabPanelNew() {
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </Field>
           <Field label="Lab name">
-            <Input value={labName} onChange={(e) => setLabName(e.target.value)} placeholder="e.g. Invitro" />
+            <Input
+              value={labName}
+              onChange={(e) => setLabName(e.target.value)}
+              placeholder="e.g. Invitro"
+            />
           </Field>
           <Field label="City">
             <Input value={city} onChange={(e) => setCity(e.target.value)} />
@@ -101,7 +105,10 @@ export function LabPanelNew() {
             <Input value={country} onChange={(e) => setCountry(e.target.value)} />
           </Field>
           <Field label="Type">
-            <Select value={panelType} onChange={(e) => setPanelType(e.target.value as typeof panelType)}>
+            <Select
+              value={panelType}
+              onChange={(e) => setPanelType(e.target.value as typeof panelType)}
+            >
               <option value="blood">Blood</option>
               <option value="urine">Urine</option>
               <option value="other">Other</option>
@@ -174,7 +181,10 @@ export function LabPanelNew() {
             variant="outline"
             size="sm"
             onClick={() =>
-              setRows((rs) => [...rs, { key: nextKey.current++, biomarkerId: "", value: "", unit: "" }])
+              setRows((rs) => [
+                ...rs,
+                { key: nextKey.current++, biomarkerId: "", value: "", unit: "" },
+              ])
             }
           >
             <Plus /> Add row

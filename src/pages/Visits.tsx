@@ -13,7 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatDate, todayISO } from "@/lib/utils";
 
 export function Visits() {
@@ -61,7 +68,11 @@ export function Visits() {
             </TableHeader>
             <TableBody>
               {visits.map((v) => (
-                <TableRow key={v.id} className="cursor-pointer" onClick={() => navigate(`/visits/${v.id}`)}>
+                <TableRow
+                  key={v.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/visits/${v.id}`)}
+                >
                   <TableCell className="font-medium">{formatDate(v.date)}</TableCell>
                   <TableCell>{v.doctorName ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{v.specialty ?? "—"}</TableCell>
@@ -153,7 +164,11 @@ export function VisitForm({
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </Field>
           <Field label="Specialty">
-            <Input value={specialty} onChange={(e) => setSpecialty(e.target.value)} placeholder="endocrinologist…" />
+            <Input
+              value={specialty}
+              onChange={(e) => setSpecialty(e.target.value)}
+              placeholder="endocrinologist…"
+            />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">

@@ -11,7 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatDate, formatValue } from "@/lib/utils";
 
 export function LabPanelDetail() {
@@ -56,7 +63,12 @@ export function LabPanelDetail() {
               </Badge>
             )}
             <Badge variant="secondary">{panel.panelType}</Badge>
-            <Button variant="outline" size="icon" onClick={() => setConfirmDelete(true)} aria-label="Delete panel">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="Delete panel"
+            >
               <Trash2 className="text-destructive" />
             </Button>
           </>
@@ -80,7 +92,10 @@ export function LabPanelDetail() {
               {results.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>
-                    <Link to={`/biomarkers/${r.biomarkerId}`} className="font-medium text-primary hover:underline">
+                    <Link
+                      to={`/biomarkers/${r.biomarkerId}`}
+                      className="font-medium text-primary hover:underline"
+                    >
                       {r.biomarker.canonicalName}
                     </Link>
                     <p className="text-[11px] text-muted-foreground">{r.biomarker.category}</p>
@@ -101,7 +116,10 @@ export function LabPanelDetail() {
                   <TableCell>
                     <FlagBadge flag={r.outOfRange ? r.flag : null} />
                   </TableCell>
-                  <TableCell className="max-w-44 truncate text-xs text-muted-foreground" title={r.rawLabel ?? undefined}>
+                  <TableCell
+                    className="max-w-44 truncate text-xs text-muted-foreground"
+                    title={r.rawLabel ?? undefined}
+                  >
                     {r.rawLabel ?? "—"}
                   </TableCell>
                 </TableRow>

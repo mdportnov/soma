@@ -86,7 +86,9 @@ export function Medications() {
                                 .join(" · ") || "no dose set"}
                             </p>
                           </div>
-                          <Badge variant={m.type === "drug" ? "default" : "success"}>{m.type}</Badge>
+                          <Badge variant={m.type === "drug" ? "default" : "success"}>
+                            {m.type}
+                          </Badge>
                         </div>
                         <p className="mt-2 text-xs text-muted-foreground">
                           {formatDate(m.startDate)} → {m.endDate ? formatDate(m.endDate) : "now"}
@@ -219,7 +221,11 @@ function MedicationForm({
       <div className="grid gap-3">
         <div className="grid grid-cols-[1fr_9rem] gap-3">
           <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Magnesium glycinate" />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Magnesium glycinate"
+            />
           </Field>
           <Field label="Type">
             <Select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
@@ -230,10 +236,19 @@ function MedicationForm({
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label="Dose">
-            <Input type="number" step="any" value={doseAmount} onChange={(e) => setDoseAmount(e.target.value)} />
+            <Input
+              type="number"
+              step="any"
+              value={doseAmount}
+              onChange={(e) => setDoseAmount(e.target.value)}
+            />
           </Field>
           <Field label="Unit">
-            <Input value={doseUnit} onChange={(e) => setDoseUnit(e.target.value)} placeholder="mg / IU / g" />
+            <Input
+              value={doseUnit}
+              onChange={(e) => setDoseUnit(e.target.value)}
+              placeholder="mg / IU / g"
+            />
           </Field>
           <Field label="Frequency">
             <Select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
@@ -262,7 +277,11 @@ function MedicationForm({
           </Field>
         </div>
         <Field label="Purpose (optional)">
-          <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="sleep quality, ferritin…" />
+          <Input
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value)}
+            placeholder="sleep quality, ferritin…"
+          />
         </Field>
         <div className="mt-1 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>

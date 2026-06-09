@@ -72,12 +72,11 @@ export async function getConfiguredProvider(): Promise<AIProvider | null> {
   const settings = loadAiSettings();
   const model = effectiveModelId(settings);
   if (!settings.providerId || !model) return null;
-  let key: string | null = null;
   try {
-    key = await getApiKey(settings.providerId);
+    const key = await getApiKey(settings.providerId);
+    if (!key) return null;
+    return buildProvider(settings.providerId, key, model);
   } catch {
     return null;
   }
-  if (!key) return null;
-  return buildProvider(settings.providerId, key, model);
 }

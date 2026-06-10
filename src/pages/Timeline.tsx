@@ -10,16 +10,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { HorizontalTimeline } from "@/components/charts/HorizontalTimeline";
 import { formatDate } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
-const RANGES = [
-  { label: "6M", months: 6 },
-  { label: "1Y", months: 12 },
-  { label: "2Y", months: 24 },
-  { label: "All", months: null },
-] as const;
+function useRanges(t: ReturnType<typeof useI18n>["t"]) {
+  return React.useMemo(() => [
+    { label: t("timeline.ranges.sixMonths"), months: 6 },
+    { label: t("timeline.ranges.oneYear"), months: 12 },
+    { label: t("timeline.ranges.twoYears"), months: 24 },
+    { label: t("timeline.ranges.all"), months: null },
+  ] as const, [t]);
+}
 
 export function Timeline() {
   const { profileId } = useApp();
+  const { t } = useI18n();
+  const ranges = useRanges(t);
   const [range, setRange] = React.useState<number | null>(12);
   const { data: events, loading } = useQuery(() => getTimeline(profileId), [profileId]);
 
@@ -28,11 +33,11 @@ export function Timeline() {
   return (
     <>
       <PageHeader
-        title="Timeline"
-        description="Labs, visits, diagnoses and medication periods on one time scale."
+        title={t("timeline.title")}
+        description={t("timeline.description")}
         actions={
           <div className="flex rounded-lg border p-0.5">
-            {RANGES.map((r) => (
+            {ranges.map((r) => (
               <Button
                 key={r.label}
                 variant={range === r.months ? "secondary" : "ghost"}
@@ -50,15 +55,15 @@ export function Timeline() {
       {events.length === 0 ? (
         <EmptyState
           icon={CalendarRange}
-          title="Timeline is empty"
-          description="Events appear here as you add labs, medications, visits and diagnoses."
+          title={t("timeline.emptyTitle")}
+          description={t("timeline.emptyDescription")}
         />
       ) : (
         <>
           <HorizontalTimeline events={events} rangeMonths={range} />
 
           <h2 className="mb-2 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            All events
+            {t("timeline.allEvents")}
           </h2>
           <div className="rounded-xl border bg-card">
             <ul className="divide-y">
@@ -78,16 +83,16 @@ export function Timeline() {
                             : "secondary"
                     }
                   >
-                    {e.kind === "lab_panel" ? "labs" : e.kind}
+                    {e.kind === "lab_panel" ? t("timeline.eventKinds.labs") : t(`timeline.eventKinds.${e.kind}`)}
                   </Badge>
                   <span className="min-w-0 flex-1 truncate text-sm">{e.title}</span>
                   {e.kind === "medication" && (
                     <span className="text-xs text-muted-foreground">
-                      → {e.endDate ? formatDate(e.endDate) : "now"}
+                      → {e.endDate ? formatDate(e.endDate) : t("timeline.now")}
                     </span>
                   )}
                   {e.kind === "lab_panel" && e.outOfRangeCount > 0 && (
-                    <Badge variant="warning">{e.outOfRangeCount} out of range</Badge>
+                    <Badge variant="warning">{e.outOfRangeCount} {t("timeline.outOfRange")}</Badge>
                   )}
                   {e.subtitle && (
                     <span className="hidden max-w-48 truncate text-xs text-muted-foreground lg:block">

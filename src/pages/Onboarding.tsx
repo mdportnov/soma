@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ArrowLeft, ArrowRight, Loader2, ShieldCheck, Sparkles } from "lucide-react";
 import { completeOnboarding } from "@/db/repos";
+import { useI18n } from "@/lib/i18n";
 import {
   CoreFields,
   OptionalFields,
@@ -20,6 +21,7 @@ const ORDER: StepId[] = ["welcome", "core", "optional", "done"];
  * Optional steps can be skipped. On finish it stamps `onboardedAt`.
  */
 export function Onboarding({ profileId, onDone }: { profileId: number; onDone: () => void }) {
+  const { t } = useI18n();
   const { draft, patch } = useProfileDraft();
   const [step, setStep] = React.useState<StepId>("welcome");
   const [saving, setSaving] = React.useState(false);
@@ -88,21 +90,19 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
           {step === "welcome" && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Welcome to Soma</CardTitle>
+                <CardTitle className="text-lg">{t("onboarding.welcomeTitle")}</CardTitle>
                 <CardDescription className="text-sm">
-                  Your health record, on your terms — labs, medications and visits in one private
-                  timeline. A minute of setup lets Soma read your results against the reference
-                  ranges that actually apply to you.
+                  {t("onboarding.welcomeDescription")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="flex items-start gap-2 text-sm text-muted-foreground">
                   <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
-                  Everything you enter stays on this device — no account, no cloud, no tracking.
+                  {t("onboarding.privacyNote")}
                 </p>
                 <div className="flex justify-end">
                   <Button onClick={() => go("core")}>
-                    Get started <ArrowRight />
+                    {t("onboarding.getStarted")} <ArrowRight />
                   </Button>
                 </div>
               </CardContent>
@@ -112,20 +112,19 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
           {step === "core" && (
             <Card>
               <CardHeader>
-                <CardTitle>About you</CardTitle>
+                <CardTitle>{t("onboarding.aboutYouTitle")}</CardTitle>
                 <CardDescription className="text-sm">
-                  Sex and age decide which reference ranges apply to your biomarkers — that&apos;s
-                  why these few are required.
+                  {t("onboarding.aboutYouDescription")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <CoreFields draft={draft} patch={patch} />
                 <div className="flex items-center justify-between">
                   <Button variant="ghost" onClick={() => go("welcome")}>
-                    <ArrowLeft /> Back
+                    <ArrowLeft /> {t("common.back")}
                   </Button>
                   <Button disabled={!coreValid} onClick={() => go("optional")}>
-                    Continue <ArrowRight />
+                    {t("common.continue")} <ArrowRight />
                   </Button>
                 </div>
               </CardContent>
@@ -135,24 +134,23 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
           {step === "optional" && (
             <Card>
               <CardHeader>
-                <CardTitle>Fine-tuning</CardTitle>
+                <CardTitle>{t("onboarding.fineTuningTitle")}</CardTitle>
                 <CardDescription className="text-sm">
-                  Optional, and worth it: these refine a few reference ranges and help track goals.
-                  Skip anything — it&apos;s all editable later in Settings.
+                  {t("onboarding.fineTuningDescription")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <OptionalFields draft={draft} patch={patch} />
                 <div className="flex items-center justify-between">
                   <Button variant="ghost" onClick={() => go("core")}>
-                    <ArrowLeft /> Back
+                    <ArrowLeft /> {t("common.back")}
                   </Button>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => go("done")}>
-                      Skip for now
+                      {t("common.skipForNow")}
                     </Button>
                     <Button onClick={() => go("done")}>
-                      Continue <ArrowRight />
+                      {t("common.continue")} <ArrowRight />
                     </Button>
                   </div>
                 </div>
@@ -164,26 +162,27 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">
-                  {firstName ? `You're all set, ${firstName}` : "You're all set"}
+                  {firstName
+                    ? t("onboarding.allSetTitleWithName", { name: firstName })
+                    : t("onboarding.allSetTitle")
+                  }
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  Your profile is saved locally. Import a lab report, log what you take, and Soma
-                  starts connecting the dots.
+                  {t("onboarding.allSetDescription")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
-                  Tip: overlay any medication on a biomarker chart to see whether what you take
-                  actually moves the numbers.
+                  {t("onboarding.tip")}
                 </p>
                 <div className="flex items-center justify-between">
                   <Button variant="ghost" onClick={() => go("optional")} disabled={saving}>
-                    <ArrowLeft /> Back
+                    <ArrowLeft /> {t("common.back")}
                   </Button>
                   <Button onClick={finish} disabled={saving}>
                     {saving ? <Loader2 className="animate-spin" /> : null}
-                    Open dashboard
+                    {t("onboarding.openDashboard")}
                   </Button>
                 </div>
               </CardContent>

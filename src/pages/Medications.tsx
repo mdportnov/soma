@@ -16,9 +16,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatValue, todayISO } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export function Medications() {
   const { profileId } = useApp();
+  const { t } = useI18n();
   const { data: meds, loading, reload } = useQuery(() => listMedications(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Medication | null>(null);
@@ -36,11 +38,11 @@ export function Medications() {
   return (
     <>
       <PageHeader
-        title="Medications & supplements"
-        description="What you take, in what dose, and since when — overlayable on any biomarker trend."
+        title={t("medications.title")}
+        description={t("medications.description")}
         actions={
           <Button onClick={openNew}>
-            <Plus /> Add
+            <Plus /> {t("common.add")}
           </Button>
         }
       />
@@ -48,19 +50,19 @@ export function Medications() {
       {meds.length === 0 ? (
         <EmptyState
           icon={Pill}
-          title="Nothing tracked yet"
-          description="Add drugs and supplements with doses and periods to correlate them with your labs."
+          title={t("medications.emptyTitle")}
+          description={t("medications.emptyDescription")}
           action={
             <Button size="sm" onClick={openNew}>
-              Add first item
+              {t("medications.addFirst")}
             </Button>
           }
         />
       ) : (
         <div className="space-y-6">
           {[
-            { label: "Currently taking", items: active },
-            { label: "Past", items: past },
+            { label: t("medications.currentlyTaking"), items: active },
+            { label: t("medications.past"), items: past },
           ]
             .filter((s) => s.items.length)
             .map((section) => (
@@ -88,7 +90,7 @@ export function Medications() {
                             </p>
                           </div>
                           <Badge variant={m.type === "drug" ? "default" : "success"}>
-                            {m.type}
+                            {t(`types.${m.type}`)}
                           </Badge>
                         </div>
                         <p className="mt-2 text-xs text-muted-foreground">
@@ -104,7 +106,7 @@ export function Medications() {
                               setFormOpen(true);
                             }}
                           >
-                            <Pencil /> Edit
+                            <Pencil /> {t("common.edit")}
                           </Button>
                           {!m.endDate && (
                             <Button
@@ -115,7 +117,7 @@ export function Medications() {
                                 void reload();
                               }}
                             >
-                              <CircleStop /> Stop today
+                              <CircleStop /> {t("medications.actions.stopToday")}
                             </Button>
                           )}
                           <Button
@@ -166,6 +168,7 @@ function MedicationForm({
   onSaved: () => void;
   profileId: number;
 }) {
+  const { t } = useI18n();
   const [name, setName] = React.useState("");
   const [type, setType] = React.useState<"drug" | "supplement">("supplement");
   const [doseAmount, setDoseAmount] = React.useState("");
@@ -217,26 +220,28 @@ function MedicationForm({
     <Dialog
       open={open}
       onClose={onClose}
-      title={editing ? "Edit medication" : "Add medication or supplement"}
+      title={editing ? t("medications.addDialog.titleEdit") : t("medications.addDialog.titleAdd")}
+      onSubmit={save}
+      submitDisabled={saving || !name.trim() || !startDate}
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-[1fr_9rem] gap-3">
-          <Field label="Name">
+          <Field label={t("fields.name")}>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Magnesium glycinate"
             />
           </Field>
-          <Field label="Type">
+          <Field label={t("fields.type")}>
             <Select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-              <option value="supplement">Supplement</option>
-              <option value="drug">Drug</option>
+              <option value="supplement">{t("types.supplement")}</option>
+              <option value="drug">{t("types.drug")}</option>
             </Select>
           </Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Dose">
+          <Field label={t("medications.fields.dose")}>
             <Input
               type="number"
               step="any"
@@ -244,25 +249,25 @@ function MedicationForm({
               onChange={(e) => setDoseAmount(e.target.value)}
             />
           </Field>
-          <Field label="Unit">
+          <Field label={t("fields.unit")}>
             <Input
               value={doseUnit}
               onChange={(e) => setDoseUnit(e.target.value)}
               placeholder="mg / IU / g"
             />
           </Field>
-          <Field label="Frequency">
+          <Field label={t("medications.fields.frequency")}>
             <Select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-              <option value="daily">Daily</option>
-              <option value="2x_daily">2× daily</option>
-              <option value="3x_daily">3× daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="as_needed">As needed</option>
-              <option value="custom">Custom</option>
+              <option value="daily">{t("frequency.daily")}</option>
+              <option value="2x_daily">{t("frequency.twiceDaily")}</option>
+              <option value="3x_daily">{t("frequency.thriceDaily")}</option>
+              <option value="weekly">{t("frequency.weekly")}</option>
+              <option value="as_needed">{t("frequency.asNeeded")}</option>
+              <option value="custom">{t("frequency.custom")}</option>
             </Select>
           </Field>
         </div>
-        <Field label="Schedule notes (optional)">
+        <Field label={t("medications.fields.scheduleNotesOptional")}>
           <Input
             value={scheduleNotes}
             onChange={(e) => setScheduleNotes(e.target.value)}
@@ -270,14 +275,14 @@ function MedicationForm({
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Start date">
+          <Field label={t("medications.fields.startDate")}>
             <DateInput value={startDate} onChange={setStartDate} />
           </Field>
-          <Field label="End date (empty = ongoing)">
+          <Field label={t("medications.fields.endDateOptional")}>
             <DateInput value={endDate} onChange={setEndDate} clearable />
           </Field>
         </div>
-        <Field label="Purpose (optional)">
+        <Field label={t("medications.fields.purposeOptional")}>
           <Input
             value={purpose}
             onChange={(e) => setPurpose(e.target.value)}
@@ -286,10 +291,10 @@ function MedicationForm({
         </Field>
         <div className="mt-1 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={save} disabled={saving || !name.trim() || !startDate}>
-            {editing ? "Save changes" : "Add"}
+            {editing ? t("common.saveChanges") : t("common.add")}
           </Button>
         </div>
       </div>

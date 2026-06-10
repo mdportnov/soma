@@ -1,5 +1,6 @@
 import { HashRouter, Route, Routes } from "react-router-dom";
 import { AppProvider } from "@/app/AppContext";
+import { I18nProvider } from "@/lib/i18n";
 import { Shell } from "@/app/Shell";
 import { Dashboard } from "@/pages/Dashboard";
 import { Timeline } from "@/pages/Timeline";
@@ -17,26 +18,28 @@ import { Settings } from "@/pages/Settings";
 
 export default function App() {
   return (
-    <AppProvider>
-      <HashRouter>
-        <Routes>
-          <Route element={<Shell />}>
-            <Route index element={<Dashboard />} />
-            <Route path="timeline" element={<Timeline />} />
-            <Route path="biomarkers" element={<Biomarkers />} />
-            <Route path="biomarkers/:id" element={<BiomarkerDetail />} />
-            <Route path="labs" element={<Labs />} />
-            <Route path="labs/new" element={<LabPanelNew />} />
-            <Route path="labs/import" element={<ImportWizard />} />
-            <Route path="labs/:id" element={<LabPanelDetail />} />
-            <Route path="medications" element={<Medications />} />
-            <Route path="visits" element={<Visits />} />
-            <Route path="visits/:id" element={<VisitDetail />} />
-            <Route path="diagnoses" element={<Diagnoses />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
-        </Routes>
-      </HashRouter>
-    </AppProvider>
+    <I18nProvider>
+      <AppProvider>
+        <HashRouter>
+          <Routes>
+            <Route element={<Shell />}>
+              <Route index element={<Dashboard />} />
+              <Route path="timeline" element={<Timeline />} />
+              <Route path="biomarkers" element={<Biomarkers />} />
+              <Route path="biomarkers/:id" element={<BiomarkerDetail />} />
+              <Route path="labs" element={<Labs />} />
+              <Route path="labs/new" element={<LabPanelNew />} />
+              <Route path="labs/import" element={<ImportWizard />} />
+              <Route path="labs/:id" element={<LabPanelDetail />} />
+              <Route path="medications" element={<Medications />} />
+              <Route path="visits" element={<Visits />} />
+              <Route path="visits/:id" element={<VisitDetail />} />
+              <Route path="diagnoses" element={<Diagnoses />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+          </Routes>
+        </HashRouter>
+      </AppProvider>
+    </I18nProvider>
   );
 }

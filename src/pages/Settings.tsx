@@ -2,14 +2,17 @@ import * as React from "react";
 import {
   CheckCircle2,
   Download,
+  Globe,
   KeyRound,
   Loader2,
   ShieldCheck,
+  Sparkles,
   Trash2,
   XCircle,
 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
+import { useI18n } from "@/lib/i18n";
 import { getProfile, updateProfile } from "@/db/repos";
 import {
   buildProvider,
@@ -36,18 +39,22 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible } from "@/components/ui/collapsible";
 import { exportAllJson, exportLabsCsv } from "@/lib/export";
 
 export function Settings() {
+  const { t } = useI18n();
+
   return (
     <>
       <PageHeader
-        title="Settings"
-        description="AI providers, profile and data export. Everything stays on this device unless you say otherwise."
+        title={t("settings.title")}
+        description={t("settings.description")}
       />
       <div className="space-y-4">
-        <AiSettingsCard />
+        <LanguageCard />
         <ProfileCard />
+        <AiSettingsCard />
         <BackupCard />
         <ExportCard />
       </div>
@@ -55,9 +62,36 @@ export function Settings() {
   );
 }
 
+// ── Language ───────────────────────────────────────────────────────────────
+
+function LanguageCard() {
+  const { lang, setLang, t } = useI18n();
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Globe className="size-4 text-muted-foreground" />
+          <CardTitle>{t("settings.language.title")}</CardTitle>
+        </div>
+        <CardDescription>{t("settings.language.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Field label={t("settings.language.title")}>
+          <Select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ru")}>
+            <option value="en">{t("settings.language.english")}</option>
+            <option value="ru">{t("settings.language.russian")}</option>
+          </Select>
+        </Field>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── AI provider / model / key ──────────────────────────────────────────────
 
 function AiSettingsCard() {
+  const { t } = useI18n();
   const [settings, setSettings] = React.useState<AiSettings>(() => loadAiSettings());
   const [keyInput, setKeyInput] = React.useState("");
   const [hasStoredKey, setHasStoredKey] = React.useState<boolean | null>(null);
@@ -120,23 +154,20 @@ function AiSettingsCard() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>AI analysis</CardTitle>
-        <CardDescription>
-          Off by default. Bring your own API key — it is stored in the OS keychain, never in the
-          database or config files. Only multimodal models (vision + PDF) are offered, since the
-          import pipeline reads photos and PDFs.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
+    <Collapsible
+      title={t("settings.ai.title")}
+      description={t("settings.ai.description")}
+      defaultOpen={false}
+      icon={<Sparkles className="size-4" />}
+    >
+      <div className="grid gap-4 p-5 pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Provider">
+          <Field label={t("settings.ai.provider")}>
             <Select
               value={settings.providerId}
               onChange={(e) => update({ providerId: e.target.value, modelId: "", customModel: "" })}
             >
-              <option value="">AI disabled</option>
+              <option value="">{t("settings.ai.aiDisabled")}</option>
               {modelRegistry.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -145,12 +176,12 @@ function AiSettingsCard() {
             </Select>
           </Field>
           {provider && (
-            <Field label="Model (multimodal only)">
+            <Field label={t("settings.ai.model")}>
               <Select
                 value={settings.modelId}
                 onChange={(e) => update({ modelId: e.target.value })}
               >
-                <option value="">Select model…</option>
+                <option value="">{t("common.selectModel")}</option>
                 {usableModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label}
@@ -163,11 +194,11 @@ function AiSettingsCard() {
 
         {provider && (
           <>
-            <Field label="Custom model id (optional, overrides the list — must support vision + PDF input)">
+            <Field label={t("settings.ai.customModel")}>
               <Input
                 value={settings.customModel}
                 onChange={(e) => update({ customModel: e.target.value })}
-                placeholder="e.g. a newer model id not in the registry yet"
+                placeholder={t("settings.ai.customModelPlaceholder")}
               />
             </Field>
 
@@ -175,16 +206,16 @@ function AiSettingsCard() {
               <div className="flex items-center gap-2">
                 <KeyRound className="size-4 text-muted-foreground" />
                 <p className="text-xs font-medium">
-                  API key for {provider.label}
+                  {t("settings.ai.apiKeyFor")} {provider.label}
                   {hasStoredKey === null ? (
-                    <span className="text-muted-foreground"> · checking…</span>
+                    <span className="text-muted-foreground"> · {t("settings.ai.checking")}</span>
                   ) : hasStoredKey ? (
                     <Badge variant="success" className="ml-2">
-                      <ShieldCheck className="size-3" /> stored in keychain
+                      <ShieldCheck className="size-3" /> {t("settings.ai.storedInKeychain")}
                     </Badge>
                   ) : (
                     <Badge variant="secondary" className="ml-2">
-                      not set
+                      {t("settings.ai.notSet")}
                     </Badge>
                   )}
                 </p>
@@ -199,7 +230,7 @@ function AiSettingsCard() {
                   autoComplete="off"
                 />
                 <Button onClick={saveKey} disabled={!keyInput.trim()}>
-                  Save key
+                  {t("settings.ai.saveKey")}
                 </Button>
                 {hasStoredKey && (
                   <>
@@ -209,17 +240,17 @@ function AiSettingsCard() {
                       disabled={testState.kind === "testing"}
                     >
                       {testState.kind === "testing" ? <Loader2 className="animate-spin" /> : null}
-                      Test key
+                      {t("settings.ai.testKey")}
                     </Button>
                     <Button variant="ghost" className="text-destructive" onClick={removeKey}>
-                      <Trash2 /> Remove
+                      <Trash2 /> {t("common.remove")}
                     </Button>
                   </>
                 )}
               </div>
               {testState.kind === "ok" && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-success">
-                  <CheckCircle2 className="size-3.5" /> Key works — model responded.
+                  <CheckCircle2 className="size-3.5" /> {t("settings.ai.keyWorks")}
                 </p>
               )}
               {testState.kind === "error" && (
@@ -232,17 +263,17 @@ function AiSettingsCard() {
         )}
 
         <p className="text-[11px] text-muted-foreground">
-          AI output is never medical advice. Documents you import are sent to the selected provider
-          only when you explicitly run an AI action.
+          {t("settings.ai.disclaimer")}
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </Collapsible>
   );
 }
 
 // ── profile ────────────────────────────────────────────────────────────────
 
 function ProfileCard() {
+  const { t } = useI18n();
   const { profileId } = useApp();
   const { data: prof, loading } = useQuery(() => getProfile(profileId), [profileId]);
   const { draft, setDraft, patch } = useProfileDraft();
@@ -257,10 +288,9 @@ function ProfileCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Profile</CardTitle>
+        <CardTitle>{t("settings.profile.title")}</CardTitle>
         <CardDescription>
-          Used for sex- and age-aware biomarker reference ranges. Single profile for now;
-          multi-profile sharing comes later.
+          {t("settings.profile.description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -274,7 +304,7 @@ function ProfileCard() {
               setTimeout(() => setSaved(false), 2000);
             }}
           >
-            {saved ? "Saved ✓" : "Save profile"}
+            {saved ? t("settings.profile.saved") : t("settings.profile.saveProfile")}
           </Button>
         </div>
       </CardContent>
@@ -285,6 +315,7 @@ function ProfileCard() {
 // ── export ─────────────────────────────────────────────────────────────────
 
 function ExportCard() {
+  const { t } = useI18n();
   const { profileId } = useApp();
   const [busy, setBusy] = React.useState<string | null>(null);
 
@@ -300,8 +331,8 @@ function ExportCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Data export</CardTitle>
-        <CardDescription>Everything is yours — full dump anytime, no lock-in.</CardDescription>
+        <CardTitle>{t("settings.export.title")}</CardTitle>
+        <CardDescription>{t("settings.export.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
         <Button
@@ -309,14 +340,14 @@ function ExportCard() {
           disabled={busy !== null}
           onClick={() => run("json", exportAllJson)}
         >
-          <Download /> {busy === "json" ? "Exporting…" : "Export all (JSON)"}
+          <Download /> {busy === "json" ? t("settings.export.exporting") : t("settings.export.exportAll")}
         </Button>
         <Button
           variant="outline"
           disabled={busy !== null}
           onClick={() => run("csv", () => exportLabsCsv(profileId))}
         >
-          <Download /> {busy === "csv" ? "Exporting…" : "Lab results (CSV)"}
+          <Download /> {busy === "csv" ? t("settings.export.exporting") : t("settings.export.exportLabs")}
         </Button>
       </CardContent>
     </Card>

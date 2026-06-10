@@ -11,14 +11,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { todayISO } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import type { Biomarker } from "@/db/schema";
 
 type Row = { key: number; biomarkerId: number | ""; value: string; unit: string };
 
 export function LabPanelNew() {
   const { profileId } = useApp();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { data: biomarkers, loading } = useQuery(() => listBiomarkers(), []);
 
@@ -40,6 +44,9 @@ export function LabPanelNew() {
     list.push(b);
     byCategory.set(b.category, list);
   }
+  const biomarkerOptions: ComboboxOption[] = [...byCategory.entries()].flatMap(([category, items]) =>
+    items.map((b) => ({ value: String(b.id), label: b.canonicalName, group: category, keywords: b.aliases })),
+  );
 
   const updateRow = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -82,37 +89,37 @@ export function LabPanelNew() {
       >
         <ArrowLeft className="size-3.5" /> Lab results
       </Link>
-      <PageHeader title="New lab panel" description="Manual entry of a lab draw." />
+      <PageHeader title={t("labPanelNew.title")} description={t("labPanelNew.description")} />
 
       <Card>
         <CardHeader>
-          <CardTitle>Panel</CardTitle>
+          <CardTitle>{t("labPanelNew.panelTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Field label="Date">
+          <Field label={t("fields.date")}>
             <DateInput value={date} onChange={setDate} />
           </Field>
-          <Field label="Lab name">
+          <Field label={t("labPanelNew.fields.labName")}>
             <Input
               value={labName}
               onChange={(e) => setLabName(e.target.value)}
               placeholder="e.g. Invitro"
             />
           </Field>
-          <Field label="City">
+          <Field label={t("fields.city")}>
             <Input value={city} onChange={(e) => setCity(e.target.value)} />
           </Field>
-          <Field label="Country">
+          <Field label={t("fields.country")}>
             <Input value={country} onChange={(e) => setCountry(e.target.value)} />
           </Field>
-          <Field label="Type">
+          <Field label={t("fields.type")}>
             <Select
               value={panelType}
               onChange={(e) => setPanelType(e.target.value as typeof panelType)}
             >
-              <option value="blood">Blood</option>
-              <option value="urine">Urine</option>
-              <option value="other">Other</option>
+              <option value="blood">{t("types.blood")}</option>
+              <option value="urine">{t("types.urine")}</option>
+              <option value="other">{t("types.other")}</option>
             </Select>
           </Field>
         </CardContent>
@@ -120,37 +127,28 @@ export function LabPanelNew() {
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Results</CardTitle>
+          <CardTitle>{t("labPanelNew.resultsTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {rows.map((row) => {
             const bio = row.biomarkerId !== "" ? byId.get(row.biomarkerId) : undefined;
             return (
               <div key={row.key} className="flex flex-wrap items-end gap-2">
-                <Field label="Biomarker" className="min-w-56 flex-1">
-                  <Select
-                    value={row.biomarkerId === "" ? "" : String(row.biomarkerId)}
-                    onChange={(e) => {
-                      const id = e.target.value ? Number(e.target.value) : "";
+                <Field label={t("labPanelNew.fields.biomarker")} className="min-w-56 flex-1">
+                  <Combobox
+                    value={row.biomarkerId === "" ? null : String(row.biomarkerId)}
+                    onChange={(v) => {
+                      const id = v ? Number(v) : "";
                       updateRow(row.key, {
                         biomarkerId: id,
                         unit: id !== "" ? (byId.get(id as number)?.defaultUnit ?? "") : "",
                       });
                     }}
-                  >
-                    <option value="">Select biomarker…</option>
-                    {[...byCategory.entries()].map(([category, items]) => (
-                      <optgroup key={category} label={category}>
-                        {items.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.canonicalName}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </Select>
+                    options={biomarkerOptions}
+                    placeholder={t("labPanelNew.selectBiomarker")}
+                  />
                 </Field>
-                <Field label="Value" className="w-28">
+                <Field label={t("fields.value")} className="w-28">
                   <Input
                     type="number"
                     step="any"
@@ -158,7 +156,7 @@ export function LabPanelNew() {
                     onChange={(e) => updateRow(row.key, { value: e.target.value })}
                   />
                 </Field>
-                <Field label="Unit" className="w-28">
+                <Field label={t("fields.unit")} className="w-28">
                   <Input
                     value={row.unit}
                     placeholder={bio?.defaultUnit ?? ""}
@@ -171,7 +169,7 @@ export function LabPanelNew() {
                   className="text-muted-foreground"
                   onClick={() => setRows((rs) => rs.filter((r) => r.key !== row.key))}
                   disabled={rows.length === 1}
-                  aria-label="Remove row"
+                  aria-label={t("labPanelNew.removeRow")}
                 >
                   <Trash2 />
                 </Button>
@@ -188,17 +186,17 @@ export function LabPanelNew() {
               ])
             }
           >
-            <Plus /> Add row
+            <Plus /> {t("labPanelNew.addRow")}
           </Button>
         </CardContent>
       </Card>
 
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="outline" onClick={() => navigate("/labs")}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button onClick={save} disabled={saving || validRows.length === 0 || !date}>
-          Save panel ({validRows.length} result{validRows.length === 1 ? "" : "s"})
+          {validRows.length === 1 ? t("labPanelNew.savePanelSingular", { count: validRows.length.toString() }) : t("labPanelNew.savePanelPlural", { count: validRows.length.toString() })}
         </Button>
       </div>
     </>

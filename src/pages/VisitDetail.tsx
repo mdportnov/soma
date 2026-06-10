@@ -22,11 +22,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VisitForm } from "./Visits";
 import { DiagnosisForm } from "./Diagnoses";
 import { formatDate } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export function VisitDetail() {
   const { id } = useParams();
   const visitId = Number(id);
   const { profileId } = useApp();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = React.useState(false);
   const [diagnosisOpen, setDiagnosisOpen] = React.useState(false);
@@ -43,7 +45,7 @@ export function VisitDetail() {
   }, [visitId]);
 
   if (loading || !data) return <Loading />;
-  if (!data.visit) return <EmptyState icon={Stethoscope} title="Visit not found" />;
+  if (!data.visit) return <EmptyState icon={Stethoscope} title={t("visitDetail.visitNotFound")} />;
   const { visit, diagnoses, prescriptions } = data;
 
   return (
@@ -72,7 +74,7 @@ export function VisitDetail() {
               variant="outline"
               size="icon"
               onClick={() => setConfirmDelete(true)}
-              aria-label="Delete visit"
+              aria-label={t("visitDetail.deleteVisit")}
             >
               <Trash2 className="text-destructive" />
             </Button>
@@ -83,7 +85,7 @@ export function VisitDetail() {
       {visit.notes && (
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle>Notes</CardTitle>
+            <CardTitle>{t("fields.notes")}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="whitespace-pre-wrap text-sm">{visit.notes}</p>
@@ -94,7 +96,7 @@ export function VisitDetail() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Diagnoses</CardTitle>
+            <CardTitle>{t("visitDetail.diagnosesTitle")}</CardTitle>
             <Button variant="outline" size="sm" onClick={() => setDiagnosisOpen(true)}>
               <Plus /> Add
             </Button>
@@ -123,7 +125,7 @@ export function VisitDetail() {
                             : "secondary"
                       }
                     >
-                      {d.status}
+                      {t(`status.${d.status}`)}
                     </Badge>
                   </li>
                 ))}
@@ -134,7 +136,7 @@ export function VisitDetail() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Prescriptions</CardTitle>
+            <CardTitle>{t("visitDetail.prescriptionsTitle")}</CardTitle>
             <Button variant="outline" size="sm" onClick={() => setRxOpen(true)}>
               <Plus /> Add
             </Button>
@@ -194,8 +196,8 @@ export function VisitDetail() {
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Delete this visit?"
-        description="Prescriptions of this visit are removed; linked diagnoses are kept but unlinked."
+        title={t("visitDetail.deleteVisitTitle")}
+        description={t("visitDetail.deleteVisitDescription")}
       >
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setConfirmDelete(false)}>
@@ -208,7 +210,7 @@ export function VisitDetail() {
               navigate("/visits");
             }}
           >
-            Delete visit
+            {t("visitDetail.deleteVisit")}
           </Button>
         </div>
       </Dialog>
@@ -227,6 +229,7 @@ function PrescriptionDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const [notes, setNotes] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
@@ -234,10 +237,26 @@ function PrescriptionDialog({
     if (open) setNotes("");
   }, [open]);
 
+  const addPrescription = async () => {
+    setSaving(true);
+    try {
+      await createPrescription({ visitId, notes: notes.trim() });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} title="Add prescription">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={t("visitDetail.addPrescription")}
+      onSubmit={addPrescription}
+      submitDisabled={saving || !notes.trim()}
+    >
       <div className="grid gap-3">
-        <Field label="Prescription">
+        <Field label={t("visitDetail.fields.prescription")}>
           <Textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -246,19 +265,11 @@ function PrescriptionDialog({
         </Field>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             disabled={saving || !notes.trim()}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                await createPrescription({ visitId, notes: notes.trim() });
-                onSaved();
-              } finally {
-                setSaving(false);
-              }
-            }}
+            onClick={addPrescription}
           >
             Add
           </Button>

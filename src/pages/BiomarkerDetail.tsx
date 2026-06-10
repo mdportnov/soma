@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/lib/i18n";
 import {
   Table,
   TableBody,
@@ -24,6 +25,7 @@ import { cn, formatDate, formatValue } from "@/lib/utils";
 export function BiomarkerDetail() {
   const { id } = useParams();
   const { profileId } = useApp();
+  const { t } = useI18n();
   const biomarkerId = Number(id);
   const [activeOverlays, setActiveOverlays] = React.useState<Set<number>>(new Set());
 
@@ -37,7 +39,7 @@ export function BiomarkerDetail() {
   }, [profileId, biomarkerId]);
 
   if (loading || !data) return <Loading />;
-  if (!data.bio) return <EmptyState icon={LineChart} title="Biomarker not found" />;
+  if (!data.bio) return <EmptyState icon={LineChart} title={t("biomarkerDetail.biomarkerNotFound")} />;
 
   const { bio, series, meds } = data;
 
@@ -86,14 +88,14 @@ export function BiomarkerDetail() {
       {series.length === 0 ? (
         <EmptyState
           icon={LineChart}
-          title="No results yet"
-          description="Add a lab panel containing this biomarker to see the trend."
+          title={t("biomarkerDetail.emptyTitle")}
+          description={t("biomarkerDetail.emptyDescription")}
         />
       ) : (
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Trend</CardTitle>
+              <CardTitle>{t("biomarkerDetail.trendTitle")}</CardTitle>
               <CardDescription>
                 Shaded bands: reference and optimal ranges. Toggle medications below to overlay
                 intake periods and correlate them with shifts.
@@ -141,16 +143,16 @@ export function BiomarkerDetail() {
 
           <Card className="mt-4">
             <CardHeader>
-              <CardTitle>All results</CardTitle>
+              <CardTitle>{t("biomarkerDetail.allResultsTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Value</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Lab</TableHead>
+                    <TableHead>{t("fields.date")}</TableHead>
+                    <TableHead>{t("fields.value")}</TableHead>
+                    <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
+                    <TableHead>{t("labs.tableColumns.lab")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

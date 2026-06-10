@@ -1,5 +1,5 @@
 import * as React from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Activity,
   CalendarRange,
@@ -29,6 +29,7 @@ const NAV = [
 
 export function Shell() {
   const [theme, setTheme] = React.useState<Theme>(() => loadTheme());
+  const location = useLocation();
 
   React.useEffect(() => applyTheme(theme), [theme]);
 
@@ -88,7 +89,8 @@ export function Shell() {
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-6xl p-6 md:p-8">
+        {/* key on pathname re-mounts the page so navigation fades in */}
+        <div key={location.pathname} className="animate-step-in mx-auto max-w-6xl p-6 md:p-8">
           <Outlet />
         </div>
       </main>

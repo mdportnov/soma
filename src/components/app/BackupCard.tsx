@@ -270,176 +270,179 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
             : "How often should Soma back up?"
       }
     >
-      {step === 1 && (
-        <div className="grid gap-2">
-          {(detection?.providers ?? []).map((p) => {
-            const unavailable = !p.path;
-            const reason =
-              p.id === "icloud" && detection?.platform !== "macos"
-                ? "macOS only"
-                : "Not found on this computer";
-            return (
-              <button
-                key={p.id}
-                type="button"
-                disabled={unavailable}
-                onClick={() => p.path && chooseDetected(p.id, p.path)}
-                className={cn(
-                  "rounded-lg border p-3 text-left transition-colors",
-                  unavailable && "cursor-not-allowed opacity-50",
-                  !unavailable && "hover:bg-muted",
-                  provider === p.id && destDir === p.path && "border-primary bg-secondary",
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{p.label}</span>
-                  {unavailable ? (
-                    <Badge variant="secondary">{reason}</Badge>
-                  ) : (
-                    <Badge variant="success">Detected</Badge>
+      {/* key={step} re-mounts the body so each step slides in */}
+      <div key={step} className="animate-step-in">
+        {step === 1 && (
+          <div className="grid gap-2">
+            {(detection?.providers ?? []).map((p) => {
+              const unavailable = !p.path;
+              const reason =
+                p.id === "icloud" && detection?.platform !== "macos"
+                  ? "macOS only"
+                  : "Not found on this computer";
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={unavailable}
+                  onClick={() => p.path && chooseDetected(p.id, p.path)}
+                  className={cn(
+                    "rounded-lg border p-3 text-left transition-colors",
+                    unavailable && "cursor-not-allowed opacity-50",
+                    !unavailable && "hover:bg-muted",
+                    provider === p.id && destDir === p.path && "border-primary bg-secondary",
                   )}
-                </div>
-                {p.path && (
-                  <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-                    {p.path}
-                  </p>
-                )}
-              </button>
-            );
-          })}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{p.label}</span>
+                    {unavailable ? (
+                      <Badge variant="secondary">{reason}</Badge>
+                    ) : (
+                      <Badge variant="success">Detected</Badge>
+                    )}
+                  </div>
+                  {p.path && (
+                    <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                      {p.path}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
 
-          <button
-            type="button"
-            onClick={pickFolder}
-            className={cn(
-              "flex items-center gap-2 rounded-lg border border-dashed p-3 text-left text-sm transition-colors hover:bg-muted",
-              provider === "custom" && destDir && "border-primary bg-secondary",
-            )}
-          >
-            <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-            {provider === "custom" && destDir ? (
-              <span className="truncate font-mono text-xs">{destDir}</span>
-            ) : (
-              "Choose a folder manually…"
-            )}
-          </button>
-
-          {customWarning && (
-            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-              {customWarning}
-            </p>
-          )}
-          {dirError && (
-            <p className="flex items-start gap-1.5 text-xs text-destructive">
-              <XCircle className="mt-0.5 size-3.5 shrink-0" /> {dirError}
-            </p>
-          )}
-
-          <p className="text-[11px] text-muted-foreground">
-            A <code>Soma Backups</code> subfolder is created inside, with a README explaining the
-            files. Only encrypted snapshots go there — never your live data.
-          </p>
-
-          <div className="mt-2 flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button disabled={!destDir} onClick={() => setStep(2)}>
-              Continue
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="grid gap-3">
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
-            <p className="flex items-start gap-1.5 font-medium">
-              <KeyRound className="mt-0.5 size-3.5 shrink-0" />
-              This passphrase encrypts every backup. It is stored only in this device&apos;s
-              keychain.
-            </p>
-            <p className="mt-1.5 text-muted-foreground">
-              If you lose this device <em>and</em> the passphrase, your backups cannot be recovered
-              — by anyone. Save it in your password manager now.
-            </p>
-          </div>
-          <Field label="Passphrase (min 8 characters)">
-            <Input
-              type="password"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
-              autoComplete="new-password"
-            />
-          </Field>
-          <Field label="Repeat passphrase">
-            <Input
-              type="password"
-              value={pass2}
-              onChange={(e) => setPass2(e.target.value)}
-              autoComplete="new-password"
-            />
-          </Field>
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={passSaved}
-              onChange={(e) => setPassSaved(e.target.checked)}
-              className="accent-primary"
-            />
-            I saved the passphrase somewhere safe
-          </label>
-          {passError && (
-            <p className="flex items-start gap-1.5 text-xs text-destructive">
-              <XCircle className="mt-0.5 size-3.5 shrink-0" /> {passError}
-            </p>
-          )}
-          <div className="mt-1 flex justify-between gap-2">
-            <Button variant="ghost" onClick={() => setStep(1)}>
-              Back
-            </Button>
-            <Button disabled={!pass || !pass2 || !passSaved} onClick={submitPassphrase}>
-              Continue
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="grid gap-3">
-          <Field label="Backup frequency">
-            <Select
-              value={frequency}
-              onChange={(e) => setFrequency(e.target.value as BackupFrequency)}
+            <button
+              type="button"
+              onClick={pickFolder}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border border-dashed p-3 text-left text-sm transition-colors hover:bg-muted",
+                provider === "custom" && destDir && "border-primary bg-secondary",
+              )}
             >
-              {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
-            <p>
-              Destination: <span className="font-mono">{destDir}</span>
+              <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+              {provider === "custom" && destDir ? (
+                <span className="truncate font-mono text-xs">{destDir}</span>
+              ) : (
+                "Choose a folder manually…"
+              )}
+            </button>
+
+            {customWarning && (
+              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                {customWarning}
+              </p>
+            )}
+            {dirError && (
+              <p className="flex items-start gap-1.5 text-xs text-destructive">
+                <XCircle className="mt-0.5 size-3.5 shrink-0" /> {dirError}
+              </p>
+            )}
+
+            <p className="text-[11px] text-muted-foreground">
+              A <code>Soma Backups</code> subfolder is created inside, with a README explaining the
+              files. Only encrypted snapshots go there — never your live data.
             </p>
-            <p className="mt-1">
-              Soma also checks on every launch and catches up if a backup was missed. The newest 12
-              snapshots are kept; older ones are deleted automatically.
-            </p>
+
+            <div className="mt-2 flex justify-end gap-2">
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button disabled={!destDir} onClick={() => setStep(2)}>
+                Continue
+              </Button>
+            </div>
           </div>
-          <div className="mt-1 flex justify-between gap-2">
-            <Button variant="ghost" onClick={() => setStep(2)}>
-              Back
-            </Button>
-            <Button onClick={finish} disabled={finishing}>
-              {finishing ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
-              Enable & back up now
-            </Button>
+        )}
+
+        {step === 2 && (
+          <div className="grid gap-3">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
+              <p className="flex items-start gap-1.5 font-medium">
+                <KeyRound className="mt-0.5 size-3.5 shrink-0" />
+                This passphrase encrypts every backup. It is stored only in this device&apos;s
+                keychain.
+              </p>
+              <p className="mt-1.5 text-muted-foreground">
+                If you lose this device <em>and</em> the passphrase, your backups cannot be
+                recovered — by anyone. Save it in your password manager now.
+              </p>
+            </div>
+            <Field label="Passphrase (min 8 characters)">
+              <Input
+                type="password"
+                value={pass}
+                onChange={(e) => setPass(e.target.value)}
+                autoComplete="new-password"
+              />
+            </Field>
+            <Field label="Repeat passphrase">
+              <Input
+                type="password"
+                value={pass2}
+                onChange={(e) => setPass2(e.target.value)}
+                autoComplete="new-password"
+              />
+            </Field>
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={passSaved}
+                onChange={(e) => setPassSaved(e.target.checked)}
+                className="accent-primary"
+              />
+              I saved the passphrase somewhere safe
+            </label>
+            {passError && (
+              <p className="flex items-start gap-1.5 text-xs text-destructive">
+                <XCircle className="mt-0.5 size-3.5 shrink-0" /> {passError}
+              </p>
+            )}
+            <div className="mt-1 flex justify-between gap-2">
+              <Button variant="ghost" onClick={() => setStep(1)}>
+                Back
+              </Button>
+              <Button disabled={!pass || !pass2 || !passSaved} onClick={submitPassphrase}>
+                Continue
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {step === 3 && (
+          <div className="grid gap-3">
+            <Field label="Backup frequency">
+              <Select
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value as BackupFrequency)}
+              >
+                {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+              <p>
+                Destination: <span className="font-mono">{destDir}</span>
+              </p>
+              <p className="mt-1">
+                Soma also checks on every launch and catches up if a backup was missed. The newest
+                12 snapshots are kept; older ones are deleted automatically.
+              </p>
+            </div>
+            <div className="mt-1 flex justify-between gap-2">
+              <Button variant="ghost" onClick={() => setStep(2)}>
+                Back
+              </Button>
+              <Button onClick={finish} disabled={finishing}>
+                {finishing ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+                Enable & back up now
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </Dialog>
   );
 }
@@ -505,104 +508,107 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
           : "Pick a .somabk file and enter the passphrase it was encrypted with."
       }
     >
-      {!meta ? (
-        <div className="grid gap-3">
-          <button
-            type="button"
-            onClick={pickFile}
-            className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-left text-sm transition-colors hover:bg-muted"
-          >
-            <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-            {filePath ? (
-              <span className="truncate font-mono text-xs">{filePath}</span>
-            ) : (
-              "Choose backup file…"
-            )}
-          </button>
-          <Field label="Passphrase">
-            <Input
-              type="password"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
-              autoComplete="off"
-            />
-          </Field>
-          {error && (
-            <p className="flex items-start gap-1.5 text-xs text-destructive">
-              <XCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
-            </p>
-          )}
-          <div className="mt-1 flex justify-end gap-2">
-            <Button variant="ghost" onClick={close}>
-              Cancel
-            </Button>
-            <Button disabled={!filePath || !pass || busy} onClick={inspect}>
-              {busy ? <Loader2 className="animate-spin" /> : null}
-              Continue
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          <div className="rounded-lg border bg-muted/40 p-3 text-xs">
-            <p className="truncate font-mono">{filePath}</p>
-            <p className="mt-1.5 text-muted-foreground">
-              Decrypted size: {formatSize(meta.sizeBytes)}
-              {meta.fileModifiedAt && <> · file date: {formatDate(meta.fileModifiedAt)}</>}
-              {" · schema v"}
-              {meta.schemaVersion} (app has v{currentSchemaVersion})
-            </p>
-          </div>
-
-          {newerThanApp ? (
-            <p className="flex items-start gap-1.5 text-xs text-destructive">
-              <XCircle className="mt-0.5 size-3.5 shrink-0" />
-              This backup was made by a newer version of Soma. Update the app first, then restore.
-            </p>
-          ) : (
-            <>
-              {meta.schemaVersion < currentSchemaVersion && (
-                <p className="text-xs text-muted-foreground">
-                  The backup uses an older schema — it will be migrated automatically after the
-                  restart.
-                </p>
-              )}
-              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs">
-                <p className="flex items-start gap-1.5 font-medium text-destructive">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  This replaces your current database and restarts the app.
-                </p>
-                <p className="mt-1.5 text-muted-foreground">
-                  A timestamped safety copy of the current database is kept next to it, so this can
-                  be undone manually if needed.
-                </p>
-              </div>
-            </>
-          )}
-
-          {error && (
-            <p className="flex items-start gap-1.5 text-xs text-destructive">
-              <XCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
-            </p>
-          )}
-
-          <div className="mt-1 flex justify-between gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                void discardRestoreStaging();
-                setMeta(null);
-              }}
+      {/* re-mounts on phase change so the review screen slides in */}
+      <div key={meta ? "review" : "pick"} className="animate-step-in">
+        {!meta ? (
+          <div className="grid gap-3">
+            <button
+              type="button"
+              onClick={pickFile}
+              className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-left text-sm transition-colors hover:bg-muted"
             >
-              Back
-            </Button>
-            <Button variant="destructive" disabled={busy || newerThanApp} onClick={restore}>
-              {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-              Replace data & restart
-            </Button>
+              <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+              {filePath ? (
+                <span className="truncate font-mono text-xs">{filePath}</span>
+              ) : (
+                "Choose backup file…"
+              )}
+            </button>
+            <Field label="Passphrase">
+              <Input
+                type="password"
+                value={pass}
+                onChange={(e) => setPass(e.target.value)}
+                autoComplete="off"
+              />
+            </Field>
+            {error && (
+              <p className="flex items-start gap-1.5 text-xs text-destructive">
+                <XCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
+              </p>
+            )}
+            <div className="mt-1 flex justify-end gap-2">
+              <Button variant="ghost" onClick={close}>
+                Cancel
+              </Button>
+              <Button disabled={!filePath || !pass || busy} onClick={inspect}>
+                {busy ? <Loader2 className="animate-spin" /> : null}
+                Continue
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="grid gap-3">
+            <div className="rounded-lg border bg-muted/40 p-3 text-xs">
+              <p className="truncate font-mono">{filePath}</p>
+              <p className="mt-1.5 text-muted-foreground">
+                Decrypted size: {formatSize(meta.sizeBytes)}
+                {meta.fileModifiedAt && <> · file date: {formatDate(meta.fileModifiedAt)}</>}
+                {" · schema v"}
+                {meta.schemaVersion} (app has v{currentSchemaVersion})
+              </p>
+            </div>
+
+            {newerThanApp ? (
+              <p className="flex items-start gap-1.5 text-xs text-destructive">
+                <XCircle className="mt-0.5 size-3.5 shrink-0" />
+                This backup was made by a newer version of Soma. Update the app first, then restore.
+              </p>
+            ) : (
+              <>
+                {meta.schemaVersion < currentSchemaVersion && (
+                  <p className="text-xs text-muted-foreground">
+                    The backup uses an older schema — it will be migrated automatically after the
+                    restart.
+                  </p>
+                )}
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs">
+                  <p className="flex items-start gap-1.5 font-medium text-destructive">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                    This replaces your current database and restarts the app.
+                  </p>
+                  <p className="mt-1.5 text-muted-foreground">
+                    A timestamped safety copy of the current database is kept next to it, so this
+                    can be undone manually if needed.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {error && (
+              <p className="flex items-start gap-1.5 text-xs text-destructive">
+                <XCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
+              </p>
+            )}
+
+            <div className="mt-1 flex justify-between gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  void discardRestoreStaging();
+                  setMeta(null);
+                }}
+              >
+                Back
+              </Button>
+              <Button variant="destructive" disabled={busy || newerThanApp} onClick={restore}>
+                {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+                Replace data & restart
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </Dialog>
   );
 }

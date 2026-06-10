@@ -1,8 +1,10 @@
 @import "tailwindcss";
+@import "react-day-picker/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
   --background: oklch(0.988 0.002 95);
   --foreground: oklch(0.235 0.01 250);
   --card: oklch(1 0 0);
@@ -26,6 +28,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.185 0.008 255);
   --foreground: oklch(0.93 0.005 250);
   --card: oklch(0.225 0.009 255);
@@ -143,4 +146,37 @@
       transition-duration: 0.01ms !important;
     }
   }
+}
+
+/* react-day-picker themed via its CSS variables (used by DateInput) */
+.rdp-root {
+  --rdp-accent-color: var(--primary);
+  --rdp-accent-background-color: color-mix(in oklch, var(--primary) 18%, transparent);
+  --rdp-today-color: var(--primary);
+  --rdp-day-width: 2.1rem;
+  --rdp-day-height: 2.1rem;
+  --rdp-day_button-width: 2.1rem;
+  --rdp-day_button-height: 2.1rem;
+  --rdp-day_button-border-radius: calc(var(--radius) - 2px);
+  --rdp-nav_button-width: 1.75rem;
+  --rdp-nav_button-height: 1.75rem;
+  --rdp-weekday-opacity: 0.55;
+  font-size: 0.8125rem;
+}
+.rdp-month_caption {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.rdp-dropdown {
+  /* native select inside the caption — keep it on-theme */
+  background: var(--card);
+  color: var(--foreground);
+}
+.rdp-day_button:hover:not([disabled]) {
+  background: var(--muted);
+}
+.rdp-selected .rdp-day_button {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
 }

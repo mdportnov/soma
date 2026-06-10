@@ -36,6 +36,7 @@ import { Field } from "@/components/app/Field";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -536,11 +537,7 @@ function ReviewStep({
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Field label="Date">
-            <Input
-              type="date"
-              value={meta.date}
-              onChange={(e) => setMeta.setDate(e.target.value)}
-            />
+            <DateInput value={meta.date} onChange={setMeta.setDate} />
           </Field>
           <Field label="Lab name">
             <Input value={meta.labName} onChange={(e) => setMeta.setLabName(e.target.value)} />

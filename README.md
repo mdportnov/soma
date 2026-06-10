@@ -85,7 +85,7 @@ Prerequisites: **Node 22+**, **pnpm**, **Rust (stable)** and the
 git clone https://github.com/mdportnov/soma.git
 cd soma
 pnpm install
-pnpm tauri icon src-tauri/icons/icon.png   # generate platform icon set (once)
+pnpm tauri icon docs/assets/logo.svg        # regenerate platform icon set from the brand mark
 pnpm tauri dev                             # run the app
 pnpm tauri build                           # production installers
 ```

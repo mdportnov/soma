@@ -4,7 +4,6 @@ import {
   Activity,
   CalendarRange,
   FlaskConical,
-  HeartPulse,
   LayoutDashboard,
   Moon,
   Pill,
@@ -16,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { applyTheme, loadTheme, type Theme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
+import logo from "@/assets/logo.svg";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -36,9 +36,7 @@ export function Shell() {
     <div className="flex h-screen overflow-hidden">
       <aside className="flex w-14 shrink-0 flex-col border-r bg-card md:w-52">
         <div className="flex h-14 items-center gap-2.5 border-b px-3 md:px-4">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <HeartPulse className="size-4" />
-          </div>
+          <img src={logo} alt="Soma" className="size-7 shrink-0" />
           <span className="hidden text-sm font-semibold tracking-tight md:block">Soma</span>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">

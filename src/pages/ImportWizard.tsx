@@ -226,87 +226,90 @@ export function ImportWizard() {
         </div>
       )}
 
-      {step.name === "pick" && (
-        <Card className="mx-auto max-w-lg">
-          <CardContent className="flex flex-col items-center py-10 text-center">
-            <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-secondary">
+      {/* key={step.name} re-mounts the stage so transitions slide in */}
+      <div key={step.name} className="animate-step-in">
+        {step.name === "pick" && (
+          <Card className="mx-auto max-w-lg">
+            <CardContent className="flex flex-col items-center py-10 text-center">
+              <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-secondary">
+                {filePath ? (
+                  <FileText className="size-5 text-secondary-foreground" />
+                ) : (
+                  <Upload className="size-5 text-secondary-foreground" />
+                )}
+              </div>
               {filePath ? (
-                <FileText className="size-5 text-secondary-foreground" />
+                <>
+                  <p className="max-w-sm truncate text-sm font-medium">
+                    {filePath.split(/[/\\]/).pop()}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Any language, any lab, any country — scans and photos included.
+                  </p>
+                  <div className="mt-4 flex gap-2">
+                    <Button variant="outline" onClick={pickFile}>
+                      Choose another
+                    </Button>
+                    <Button onClick={() => runExtraction(boot.provider!)}>
+                      <Sparkles /> Extract results
+                    </Button>
+                  </div>
+                </>
               ) : (
-                <Upload className="size-5 text-secondary-foreground" />
+                <>
+                  <p className="text-sm font-medium">Choose a lab report</p>
+                  <p className="mt-1 text-xs text-muted-foreground">PDF, JPG, PNG or WebP</p>
+                  <Button className="mt-4" onClick={pickFile}>
+                    <Upload /> Choose file
+                  </Button>
+                </>
               )}
-            </div>
-            {filePath ? (
-              <>
-                <p className="max-w-sm truncate text-sm font-medium">
-                  {filePath.split(/[/\\]/).pop()}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Any language, any lab, any country — scans and photos included.
-                </p>
-                <div className="mt-4 flex gap-2">
-                  <Button variant="outline" onClick={pickFile}>
-                    Choose another
-                  </Button>
-                  <Button onClick={() => runExtraction(boot.provider!)}>
-                    <Sparkles /> Extract results
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-medium">Choose a lab report</p>
-                <p className="mt-1 text-xs text-muted-foreground">PDF, JPG, PNG or WebP</p>
-                <Button className="mt-4" onClick={pickFile}>
-                  <Upload /> Choose file
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )}
 
-      {step.name === "extracting" && (
-        <Card className="mx-auto max-w-lg">
-          <CardContent className="flex flex-col items-center py-12 text-center">
-            <Loader2 className="mb-3 size-6 animate-spin text-primary" />
-            <p className="text-sm font-medium">Extracting and mapping…</p>
-            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              Phase 1: structured extraction. Phase 2: matching against your biomarker dictionary
-              (exact → alias → fuzzy → AI disambiguation).
-            </p>
-          </CardContent>
-        </Card>
-      )}
+        {step.name === "extracting" && (
+          <Card className="mx-auto max-w-lg">
+            <CardContent className="flex flex-col items-center py-12 text-center">
+              <Loader2 className="mb-3 size-6 animate-spin text-primary" />
+              <p className="text-sm font-medium">Extracting and mapping…</p>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                Phase 1: structured extraction. Phase 2: matching against your biomarker dictionary
+                (exact → alias → fuzzy → AI disambiguation).
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-      {(step.name === "review" || step.name === "saving") && step.name === "review" && (
-        <ReviewStep
-          rows={step.rows}
-          index={index}
-          biomarkers={boot.biomarkers}
-          onChangeRow={(key, biomarkerId) =>
-            updateRows(step.rows, (rs) => {
-              const row = rs.find((r) => r.key === key)!;
-              row.biomarkerId = biomarkerId;
-              row.confidence = biomarkerId == null ? "none" : row.confidence;
-              row.include = biomarkerId != null ? row.include : false;
-              reconvertRow(row, index);
-            })
-          }
-          onToggleInclude={(key) =>
-            updateRows(step.rows, (rs) => {
-              const row = rs.find((r) => r.key === key)!;
-              row.include = !row.include && row.biomarkerId != null;
-            })
-          }
-          onCreateCustom={(key) => setCustomForKey(key)}
-          meta={{ date, labName, city, country, panelType }}
-          setMeta={{ setDate, setLabName, setCity, setCountry, setPanelType }}
-          onSave={() => save(step.rows)}
-        />
-      )}
+        {(step.name === "review" || step.name === "saving") && step.name === "review" && (
+          <ReviewStep
+            rows={step.rows}
+            index={index}
+            biomarkers={boot.biomarkers}
+            onChangeRow={(key, biomarkerId) =>
+              updateRows(step.rows, (rs) => {
+                const row = rs.find((r) => r.key === key)!;
+                row.biomarkerId = biomarkerId;
+                row.confidence = biomarkerId == null ? "none" : row.confidence;
+                row.include = biomarkerId != null ? row.include : false;
+                reconvertRow(row, index);
+              })
+            }
+            onToggleInclude={(key) =>
+              updateRows(step.rows, (rs) => {
+                const row = rs.find((r) => r.key === key)!;
+                row.include = !row.include && row.biomarkerId != null;
+              })
+            }
+            onCreateCustom={(key) => setCustomForKey(key)}
+            meta={{ date, labName, city, country, panelType }}
+            setMeta={{ setDate, setLabName, setCity, setCountry, setPanelType }}
+            onSave={() => save(step.rows)}
+          />
+        )}
 
-      {step.name === "saving" && <Loading label="Saving panel…" />}
+        {step.name === "saving" && <Loading label="Saving panel…" />}
+      </div>
 
       <CreateBiomarkerDialog
         open={customForKey != null}

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowLeft, ArrowRight, Check, HeartPulse, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, ShieldCheck, Sparkles } from "lucide-react";
 import { completeOnboarding } from "@/db/repos";
 import {
   CoreFields,
@@ -9,6 +9,7 @@ import {
 } from "@/components/app/ProfileFields";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import logo from "@/assets/logo.svg";
 
 type StepId = "welcome" | "core" | "optional" | "done";
 const ORDER: StepId[] = ["welcome", "core", "optional", "done"];
@@ -26,6 +27,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
 
   const index = ORDER.indexOf(step);
   const coreValid = draft.name.trim().length > 0 && draft.birthDate !== "" && draft.sex !== "";
+  const firstName = draft.name.trim().split(/\s+/)[0];
 
   const go = (id: StepId) => {
     setError(null);
@@ -46,134 +48,148 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
-      <div className="w-full max-w-xl">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-6">
+      {/* soft brand glow behind the card */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-1/3 size-[640px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60"
+        style={{
+          background:
+            "radial-gradient(circle, color-mix(in oklch, var(--primary) 14%, transparent) 0%, transparent 65%)",
+        }}
+      />
+
+      <div className="animate-rise-in relative w-full max-w-xl">
         <div className="mb-6 flex items-center justify-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <HeartPulse className="size-4.5" />
-          </div>
-          <span className="text-base font-semibold tracking-tight">Soma</span>
+          <img src={logo} alt="" className="size-9" />
+          <span className="text-lg font-semibold tracking-tight">Soma</span>
         </div>
 
-        {/* progress dots (skip the welcome/done framing screens) */}
-        <div className="mb-4 flex items-center justify-center gap-1.5">
+        <div className="mb-5 flex items-center justify-center gap-1.5">
           {ORDER.map((id, i) => (
             <span
               key={id}
               className={
-                "h-1.5 rounded-full transition-all " +
-                (i <= index ? "w-6 bg-primary" : "w-3 bg-muted")
+                "h-1.5 rounded-full transition-all duration-300 " +
+                (i === index ? "w-6 bg-primary" : i < index ? "w-3 bg-primary/50" : "w-3 bg-muted")
               }
             />
           ))}
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          <div className="animate-step-in mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
-        {step === "welcome" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Welcome to Soma</CardTitle>
-              <CardDescription>
-                Your private, local-first health dashboard. Let&apos;s set up your profile so lab
-                results can be checked against the right reference ranges for you.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
-                Everything you enter stays on this device. It takes about a minute.
-              </p>
-              <div className="flex justify-end">
-                <Button onClick={() => go("core")}>
-                  Get started <ArrowRight />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {step === "core" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>About you</CardTitle>
-              <CardDescription>
-                Biological sex and age determine which reference ranges apply to your biomarkers, so
-                these are required.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <CoreFields draft={draft} patch={patch} />
-              <div className="flex items-center justify-between">
-                <Button variant="ghost" onClick={() => go("welcome")}>
-                  <ArrowLeft /> Back
-                </Button>
-                <Button disabled={!coreValid} onClick={() => go("optional")}>
-                  Continue <ArrowRight />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {step === "optional" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>A bit more (optional)</CardTitle>
-              <CardDescription>
-                These refine some reference ranges and help track goals. Skip anything you&apos;d
-                rather not share — you can edit it later in Settings.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <OptionalFields draft={draft} patch={patch} />
-              <div className="flex items-center justify-between">
-                <Button variant="ghost" onClick={() => go("core")}>
-                  <ArrowLeft /> Back
-                </Button>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => go("done")}>
-                    Skip
+        {/* key={step} re-mounts the card so each step slides in */}
+        <div key={step} className="animate-step-in">
+          {step === "welcome" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Welcome to Soma</CardTitle>
+                <CardDescription>
+                  Your health record, on your terms — labs, medications and visits in one private
+                  timeline. A minute of setup lets Soma read your results against the reference
+                  ranges that actually apply to you.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
+                  Everything you enter stays on this device — no account, no cloud, no tracking.
+                </p>
+                <div className="flex justify-end">
+                  <Button onClick={() => go("core")}>
+                    Get started <ArrowRight />
                   </Button>
-                  <Button onClick={() => go("done")}>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {step === "core" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>About you</CardTitle>
+                <CardDescription>
+                  Sex and age decide which reference ranges apply to your biomarkers — that&apos;s
+                  why these few are required.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <CoreFields draft={draft} patch={patch} />
+                <div className="flex items-center justify-between">
+                  <Button variant="ghost" onClick={() => go("welcome")}>
+                    <ArrowLeft /> Back
+                  </Button>
+                  <Button disabled={!coreValid} onClick={() => go("optional")}>
                     Continue <ArrowRight />
                   </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
 
-        {step === "done" && (
-          <Card>
-            <CardHeader>
-              <CardTitle>You&apos;re all set</CardTitle>
-              <CardDescription>
-                Your profile is ready. Import lab results, log medications and visits, and Soma will
-                flag values outside your reference ranges.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                <Check className="mt-0.5 size-4 shrink-0 text-success" />
-                {draft.name.trim() || "Profile"} — saved locally.
-              </p>
-              <div className="flex items-center justify-between">
-                <Button variant="ghost" onClick={() => go("optional")} disabled={saving}>
-                  <ArrowLeft /> Back
-                </Button>
-                <Button onClick={finish} disabled={saving}>
-                  {saving ? <Loader2 className="animate-spin" /> : null}
-                  Go to dashboard
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+          {step === "optional" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Fine-tuning</CardTitle>
+                <CardDescription>
+                  Optional, and worth it: these refine a few reference ranges and help track goals.
+                  Skip anything — it&apos;s all editable later in Settings.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <OptionalFields draft={draft} patch={patch} />
+                <div className="flex items-center justify-between">
+                  <Button variant="ghost" onClick={() => go("core")}>
+                    <ArrowLeft /> Back
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => go("done")}>
+                      Skip for now
+                    </Button>
+                    <Button onClick={() => go("done")}>
+                      Continue <ArrowRight />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {step === "done" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {firstName ? `You're all set, ${firstName}` : "You're all set"}
+                </CardTitle>
+                <CardDescription>
+                  Your profile is saved locally. Import a lab report, log what you take, and Soma
+                  starts connecting the dots.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
+                  Tip: overlay any medication on a biomarker chart to see whether what you take
+                  actually moves the numbers.
+                </p>
+                <div className="flex items-center justify-between">
+                  <Button variant="ghost" onClick={() => go("optional")} disabled={saving}>
+                    <ArrowLeft /> Back
+                  </Button>
+                  <Button onClick={finish} disabled={saving}>
+                    {saving ? <Loader2 className="animate-spin" /> : null}
+                    Open dashboard
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );

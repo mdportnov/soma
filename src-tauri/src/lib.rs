@@ -1,3 +1,5 @@
+mod backup;
+
 use keyring::Entry;
 
 /// Keychain service name; one entry per AI provider.
@@ -43,7 +45,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             keychain_set,
             keychain_get,
-            keychain_delete
+            keychain_delete,
+            backup::detect_backup_providers,
+            backup::verify_backup_dir,
+            backup::backup_passphrase_set,
+            backup::backup_passphrase_exists,
+            backup::backup_passphrase_delete,
+            backup::backup_snapshot_target,
+            backup::create_backup,
+            backup::inspect_backup,
+            backup::discard_restore_staging,
+            backup::restore_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -13,6 +13,9 @@ const migrationFiles = import.meta.glob<string>("./migrations/*.sql", {
 
 const BREAKPOINT = "--> statement-breakpoint";
 
+/** Schema version = number of bundled migrations; stamped into backup files. */
+export const schemaVersion = Object.keys(migrationFiles).length;
+
 export async function runMigrations(conn: Database): Promise<void> {
   await conn.execute(
     `CREATE TABLE IF NOT EXISTS __migrations (

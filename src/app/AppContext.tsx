@@ -1,6 +1,7 @@
 import * as React from "react";
 import { initDatabase } from "@/db/client";
 import { ensureActiveProfile, isOnboarded } from "@/db/repos";
+import { initBackupScheduler } from "@/lib/backup";
 import { Loading } from "@/components/app/Loading";
 import { Onboarding } from "@/pages/Onboarding";
 
@@ -27,6 +28,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const profileId = await ensureActiveProfile();
         setOnboarded(await isOnboarded(profileId));
         setState({ profileId });
+        initBackupScheduler();
       } catch (e) {
         console.error(e);
         setError(e instanceof Error ? e.message : String(e));

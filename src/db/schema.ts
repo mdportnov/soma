@@ -17,7 +17,30 @@ export const profile = sqliteTable("profile", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   birthDate: text("birth_date"),
+  /** Biological sex — drives sex-specific biomarker reference ranges. */
   sex: text("sex", { enum: ["male", "female", "other"] }),
+  /** Canonical metric storage; UI converts per `unitSystem`. */
+  heightCm: real("height_cm"),
+  weightKg: real("weight_kg"),
+  targetWeightKg: real("target_weight_kg"),
+  /** ABO blood group + Rh, kept as separate optional fields. */
+  bloodType: text("blood_type", { enum: ["A", "B", "AB", "O"] }),
+  rhFactor: text("rh_factor", { enum: ["positive", "negative"] }),
+  /** Free-text ethnicity — affects some reference ranges (e.g. eGFR, CBC). */
+  ethnicity: text("ethnicity"),
+  activityLevel: text("activity_level", {
+    enum: ["sedentary", "light", "moderate", "active", "very_active"],
+  }),
+  smoking: text("smoking", { enum: ["never", "former", "current"] }),
+  alcohol: text("alcohol", { enum: ["none", "occasional", "moderate", "heavy"] }),
+  /** Free-text chronic conditions / notes. */
+  conditions: text("conditions"),
+  /** Preferred display unit system. */
+  unitSystem: text("unit_system", { enum: ["metric", "imperial"] })
+    .notNull()
+    .default("metric"),
+  /** Set when onboarding is completed; null = onboarding not done. */
+  onboardedAt: text("onboarded_at"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
@@ -216,6 +239,7 @@ export const diagnosis = sqliteTable(
 
 // ── Inferred row types ─────────────────────────────────────────────────────
 export type Profile = typeof profile.$inferSelect;
+export type NewProfile = typeof profile.$inferInsert;
 export type Biomarker = typeof biomarker.$inferSelect;
 export type NewBiomarker = typeof biomarker.$inferInsert;
 export type LabPanel = typeof labPanel.$inferSelect;

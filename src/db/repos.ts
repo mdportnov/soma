@@ -22,7 +22,9 @@ import {
   type NewLabResult,
   type NewMedication,
   type NewPrescription,
+  type NewProfile,
   type NewVisit,
+  type Profile,
   type Visit,
 } from "./schema";
 import { computeFlag, convertToDefaultUnit } from "@/lib/units";
@@ -53,20 +55,32 @@ export async function ensureActiveProfile(): Promise<number> {
   return created.id;
 }
 
-export async function getProfile(id: number) {
+export async function getProfile(id: number): Promise<Profile | null> {
   const rows = await db.select().from(profile).where(eq(profile.id, id));
   return rows[0] ?? null;
 }
 
-export async function updateProfile(
-  id: number,
-  data: Partial<{
-    name: string;
-    birthDate: string | null;
-    sex: "male" | "female" | "other" | null;
-  }>,
-) {
+export type ProfileUpdate = Partial<Omit<NewProfile, "id" | "createdAt">>;
+
+export async function updateProfile(id: number, data: ProfileUpdate) {
   await db.update(profile).set(data).where(eq(profile.id, id));
+}
+
+/** True when the active profile has finished onboarding. */
+export async function isOnboarded(id: number): Promise<boolean> {
+  const rows = await db
+    .select({ onboardedAt: profile.onboardedAt })
+    .from(profile)
+    .where(eq(profile.id, id));
+  return !!rows[0]?.onboardedAt;
+}
+
+/** Persists onboarding answers and stamps completion. */
+export async function completeOnboarding(id: number, data: ProfileUpdate) {
+  await db
+    .update(profile)
+    .set({ ...data, onboardedAt: new Date().toISOString() })
+    .where(eq(profile.id, id));
 }
 
 // ── biomarkers ─────────────────────────────────────────────────────────────

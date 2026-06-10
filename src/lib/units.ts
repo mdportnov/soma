@@ -167,6 +167,35 @@ function round(v: number): number {
   return Math.round(v * 1000) / 1000;
 }
 
+// ── body measurements (profile) ─────────────────────────────────────────────
+// Profile height/weight are stored canonically in metric (cm / kg); these
+// helpers convert to and from imperial for display and entry.
+
+export type UnitSystem = "metric" | "imperial";
+
+export const KG_PER_LB = 0.45359237;
+export const CM_PER_IN = 2.54;
+
+export function kgToLb(kg: number): number {
+  return kg / KG_PER_LB;
+}
+
+export function lbToKg(lb: number): number {
+  return lb * KG_PER_LB;
+}
+
+export function cmToFtIn(cm: number): { ft: number; inches: number } {
+  const totalIn = cm / CM_PER_IN;
+  const ft = Math.floor(totalIn / 12);
+  const inches = Math.round(totalIn - ft * 12);
+  // Carry over when rounding pushes inches to 12.
+  return inches === 12 ? { ft: ft + 1, inches: 0 } : { ft, inches };
+}
+
+export function ftInToCm(ft: number, inches: number): number {
+  return (ft * 12 + inches) * CM_PER_IN;
+}
+
 /** Out-of-range flag computation against the biomarker's reference range. */
 export function computeFlag(
   value: number,

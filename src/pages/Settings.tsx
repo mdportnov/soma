@@ -24,6 +24,13 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
+import {
+  CoreFields,
+  OptionalFields,
+  draftFromProfile,
+  draftToUpdate,
+  useProfileDraft,
+} from "@/components/app/ProfileFields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -238,18 +245,12 @@ function AiSettingsCard() {
 function ProfileCard() {
   const { profileId } = useApp();
   const { data: prof, loading } = useQuery(() => getProfile(profileId), [profileId]);
-  const [name, setName] = React.useState("");
-  const [birthDate, setBirthDate] = React.useState("");
-  const [sex, setSex] = React.useState("");
+  const { draft, setDraft, patch } = useProfileDraft();
   const [saved, setSaved] = React.useState(false);
 
   React.useEffect(() => {
-    if (prof) {
-      setName(prof.name);
-      setBirthDate(prof.birthDate ?? "");
-      setSex(prof.sex ?? "");
-    }
-  }, [prof]);
+    if (prof) setDraft(draftFromProfile(prof));
+  }, [prof, setDraft]);
 
   if (loading) return <Loading />;
 
@@ -258,32 +259,17 @@ function ProfileCard() {
       <CardHeader>
         <CardTitle>Profile</CardTitle>
         <CardDescription>
-          Single profile for now; multi-profile sharing comes later.
+          Used for sex- and age-aware biomarker reference ranges. Single profile for now;
+          multi-profile sharing comes later.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-3">
-        <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="Birth date">
-          <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
-        </Field>
-        <Field label="Sex">
-          <Select value={sex} onChange={(e) => setSex(e.target.value)}>
-            <option value="">—</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-          </Select>
-        </Field>
-        <div className="sm:col-span-3">
+      <CardContent className="space-y-5">
+        <CoreFields draft={draft} patch={patch} />
+        <OptionalFields draft={draft} patch={patch} />
+        <div>
           <Button
             onClick={async () => {
-              await updateProfile(profileId, {
-                name: name.trim() || "My profile",
-                birthDate: birthDate || null,
-                sex: (sex || null) as "male" | "female" | "other" | null,
-              });
+              await updateProfile(profileId, draftToUpdate(draft));
               setSaved(true);
               setTimeout(() => setSaved(false), 2000);
             }}

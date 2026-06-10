@@ -1,8 +1,9 @@
 import * as React from "react";
 import { initDatabase } from "@/db/client";
-import { ensureActiveProfile } from "@/db/repos";
+import { ensureActiveProfile, isOnboarded } from "@/db/repos";
 import { initBackupScheduler } from "@/lib/backup";
 import { Loading } from "@/components/app/Loading";
+import { Onboarding } from "@/pages/Onboarding";
 
 type AppState = { profileId: number };
 
@@ -17,6 +18,7 @@ export function useApp(): AppState {
 /** Boots the local database (migrations + seed) and resolves the active profile. */
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<AppState | null>(null);
+  const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -24,6 +26,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         await initDatabase();
         const profileId = await ensureActiveProfile();
+        setOnboarded(await isOnboarded(profileId));
         setState({ profileId });
         initBackupScheduler();
       } catch (e) {
@@ -44,7 +47,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!state) return <Loading label="Opening local database…" />;
+  if (!state || onboarded === null) return <Loading label="Opening local database…" />;
+
+  if (!onboarded) {
+    return <Onboarding profileId={state.profileId} onDone={() => setOnboarded(true)} />;
+  }
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
 }

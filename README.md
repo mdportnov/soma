@@ -202,6 +202,16 @@ flowchart LR
 
 ## Contributing
 
+### Branching workflow
+
+- `master` is the stable branch — always green, never force-pushed, no direct commits.
+- Features: branch from `master` as `feature/<name>` (e.g. `feature/onboarding`).
+- Fixes: branch from `master` as `fix/<name>`.
+- All changes land in `master` via a PR, merged with **squash merge** — one clean commit
+  per feature/fix; delete the branch after merge.
+
+### Checks
+
 Issues and PRs are welcome. Before pushing, please run:
 
 ```bash

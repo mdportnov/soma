@@ -21,6 +21,7 @@ import {
 } from "@/ai";
 import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
 import { PageHeader } from "@/components/app/PageHeader";
+import { BackupCard } from "@/components/app/BackupCard";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export function Settings() {
       <div className="space-y-4">
         <AiSettingsCard />
         <ProfileCard />
+        <BackupCard />
         <ExportCard />
       </div>
     </>

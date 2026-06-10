@@ -41,6 +41,23 @@ export const db = drizzle<typeof schema>(
   { schema },
 );
 
+/**
+ * Atomic, consistent snapshot of the live database into `path`.
+ * `VACUUM INTO` is the only safe way to copy an open SQLite file.
+ */
+export async function vacuumInto(path: string): Promise<void> {
+  const conn = await getSqlite();
+  await conn.execute(`VACUUM INTO '${path.replace(/'/g, "''")}'`);
+}
+
+/** Closes the SQLite connection; required before the DB file is swapped on restore. */
+export async function closeDatabase(): Promise<void> {
+  if (sqlite) {
+    await sqlite.close();
+    sqlite = null;
+  }
+}
+
 let initPromise: Promise<void> | null = null;
 
 /** Idempotent startup: migrations + reference-data seed + default profile. */

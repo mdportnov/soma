@@ -1,6 +1,7 @@
 import * as React from "react";
 import { initDatabase } from "@/db/client";
 import { ensureActiveProfile } from "@/db/repos";
+import { initBackupScheduler } from "@/lib/backup";
 import { Loading } from "@/components/app/Loading";
 
 type AppState = { profileId: number };
@@ -24,6 +25,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await initDatabase();
         const profileId = await ensureActiveProfile();
         setState({ profileId });
+        initBackupScheduler();
       } catch (e) {
         console.error(e);
         setError(e instanceof Error ? e.message : String(e));

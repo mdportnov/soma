@@ -17,10 +17,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export function Labs() {
   const { profileId } = useApp();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { data: panels, loading } = useQuery(() => listPanels(profileId), [profileId]);
 
   if (loading || !panels) return <Loading />;
@@ -28,18 +30,18 @@ export function Labs() {
   return (
     <>
       <PageHeader
-        title="Lab results"
-        description="Every blood draw and urine test, manually entered or AI-imported."
+        title={t("labs.title")}
+        description={t("labs.description")}
         actions={
           <>
             <Link to="/labs/import">
               <Button variant="outline">
-                <Sparkles /> AI import
+                <Sparkles /> {t("labs.aiImport")}
               </Button>
             </Link>
             <Link to="/labs/new">
               <Button>
-                <Plus /> New panel
+                <Plus /> {t("labs.newPanel")}
               </Button>
             </Link>
           </>
@@ -49,11 +51,11 @@ export function Labs() {
       {panels.length === 0 ? (
         <EmptyState
           icon={TestTubes}
-          title="No lab panels yet"
-          description="Enter results manually or import a PDF/photo of a lab report with AI."
+          title={t("labs.emptyTitle")}
+          description={t("labs.emptyDescription")}
           action={
             <Link to="/labs/new">
-              <Button size="sm">Add first panel</Button>
+              <Button size="sm">{t("labs.addFirstPanel")}</Button>
             </Link>
           }
         />
@@ -62,13 +64,13 @@ export function Labs() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Lab</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Results</TableHead>
-                <TableHead>Out of range</TableHead>
-                <TableHead>Source</TableHead>
+                <TableHead>{t("labs.tableColumns.date")}</TableHead>
+                <TableHead>{t("labs.tableColumns.lab")}</TableHead>
+                <TableHead>{t("labs.tableColumns.location")}</TableHead>
+                <TableHead>{t("labs.tableColumns.type")}</TableHead>
+                <TableHead>{t("labs.tableColumns.results")}</TableHead>
+                <TableHead>{t("labs.tableColumns.outOfRange")}</TableHead>
+                <TableHead>{t("labs.tableColumns.source")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -97,10 +99,10 @@ export function Labs() {
                   <TableCell>
                     {p.importMethod === "ai" ? (
                       <Badge>
-                        <Sparkles className="size-3" /> AI
+                        <Sparkles className="size-3" /> {t("labs.importSource.ai")}
                       </Badge>
                     ) : (
-                      <Badge variant="secondary">manual</Badge>
+                      <Badge variant="secondary">{t("labs.importSource.manual")}</Badge>
                     )}
                   </TableCell>
                 </TableRow>

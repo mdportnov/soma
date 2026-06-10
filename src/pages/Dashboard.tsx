@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Activity, AlertTriangle, CalendarRange, Pill, TestTubes } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
+import { useI18n } from "@/lib/i18n";
 import { getTimeline, listMedications, listPanels } from "@/db/repos";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 
 export function Dashboard() {
+  const { t } = useI18n();
   const { profileId } = useApp();
 
   const { data, loading } = useQuery(async () => {
@@ -31,17 +33,17 @@ export function Dashboard() {
   const recent = timeline.slice(0, 8);
 
   const stats = [
-    { label: "Lab panels", value: panels.length, icon: TestTubes, to: "/labs" },
+    { label: t("dashboard.stats.labPanels"), value: panels.length, icon: TestTubes, to: "/labs" },
     {
-      label: "Out of range (latest panel)",
+      label: t("dashboard.stats.outOfRangeLatest"),
       value: latestPanel ? latestPanel.outOfRangeCount : "—",
       icon: AlertTriangle,
       to: latestPanel ? `/labs/${latestPanel.id}` : "/labs",
       alert: !!latestPanel && latestPanel.outOfRangeCount > 0,
     },
-    { label: "Active medications", value: activeMeds.length, icon: Pill, to: "/medications" },
+    { label: t("dashboard.stats.activeMedications"), value: activeMeds.length, icon: Pill, to: "/medications" },
     {
-      label: "Last lab draw",
+      label: t("dashboard.stats.lastLabDraw"),
       value: latestPanel ? formatDate(latestPanel.date) : "—",
       icon: Activity,
       to: latestPanel ? `/labs/${latestPanel.id}` : "/labs",
@@ -51,8 +53,8 @@ export function Dashboard() {
   return (
     <>
       <PageHeader
-        title="Dashboard"
-        description="Your health at a glance — local, private, yours."
+        title={t("pages.dashboard.title")}
+        description={t("pages.dashboard.description")}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -81,7 +83,7 @@ export function Dashboard() {
 
       <Card className="mt-6">
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Recent activity</CardTitle>
+          <CardTitle>{t("dashboard.recentActivityTitle")}</CardTitle>
           <Link to="/timeline" className="text-xs font-medium text-primary hover:underline">
             Full timeline →
           </Link>
@@ -90,11 +92,11 @@ export function Dashboard() {
           {recent.length === 0 ? (
             <EmptyState
               icon={CalendarRange}
-              title="No records yet"
-              description="Add your first lab panel, medication or doctor visit to get started."
+              title={t("dashboard.noRecordsTitle")}
+              description={t("dashboard.recentActivity.description")}
               action={
                 <Link to="/labs/new">
-                  <Button size="sm">Add lab results</Button>
+                  <Button size="sm">{t("dashboard.addLabResults")}</Button>
                 </Link>
               }
             />

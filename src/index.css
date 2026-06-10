@@ -9,6 +9,8 @@
   --foreground: oklch(0.235 0.01 250);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.235 0.01 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.235 0.01 250);
   --muted: oklch(0.962 0.004 95);
   --muted-foreground: oklch(0.52 0.012 250);
   --border: oklch(0.912 0.005 95);
@@ -33,6 +35,8 @@
   --foreground: oklch(0.93 0.005 250);
   --card: oklch(0.225 0.009 255);
   --card-foreground: oklch(0.93 0.005 250);
+  --popover: oklch(0.262 0.01 255);
+  --popover-foreground: oklch(0.93 0.005 250);
   --muted: oklch(0.26 0.01 255);
   --muted-foreground: oklch(0.68 0.012 250);
   --border: oklch(0.3 0.01 255);
@@ -55,6 +59,8 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
@@ -78,9 +84,12 @@
     "Inter", "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --animate-overlay-in: overlay-in 0.18s ease both;
+  --animate-overlay-out: overlay-out 0.14s ease both;
   --animate-dialog-in: dialog-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-dialog-out: dialog-out 0.16s cubic-bezier(0.4, 0, 1, 1) both;
   --animate-step-in: step-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-rise-in: rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-combobox-in: combobox-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes overlay-in {
@@ -92,6 +101,15 @@
   }
 }
 
+@keyframes overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes dialog-in {
   from {
     opacity: 0;
@@ -100,6 +118,17 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes dialog-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
   }
 }
 
@@ -118,6 +147,17 @@
   from {
     opacity: 0;
     transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes combobox-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
   }
   to {
     opacity: 1;

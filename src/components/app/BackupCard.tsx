@@ -10,6 +10,7 @@ import {
   RotateCcw,
   XCircle,
 } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ function formatDate(iso: string): string {
 }
 
 export function BackupCard() {
+  const { t } = useI18n();
   const [settings, setSettings] = React.useState<BackupSettings>(() => loadBackupSettings());
   const [wizardOpen, setWizardOpen] = React.useState(false);
   const [restoreOpen, setRestoreOpen] = React.useState(false);
@@ -77,24 +79,19 @@ export function BackupCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Backups</CardTitle>
-        <CardDescription>
-          Encrypted snapshots of your database, saved into a folder your cloud client (iCloud Drive,
-          Google Drive, Dropbox, OneDrive) already syncs. Soma never uploads anything itself and
-          stores only encrypted <code>.somabk</code> files there — your live data never leaves this
-          device.
-        </CardDescription>
+        <CardTitle>{t("backup.title")}</CardTitle>
+        <CardDescription>{t("backup.description")}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         {settings.enabled ? (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Destination">
+              <Field label={t("backup.destination")}>
                 <p className="truncate rounded-md border bg-muted/40 px-2.5 py-2 font-mono text-xs">
                   {settings.destDir}
                 </p>
               </Field>
-              <Field label="Frequency">
+              <Field label={t("backup.frequency")}>
                 <Select
                   value={settings.frequency}
                   onChange={(e) => update({ frequency: e.target.value as BackupFrequency })}
@@ -110,45 +107,44 @@ export function BackupCard() {
 
             <p className="text-xs text-muted-foreground">
               {settings.lastBackupAt
-                ? `Last backup: ${formatDate(settings.lastBackupAt)}`
-                : "No backup has run yet."}
-              {" · "}Old snapshots are rotated automatically (newest 12 are kept).
+                ? `${t("backup.lastBackup")}: ${formatDate(settings.lastBackupAt)}`
+                : t("backup.noBackupYet")}
+              {" · "}{t("backup.rotationNote")}
             </p>
             {settings.lastResult && !settings.lastResult.ok && (
               <p className="flex items-start gap-1.5 text-xs text-destructive">
                 <XCircle className="mt-0.5 size-3.5 shrink-0" />
-                Last attempt failed: {settings.lastResult.message}
+                {t("backup.lastAttemptFailed")}: {settings.lastResult.message}
               </p>
             )}
 
             <div className="flex flex-wrap gap-2">
               <Button onClick={backupNow} disabled={busy}>
                 {busy ? <Loader2 className="animate-spin" /> : <CloudUpload />}
-                {busy ? "Backing up…" : "Back up now"}
+                {busy ? t("backup.backingUp") : t("backup.backupNow")}
               </Button>
               <Button variant="outline" onClick={() => setRestoreOpen(true)}>
-                <RotateCcw /> Restore from backup…
+                <RotateCcw /> {t("backup.restoreFromBackup")}
               </Button>
               <Button
                 variant="ghost"
                 className="text-destructive"
                 onClick={() => update({ enabled: false })}
               >
-                Disable
+                {t("backup.disable")}
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Disabling only stops future backups — existing snapshots and your passphrase are kept,
-              so you can re-enable any time.
+              {t("backup.disableNote")}
             </p>
           </>
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => setWizardOpen(true)}>
-              <CloudUpload /> Set up backups
+              <CloudUpload /> {t("backup.setupBackups")}
             </Button>
             <Button variant="outline" onClick={() => setRestoreOpen(true)}>
-              <RotateCcw /> Restore from backup…
+              <RotateCcw /> {t("backup.restoreFromBackup")}
             </Button>
           </div>
         )}
@@ -177,6 +173,7 @@ type WizardProps = {
 };
 
 function SetupWizard({ onClose, onDone }: WizardProps) {
+  const { t } = useI18n();
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
   const [detection, setDetection] = React.useState<Detection | null>(null);
 
@@ -208,11 +205,11 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
     setDirError(null);
     const check = await verifyBackupDir(picked);
     if (!check.exists) {
-      setDirError("That folder does not exist.");
+      setDirError(t("backup.folderNotExist"));
       return;
     }
     if (!check.writable) {
-      setDirError("Soma cannot write into that folder — pick another one.");
+      setDirError(t("backup.folderNotWritable"));
       return;
     }
     const detected = detection?.providers.find((p) => p.path && picked.startsWith(p.path));
@@ -221,25 +218,24 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
     setCustomWarning(
       detected
         ? null
-        : "This folder is not one of the detected cloud folders. Backups saved here will " +
-            "only reach a cloud if something on this computer syncs this folder.",
+        : t("backup.customWarning"),
     );
     if (!viaDialog) setDirError(null);
   };
 
   const pickFolder = async () => {
-    const picked = await open({ directory: true, title: "Choose a backup folder" });
+    const picked = await open({ directory: true, title: t("backup.chooseFolderDialogTitle") });
     if (typeof picked === "string") await choosePicked(picked, true);
   };
 
   const submitPassphrase = async () => {
     setPassError(null);
     if (pass.length < 8) {
-      setPassError("Use at least 8 characters.");
+      setPassError(t("backup.passphraseMinLength"));
       return;
     }
     if (pass !== pass2) {
-      setPassError("Passphrases don't match.");
+      setPassError(t("backup.passphraseMismatch"));
       return;
     }
     setStep(3);
@@ -257,18 +253,31 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
     }
   };
 
+  const stepSubmit = step === 1
+    ? () => { if (destDir) setStep(2); }
+    : step === 2
+      ? submitPassphrase
+      : finish;
+  const stepDisabled = step === 1
+    ? !destDir
+    : step === 2
+      ? (!pass || !pass2 || !passSaved)
+      : finishing;
+
   return (
     <Dialog
       open
       onClose={onClose}
-      title={`Set up backups · step ${step} of 3`}
+      title={t("backup.setupStep", { step: step.toString() })}
       description={
         step === 1
-          ? "Where should encrypted snapshots be saved?"
+          ? t("backup.step1Description")
           : step === 2
-            ? "Protect your backups with a passphrase."
-            : "How often should Soma back up?"
+            ? t("backup.step2Description")
+            : t("backup.step3Description")
       }
+      onSubmit={stepSubmit}
+      submitDisabled={stepDisabled}
     >
       {/* key={step} re-mounts the body so each step slides in */}
       <div key={step} className="animate-step-in">
@@ -278,8 +287,8 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
               const unavailable = !p.path;
               const reason =
                 p.id === "icloud" && detection?.platform !== "macos"
-                  ? "macOS only"
-                  : "Not found on this computer";
+                  ? t("backup.macosOnly")
+                  : t("backup.notFoundOnComputer");
               return (
                 <button
                   key={p.id}
@@ -298,7 +307,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
                     {unavailable ? (
                       <Badge variant="secondary">{reason}</Badge>
                     ) : (
-                      <Badge variant="success">Detected</Badge>
+                      <Badge variant="success">{t("backup.detected")}</Badge>
                     )}
                   </div>
                   {p.path && (
@@ -322,7 +331,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
               {provider === "custom" && destDir ? (
                 <span className="truncate font-mono text-xs">{destDir}</span>
               ) : (
-                "Choose a folder manually…"
+                t("backup.chooseManually")
               )}
             </button>
 
@@ -339,16 +348,15 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
             )}
 
             <p className="text-[11px] text-muted-foreground">
-              A <code>Soma Backups</code> subfolder is created inside, with a README explaining the
-              files. Only encrypted snapshots go there — never your live data.
+              {t("backup.subfolderNote")}
             </p>
 
             <div className="mt-2 flex justify-end gap-2">
               <Button variant="ghost" onClick={onClose}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button disabled={!destDir} onClick={() => setStep(2)}>
-                Continue
+                {t("common.continue")}
               </Button>
             </div>
           </div>
@@ -359,15 +367,13 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
               <p className="flex items-start gap-1.5 font-medium">
                 <KeyRound className="mt-0.5 size-3.5 shrink-0" />
-                This passphrase encrypts every backup. It is stored only in this device&apos;s
-                keychain.
+                {t("backup.passphraseTitle")}
               </p>
               <p className="mt-1.5 text-muted-foreground">
-                If you lose this device <em>and</em> the passphrase, your backups cannot be
-                recovered — by anyone. Save it in your password manager now.
+                {t("backup.passphraseWarning")}
               </p>
             </div>
-            <Field label="Passphrase (min 8 characters)">
+            <Field label={t("backup.passphraseLabel")}>
               <Input
                 type="password"
                 value={pass}
@@ -375,7 +381,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
                 autoComplete="new-password"
               />
             </Field>
-            <Field label="Repeat passphrase">
+            <Field label={t("backup.passphraseRepeat")}>
               <Input
                 type="password"
                 value={pass2}
@@ -390,7 +396,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
                 onChange={(e) => setPassSaved(e.target.checked)}
                 className="accent-primary"
               />
-              I saved the passphrase somewhere safe
+              {t("backup.passphraseSaved")}
             </label>
             {passError && (
               <p className="flex items-start gap-1.5 text-xs text-destructive">
@@ -399,10 +405,10 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
             )}
             <div className="mt-1 flex justify-between gap-2">
               <Button variant="ghost" onClick={() => setStep(1)}>
-                Back
+                {t("common.back")}
               </Button>
               <Button disabled={!pass || !pass2 || !passSaved} onClick={submitPassphrase}>
-                Continue
+                {t("common.continue")}
               </Button>
             </div>
           </div>
@@ -410,7 +416,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
 
         {step === 3 && (
           <div className="grid gap-3">
-            <Field label="Backup frequency">
+            <Field label={t("backup.backupFrequency")}>
               <Select
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value as BackupFrequency)}
@@ -424,20 +430,19 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
             </Field>
             <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
               <p>
-                Destination: <span className="font-mono">{destDir}</span>
+                {t("backup.destinationSummary")} <span className="font-mono">{destDir}</span>
               </p>
               <p className="mt-1">
-                Soma also checks on every launch and catches up if a backup was missed. The newest
-                12 snapshots are kept; older ones are deleted automatically.
+                {t("backup.catchupNote")}
               </p>
             </div>
             <div className="mt-1 flex justify-between gap-2">
               <Button variant="ghost" onClick={() => setStep(2)}>
-                Back
+                {t("common.back")}
               </Button>
               <Button onClick={finish} disabled={finishing}>
                 {finishing ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
-                Enable & back up now
+                {t("backup.enableAndBackup")}
               </Button>
             </div>
           </div>
@@ -450,6 +455,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
 // ── restore ─────────────────────────────────────────────────────────────────
 
 function RestoreDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const [filePath, setFilePath] = React.useState("");
   const [pass, setPass] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -463,8 +469,8 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
 
   const pickFile = async () => {
     const picked = await open({
-      title: "Choose a Soma backup",
-      filters: [{ name: "Soma backup", extensions: ["somabk"] }],
+      title: t("backup.chooseBackupDialogTitle"),
+      filters: [{ name: t("backup.somaBackupFilter"), extensions: ["somabk"] }],
     });
     if (typeof picked === "string") {
       setFilePath(picked);
@@ -501,12 +507,14 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
     <Dialog
       open
       onClose={close}
-      title="Restore from backup"
+      title={t("backup.restoreTitle")}
       description={
         meta
-          ? "Review the backup before replacing your data."
-          : "Pick a .somabk file and enter the passphrase it was encrypted with."
+          ? t("backup.restoreReviewDescription")
+          : t("backup.restorePickDescription")
       }
+      onSubmit={meta ? undefined : inspect}
+      submitDisabled={!filePath || !pass || busy}
     >
       {/* re-mounts on phase change so the review screen slides in */}
       <div key={meta ? "review" : "pick"} className="animate-step-in">
@@ -521,10 +529,10 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
               {filePath ? (
                 <span className="truncate font-mono text-xs">{filePath}</span>
               ) : (
-                "Choose backup file…"
+                t("backup.chooseBackupFile")
               )}
             </button>
-            <Field label="Passphrase">
+            <Field label={t("backup.passphrase")}>
               <Input
                 type="password"
                 value={pass}
@@ -539,11 +547,11 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
             )}
             <div className="mt-1 flex justify-end gap-2">
               <Button variant="ghost" onClick={close}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button disabled={!filePath || !pass || busy} onClick={inspect}>
                 {busy ? <Loader2 className="animate-spin" /> : null}
-                Continue
+                {t("common.continue")}
               </Button>
             </div>
           </div>
@@ -552,34 +560,31 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
             <div className="rounded-lg border bg-muted/40 p-3 text-xs">
               <p className="truncate font-mono">{filePath}</p>
               <p className="mt-1.5 text-muted-foreground">
-                Decrypted size: {formatSize(meta.sizeBytes)}
-                {meta.fileModifiedAt && <> · file date: {formatDate(meta.fileModifiedAt)}</>}
-                {" · schema v"}
-                {meta.schemaVersion} (app has v{currentSchemaVersion})
+                {t("backup.decryptedSize")} {formatSize(meta.sizeBytes)}
+                {meta.fileModifiedAt && <> · {t("backup.fileDate")} {formatDate(meta.fileModifiedAt)}</>}
+                {" · "}{t("backup.schema")} v{meta.schemaVersion} ({t("backup.appHas")} v{currentSchemaVersion})
               </p>
             </div>
 
             {newerThanApp ? (
               <p className="flex items-start gap-1.5 text-xs text-destructive">
                 <XCircle className="mt-0.5 size-3.5 shrink-0" />
-                This backup was made by a newer version of Soma. Update the app first, then restore.
+                {t("backup.newerVersionError")}
               </p>
             ) : (
               <>
                 {meta.schemaVersion < currentSchemaVersion && (
                   <p className="text-xs text-muted-foreground">
-                    The backup uses an older schema — it will be migrated automatically after the
-                    restart.
+                    {t("backup.olderSchemaNote")}
                   </p>
                 )}
                 <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs">
                   <p className="flex items-start gap-1.5 font-medium text-destructive">
                     <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                    This replaces your current database and restarts the app.
+                    {t("backup.replaceWarningTitle")}
                   </p>
                   <p className="mt-1.5 text-muted-foreground">
-                    A timestamped safety copy of the current database is kept next to it, so this
-                    can be undone manually if needed.
+                    {t("backup.replaceWarningDescription")}
                   </p>
                 </div>
               </>
@@ -599,11 +604,11 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
                   setMeta(null);
                 }}
               >
-                Back
+                {t("common.back")}
               </Button>
               <Button variant="destructive" disabled={busy || newerThanApp} onClick={restore}>
                 {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                Replace data & restart
+                {t("backup.replaceAndRestart")}
               </Button>
             </div>
           </div>

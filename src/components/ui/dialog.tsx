@@ -11,22 +11,67 @@ type DialogProps = {
   description?: string;
   children: React.ReactNode;
   className?: string;
+  onSubmit?: () => void;
+  submitDisabled?: boolean;
 };
 
-export function Dialog({ open, onClose, title, description, children, className }: DialogProps) {
+export function Dialog({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  className,
+  onSubmit,
+  submitDisabled,
+}: DialogProps) {
+  const [rendered, setRendered] = React.useState(open);
+  const [closing, setClosing] = React.useState(false);
+
   React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    if (open) {
+      setRendered(true);
+      setClosing(false);
+    } else if (rendered) {
+      setClosing(true);
+    }
+    // `rendered` is intentionally excluded: it is write-only here and including
+    // it would cause a second exit-cycle after unmount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const handleAnimationEnd = () => {
+    if (closing) {
+      setRendered(false);
+      setClosing(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!open || closing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && onSubmit && !submitDisabled) {
+        e.preventDefault();
+        onSubmit();
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, closing, onClose, onSubmit, submitDisabled]);
 
-  if (!open) return null;
+  if (!rendered) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="animate-overlay-in absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        className={cn(
+          "absolute inset-0 bg-black/40 backdrop-blur-sm",
+          closing ? "animate-overlay-out" : "animate-overlay-in",
+        )}
         onClick={onClose}
         aria-hidden
       />
@@ -34,8 +79,10 @@ export function Dialog({ open, onClose, title, description, children, className 
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        onAnimationEnd={handleAnimationEnd}
         className={cn(
-          "animate-dialog-in relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl border bg-card p-5 shadow-xl",
+          "relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl border bg-card p-5 shadow-xl",
+          closing ? "animate-dialog-out" : "animate-dialog-in",
           className,
         )}
       >

@@ -38,6 +38,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -50,6 +52,7 @@ import {
 } from "@/components/ui/table";
 import { CreateBiomarkerDialog } from "./Biomarkers";
 import { formatValue, todayISO } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import type { Biomarker } from "@/db/schema";
 
 type Step =
@@ -62,6 +65,7 @@ type ReviewRow = MappedRow & { include: boolean; key: number };
 
 export function ImportWizard() {
   const { profileId } = useApp();
+  const { t } = useI18n();
   const navigate = useNavigate();
 
   const {
@@ -92,21 +96,19 @@ export function ImportWizard() {
     return (
       <>
         <BackLink />
-        <PageHeader title="AI import" />
+        <PageHeader title={t("importWizard.title")} />
         <Card className="mx-auto max-w-lg">
           <CardContent className="flex flex-col items-center py-10 text-center">
             <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-secondary">
               <Sparkles className="size-5 text-secondary-foreground" />
             </div>
-            <p className="text-sm font-medium">AI analysis is disabled</p>
+            <p className="text-sm font-medium">{t("importWizard.aiDisabledTitle")}</p>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              To import lab reports from PDF or photos, enable AI analysis and paste your API key in
-              Settings. Your documents are sent only to the provider you choose, only when you run
-              an import.
+              {t("importWizard.aiDisabledDescription")}
             </p>
             <Link to="/settings" className="mt-4">
               <Button>
-                <SettingsIcon /> Open Settings
+                <SettingsIcon /> {t("importWizard.openSettings")}
               </Button>
             </Link>
           </CardContent>
@@ -216,8 +218,8 @@ export function ImportWizard() {
     <>
       <BackLink />
       <PageHeader
-        title="AI import"
-        description="PDF or photo → extracted values → you confirm the mapping → saved. Nothing is written without your review."
+        title={t("importWizard.title")}
+        description={t("importWizard.description")}
       />
 
       {error && (
@@ -258,7 +260,7 @@ export function ImportWizard() {
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-medium">Choose a lab report</p>
+                  <p className="text-sm font-medium">{t("importWizard.chooseLabReport")}</p>
                   <p className="mt-1 text-xs text-muted-foreground">PDF, JPG, PNG or WebP</p>
                   <Button className="mt-4" onClick={pickFile}>
                     <Upload /> Choose file
@@ -309,7 +311,7 @@ export function ImportWizard() {
           />
         )}
 
-        {step.name === "saving" && <Loading label="Saving panel…" />}
+        {step.name === "saving" && <Loading label={t("importWizard.savingPanel")} />}
       </div>
 
       <CreateBiomarkerDialog
@@ -398,6 +400,7 @@ function ReviewStep({
   };
   onSave: () => void;
 }) {
+  const { t } = useI18n();
   const includedCount = rows.filter((r) => r.include && r.biomarkerId != null).length;
   const duplicates = rows.filter((r) => r.include && r.duplicate).length;
 
@@ -407,12 +410,15 @@ function ReviewStep({
     list.push(b);
     byCategory.set(b.category, list);
   }
+  const biomarkerOptions: ComboboxOption[] = [...byCategory.entries()].flatMap(([category, items]) =>
+    items.map((b) => ({ value: String(b.id), label: b.canonicalName, group: category, keywords: b.aliases })),
+  );
 
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Review extracted results</CardTitle>
+          <CardTitle>{t("importWizard.reviewExtractedResults")}</CardTitle>
           <CardDescription>
             Check each mapping before saving. Green = exact dictionary match, yellow = fuzzy match,
             blue = AI-suggested, red = unrecognized. Original labels are kept for audit.
@@ -422,12 +428,12 @@ function ReviewStep({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">Save</TableHead>
-                <TableHead>Source label</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead>Biomarker</TableHead>
-                <TableHead>Match</TableHead>
-                <TableHead>Normalized</TableHead>
+                <TableHead className="w-10">{t("common.save")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
+                <TableHead>{t("fields.value")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
+                <TableHead>{t("importWizard.matchColumn")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -458,35 +464,12 @@ function ReviewStep({
                       {formatValue(row.raw.value)} {row.raw.unit}
                     </TableCell>
                     <TableCell className="min-w-52">
-                      <Select
-                        value={row.biomarkerId != null ? String(row.biomarkerId) : ""}
-                        onChange={(e) =>
-                          onChangeRow(row.key, e.target.value ? Number(e.target.value) : null)
-                        }
-                      >
-                        <option value="">— not mapped —</option>
-                        {row.candidates.length > 0 && (
-                          <optgroup label="Suggestions">
-                            {row.candidates.map((c) => {
-                              const b = index.byId.get(c.biomarkerId);
-                              return b ? (
-                                <option key={`cand-${c.biomarkerId}`} value={c.biomarkerId}>
-                                  {b.canonicalName} ({Math.round(c.score * 100)}%)
-                                </option>
-                              ) : null;
-                            })}
-                          </optgroup>
-                        )}
-                        {[...byCategory.entries()].map(([category, items]) => (
-                          <optgroup key={category} label={category}>
-                            {items.map((b) => (
-                              <option key={b.id} value={b.id}>
-                                {b.canonicalName}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </Select>
+                      <Combobox
+                        value={row.biomarkerId != null ? String(row.biomarkerId) : null}
+                        onChange={(v) => onChangeRow(row.key, v ? Number(v) : null)}
+                        options={biomarkerOptions}
+                        placeholder={t("importWizard.notMapped")}
+                      />
                       {row.biomarkerId == null && (
                         <button
                           className="mt-1 inline-flex cursor-pointer items-center gap-1 text-[11px] text-primary hover:underline"
@@ -533,29 +516,29 @@ function ReviewStep({
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Panel details</CardTitle>
+          <CardTitle>{t("importWizard.panelDetailsTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Field label="Date">
+          <Field label={t("fields.date")}>
             <DateInput value={meta.date} onChange={setMeta.setDate} />
           </Field>
-          <Field label="Lab name">
+          <Field label={t("labPanelNew.fields.labName")}>
             <Input value={meta.labName} onChange={(e) => setMeta.setLabName(e.target.value)} />
           </Field>
-          <Field label="City">
+          <Field label={t("fields.city")}>
             <Input value={meta.city} onChange={(e) => setMeta.setCity(e.target.value)} />
           </Field>
-          <Field label="Country">
+          <Field label={t("fields.country")}>
             <Input value={meta.country} onChange={(e) => setMeta.setCountry(e.target.value)} />
           </Field>
-          <Field label="Type">
+          <Field label={t("fields.type")}>
             <Select
               value={meta.panelType}
               onChange={(e) => setMeta.setPanelType(e.target.value as "blood" | "urine" | "other")}
             >
-              <option value="blood">Blood</option>
-              <option value="urine">Urine</option>
-              <option value="other">Other</option>
+              <option value="blood">{t("types.blood")}</option>
+              <option value="urine">{t("types.urine")}</option>
+              <option value="other">{t("types.other")}</option>
             </Select>
           </Field>
         </CardContent>

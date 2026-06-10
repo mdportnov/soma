@@ -20,11 +20,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, formatValue } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export function LabPanelDetail() {
   const { id } = useParams();
   const panelId = Number(id);
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { data, loading } = useQuery(async () => {
@@ -33,7 +35,7 @@ export function LabPanelDetail() {
   }, [panelId]);
 
   if (loading || !data) return <Loading />;
-  if (!data.panel) return <EmptyState icon={TestTubes} title="Panel not found" />;
+  if (!data.panel) return <EmptyState icon={TestTubes} title={t("labPanelDetail.panelNotFound")} />;
 
   const { panel, results } = data;
   const outOfRange = results.filter((r) => r.outOfRange).length;
@@ -44,14 +46,14 @@ export function LabPanelDetail() {
         to="/labs"
         className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-3.5" /> Lab results
+        <ArrowLeft className="size-3.5" /> {t("labPanelDetail.backToLabs")}
       </Link>
       <PageHeader
         title={`${formatDate(panel.date)}${panel.labName ? ` — ${panel.labName}` : ""}`}
         description={[
           [panel.city, panel.country].filter(Boolean).join(", "),
-          `${results.length} results`,
-          outOfRange ? `${outOfRange} out of range` : "all in range",
+          `${results.length} ${t("labs.tableColumns.results").toLowerCase()}`,
+          outOfRange ? `${outOfRange} ${t("labPanelDetail.outOfRange")}` : t("labPanelDetail.allInRange"),
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -59,7 +61,7 @@ export function LabPanelDetail() {
           <>
             {panel.importMethod === "ai" && (
               <Badge>
-                <Sparkles className="size-3" /> AI imported
+                <Sparkles className="size-3" /> {t("labPanelDetail.aiImported")}
               </Badge>
             )}
             <Badge variant="secondary">{panel.panelType}</Badge>
@@ -67,7 +69,7 @@ export function LabPanelDetail() {
               variant="outline"
               size="icon"
               onClick={() => setConfirmDelete(true)}
-              aria-label="Delete panel"
+              aria-label={t("labPanelDetail.deletePanel")}
             >
               <Trash2 className="text-destructive" />
             </Button>
@@ -80,12 +82,12 @@ export function LabPanelDetail() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Biomarker</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead>Normalized</TableHead>
-                <TableHead>Reference</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Source label</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.value")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.reference")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -132,12 +134,12 @@ export function LabPanelDetail() {
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Delete this panel?"
-        description="The panel and all its results will be removed. This cannot be undone."
+        title={t("labPanelDetail.deletePanelTitle")}
+        description={t("labPanelDetail.deletePanelDescription")}
       >
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -146,7 +148,7 @@ export function LabPanelDetail() {
               navigate("/labs");
             }}
           >
-            Delete panel
+            {t("labPanelDetail.deletePanel")}
           </Button>
         </div>
       </Dialog>

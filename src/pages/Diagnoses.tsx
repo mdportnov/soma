@@ -23,9 +23,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, todayISO } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export function Diagnoses() {
   const { profileId } = useApp();
+  const { t } = useI18n();
   const {
     data: diagnoses,
     loading,
@@ -39,8 +41,8 @@ export function Diagnoses() {
   return (
     <>
       <PageHeader
-        title="Diagnoses"
-        description="Active conditions and resolved history."
+        title={t("diagnoses.title")}
+        description={t("diagnoses.description")}
         actions={
           <Button
             onClick={() => {
@@ -48,7 +50,7 @@ export function Diagnoses() {
               setFormOpen(true);
             }}
           >
-            <Plus /> Add diagnosis
+            <Plus /> {t("common.add")}
           </Button>
         }
       />
@@ -56,18 +58,18 @@ export function Diagnoses() {
       {diagnoses.length === 0 ? (
         <EmptyState
           icon={FlaskConical}
-          title="No diagnoses recorded"
-          description="Track conditions with status: active, in remission or resolved."
+          title={t("diagnoses.emptyTitle")}
+          description={t("diagnoses.emptyDescription")}
         />
       ) : (
         <div className="rounded-xl border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Diagnosis</TableHead>
-                <TableHead>ICD</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t("diagnoses.fields.diagnosis")}</TableHead>
+                <TableHead>{t("diagnoses.fields.icd")}</TableHead>
+                <TableHead>{t("fields.date")}</TableHead>
+                <TableHead>{t("diagnoses.fields.status")}</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
@@ -87,7 +89,7 @@ export function Diagnoses() {
                             : "secondary"
                       }
                     >
-                      {d.status}
+                      {t(`status.${d.status}`)}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -95,7 +97,7 @@ export function Diagnoses() {
                       <Button
                         variant="ghost"
                         size="iconSm"
-                        aria-label="Edit"
+                        aria-label={t("common.edit")}
                         onClick={() => {
                           setEditing(d);
                           setFormOpen(true);
@@ -106,7 +108,7 @@ export function Diagnoses() {
                       <Button
                         variant="ghost"
                         size="iconSm"
-                        aria-label="Delete"
+                        aria-label={t("common.delete")}
                         className="text-destructive"
                         onClick={async () => {
                           await deleteDiagnosis(d.id);
@@ -155,6 +157,7 @@ export function DiagnosisForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = React.useState("");
   const [icdCode, setIcdCode] = React.useState("");
   const [date, setDate] = React.useState(todayISO());
@@ -190,9 +193,15 @@ export function DiagnosisForm({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title={editing ? "Edit diagnosis" : "Add diagnosis"}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={editing ? t("diagnoses.addDialog.titleEdit") : t("diagnoses.addDialog.titleAdd")}
+      onSubmit={save}
+      submitDisabled={saving || !name.trim() || !date}
+    >
       <div className="grid gap-3">
-        <Field label="Name">
+        <Field label={t("fields.name")}>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -200,30 +209,30 @@ export function DiagnosisForm({
           />
         </Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="ICD code (optional)">
+          <Field label={t("diagnoses.fields.icdCodeOptional")}>
             <Input
               value={icdCode}
               onChange={(e) => setIcdCode(e.target.value)}
               placeholder="E03.9"
             />
           </Field>
-          <Field label="Date">
+          <Field label={t("fields.date")}>
             <DateInput value={date} onChange={setDate} />
           </Field>
-          <Field label="Status">
+          <Field label={t("diagnoses.fields.status")}>
             <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-              <option value="active">Active</option>
-              <option value="remission">Remission</option>
-              <option value="resolved">Resolved</option>
+              <option value="active">{t("status.active")}</option>
+              <option value="remission">{t("status.remission")}</option>
+              <option value="resolved">{t("status.resolved")}</option>
             </Select>
           </Field>
         </div>
         <div className="mt-1 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={save} disabled={saving || !name.trim() || !date}>
-            {editing ? "Save changes" : "Add"}
+            {editing ? t("common.saveChanges") : t("common.add")}
           </Button>
         </div>
       </div>

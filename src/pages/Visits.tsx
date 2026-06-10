@@ -23,9 +23,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, todayISO } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 export function Visits() {
   const { profileId } = useApp();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { data: visits, loading, reload } = useQuery(() => listVisits(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
@@ -35,11 +37,11 @@ export function Visits() {
   return (
     <>
       <PageHeader
-        title="Doctor visits"
-        description="Consultations across clinics, cities and countries."
+        title={t("visits.title")}
+        description={t("visits.description")}
         actions={
           <Button onClick={() => setFormOpen(true)}>
-            <Plus /> New visit
+            <Plus /> {t("common.add")}
           </Button>
         }
       />
@@ -47,11 +49,11 @@ export function Visits() {
       {visits.length === 0 ? (
         <EmptyState
           icon={Stethoscope}
-          title="No visits yet"
-          description="Log doctor consultations with diagnoses and prescriptions."
+          title={t("visits.emptyTitle")}
+          description={t("visits.emptyDescription")}
           action={
             <Button size="sm" onClick={() => setFormOpen(true)}>
-              Log first visit
+              {t("visits.addFirst")}
             </Button>
           }
         />
@@ -60,11 +62,11 @@ export function Visits() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Doctor</TableHead>
-                <TableHead>Specialty</TableHead>
-                <TableHead>Clinic</TableHead>
-                <TableHead>Location</TableHead>
+                <TableHead>{t("fields.date")}</TableHead>
+                <TableHead>{t("visits.fields.doctor")}</TableHead>
+                <TableHead>{t("visits.fields.specialty")}</TableHead>
+                <TableHead>{t("visits.fields.clinic")}</TableHead>
+                <TableHead>{t("visits.fields.location")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -115,6 +117,7 @@ export function VisitForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const [date, setDate] = React.useState(todayISO());
   const [doctorName, setDoctorName] = React.useState("");
   const [specialty, setSpecialty] = React.useState("");
@@ -158,13 +161,19 @@ export function VisitForm({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title={editing ? "Edit visit" : "New doctor visit"}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={editing ? t("visits.addDialog.titleEdit") : t("visits.addDialog.titleAdd")}
+      onSubmit={save}
+      submitDisabled={saving || !date}
+    >
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Date">
+          <Field label={t("fields.date")}>
             <DateInput value={date} onChange={setDate} />
           </Field>
-          <Field label="Specialty">
+          <Field label={t("visits.fields.specialty")}>
             <Input
               value={specialty}
               onChange={(e) => setSpecialty(e.target.value)}
@@ -173,30 +182,30 @@ export function VisitForm({
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Doctor">
+          <Field label={t("visits.fields.doctor")}>
             <Input value={doctorName} onChange={(e) => setDoctorName(e.target.value)} />
           </Field>
-          <Field label="Clinic">
+          <Field label={t("visits.fields.clinic")}>
             <Input value={clinic} onChange={(e) => setClinic(e.target.value)} />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="City">
+          <Field label={t("fields.city")}>
             <Input value={city} onChange={(e) => setCity(e.target.value)} />
           </Field>
-          <Field label="Country">
+          <Field label={t("fields.country")}>
             <Input value={country} onChange={(e) => setCountry(e.target.value)} />
           </Field>
         </div>
-        <Field label="Notes">
+        <Field label={t("fields.notes")}>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <div className="mt-1 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={save} disabled={saving || !date}>
-            {editing ? "Save changes" : "Add visit"}
+            {editing ? t("common.saveChanges") : t("common.addVisit")}
           </Button>
         </div>
       </div>

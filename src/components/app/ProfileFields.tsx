@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/lib/i18n";
 import { cmToFtIn, ftInToCm, kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
 import type { ProfileUpdate } from "@/db/repos";
 import type { Profile } from "@/db/schema";
@@ -96,6 +97,8 @@ function HeightInput({
   system: UnitSystem;
   onChange: (cm: number | null) => void;
 }) {
+  const { t } = useI18n();
+
   if (system === "imperial") {
     const { ft, inches } = cm != null ? cmToFtIn(cm) : { ft: NaN, inches: NaN };
     const setPart = (nextFt: number, nextIn: number) => {
@@ -107,7 +110,7 @@ function HeightInput({
         <Input
           type="number"
           min={0}
-          placeholder="ft"
+          placeholder={t("profile.placeholders.ft")}
           value={Number.isNaN(ft) ? "" : ft}
           onChange={(e) => setPart(e.target.value === "" ? NaN : Number(e.target.value), inches)}
         />
@@ -115,7 +118,7 @@ function HeightInput({
           type="number"
           min={0}
           max={11}
-          placeholder="in"
+          placeholder={t("profile.placeholders.in")}
           value={Number.isNaN(inches) ? "" : inches}
           onChange={(e) => setPart(ft, e.target.value === "" ? NaN : Number(e.target.value))}
         />
@@ -126,7 +129,7 @@ function HeightInput({
     <Input
       type="number"
       min={0}
-      placeholder="cm"
+      placeholder={t("profile.placeholders.cm")}
       value={cm ?? ""}
       onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
     />
@@ -144,6 +147,7 @@ function WeightInput({
   placeholder?: string;
   onChange: (kg: number | null) => void;
 }) {
+  const { t } = useI18n();
   const imperial = system === "imperial";
   const display = kg == null ? "" : Math.round((imperial ? kgToLb(kg) : kg) * 10) / 10;
   return (
@@ -151,7 +155,7 @@ function WeightInput({
       type="number"
       min={0}
       step="0.1"
-      placeholder={placeholder ?? (imperial ? "lb" : "kg")}
+      placeholder={placeholder ?? (imperial ? t("profile.placeholders.lb") : t("profile.placeholders.kg"))}
       value={display}
       onChange={(e) => {
         if (e.target.value === "") return onChange(null);
@@ -166,46 +170,48 @@ function WeightInput({
 
 /** Required core fields: name, birth date, sex, height, weight. */
 export function CoreFields({ draft, patch }: { draft: ProfileDraft; patch: Patch }) {
+  const { t } = useI18n();
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Name">
+      <Field label={t("profile.fields.name")}>
         <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} />
       </Field>
-      <Field label="Date of birth">
+      <Field label={t("profile.fields.dateOfBirth")}>
         <DateInput
           value={draft.birthDate}
           onChange={(birthDate) => patch({ birthDate })}
           defaultMonth={new Date(1990, 0)}
         />
       </Field>
-      <Field label="Biological sex">
+      <Field label={t("profile.fields.biologicalSex")}>
         <Select
           value={draft.sex}
           onChange={(e) => patch({ sex: e.target.value as ProfileDraft["sex"] })}
         >
           <option value="">—</option>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
-          <option value="other">Other / intersex</option>
+          <option value="male">{t("profile.options.male")}</option>
+          <option value="female">{t("profile.options.female")}</option>
+          <option value="other">{t("profile.options.otherIntersex")}</option>
         </Select>
       </Field>
-      <Field label="Units">
+      <Field label={t("profile.fields.units")}>
         <Select
           value={draft.unitSystem}
           onChange={(e) => patch({ unitSystem: e.target.value as UnitSystem })}
         >
-          <option value="metric">Metric (cm, kg)</option>
-          <option value="imperial">Imperial (ft/in, lb)</option>
+          <option value="metric">{t("profile.options.metricSystem")}</option>
+          <option value="imperial">{t("profile.options.imperialSystem")}</option>
         </Select>
       </Field>
-      <Field label="Height">
+      <Field label={t("profile.fields.height")}>
         <HeightInput
           cm={draft.heightCm}
           system={draft.unitSystem}
           onChange={(cm) => patch({ heightCm: cm })}
         />
       </Field>
-      <Field label="Weight">
+      <Field label={t("profile.fields.weight")}>
         <WeightInput
           kg={draft.weightKg}
           system={draft.unitSystem}
@@ -218,9 +224,11 @@ export function CoreFields({ draft, patch }: { draft: ProfileDraft; patch: Patch
 
 /** Optional fields: blood type, ethnicity, target weight, lifestyle, conditions. */
 export function OptionalFields({ draft, patch }: { draft: ProfileDraft; patch: Patch }) {
+  const { t } = useI18n();
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Blood group">
+      <Field label={t("profile.fields.bloodGroup")}>
         <Select
           value={draft.bloodType}
           onChange={(e) => patch({ bloodType: e.target.value as ProfileDraft["bloodType"] })}
@@ -232,32 +240,32 @@ export function OptionalFields({ draft, patch }: { draft: ProfileDraft; patch: P
           <option value="O">O</option>
         </Select>
       </Field>
-      <Field label="Rh factor">
+      <Field label={t("profile.fields.rhFactor")}>
         <Select
           value={draft.rhFactor}
           onChange={(e) => patch({ rhFactor: e.target.value as ProfileDraft["rhFactor"] })}
         >
           <option value="">—</option>
-          <option value="positive">Positive (+)</option>
-          <option value="negative">Negative (−)</option>
+          <option value="positive">{t("profile.options.positiveRh")}</option>
+          <option value="negative">{t("profile.options.negativeRh")}</option>
         </Select>
       </Field>
-      <Field label="Ethnicity (affects some reference ranges)">
+      <Field label={t("profile.fields.ethnicity")}>
         <Input
           value={draft.ethnicity}
-          placeholder="e.g. East Asian, Black, White…"
+          placeholder={t("profile.placeholders.ethnicity")}
           onChange={(e) => patch({ ethnicity: e.target.value })}
         />
       </Field>
-      <Field label="Target weight">
+      <Field label={t("profile.fields.targetWeight")}>
         <WeightInput
           kg={draft.targetWeightKg}
           system={draft.unitSystem}
-          placeholder="optional"
+          placeholder={t("profile.placeholders.optional")}
           onChange={(kg) => patch({ targetWeightKg: kg })}
         />
       </Field>
-      <Field label="Activity level">
+      <Field label={t("profile.fields.activityLevel")}>
         <Select
           value={draft.activityLevel}
           onChange={(e) =>
@@ -265,41 +273,41 @@ export function OptionalFields({ draft, patch }: { draft: ProfileDraft; patch: P
           }
         >
           <option value="">—</option>
-          <option value="sedentary">Sedentary</option>
-          <option value="light">Lightly active</option>
-          <option value="moderate">Moderately active</option>
-          <option value="active">Active</option>
-          <option value="very_active">Very active</option>
+          <option value="sedentary">{t("profile.options.sedentary")}</option>
+          <option value="light">{t("profile.options.lightlyActive")}</option>
+          <option value="moderate">{t("profile.options.moderatelyActive")}</option>
+          <option value="active">{t("profile.options.active")}</option>
+          <option value="very_active">{t("profile.options.veryActive")}</option>
         </Select>
       </Field>
-      <Field label="Smoking">
+      <Field label={t("profile.fields.smoking")}>
         <Select
           value={draft.smoking}
           onChange={(e) => patch({ smoking: e.target.value as ProfileDraft["smoking"] })}
         >
           <option value="">—</option>
-          <option value="never">Never</option>
-          <option value="former">Former</option>
-          <option value="current">Current</option>
+          <option value="never">{t("profile.options.never")}</option>
+          <option value="former">{t("profile.options.former")}</option>
+          <option value="current">{t("profile.options.current")}</option>
         </Select>
       </Field>
-      <Field label="Alcohol">
+      <Field label={t("profile.fields.alcohol")}>
         <Select
           value={draft.alcohol}
           onChange={(e) => patch({ alcohol: e.target.value as ProfileDraft["alcohol"] })}
         >
           <option value="">—</option>
-          <option value="none">None</option>
-          <option value="occasional">Occasional</option>
-          <option value="moderate">Moderate</option>
-          <option value="heavy">Heavy</option>
+          <option value="none">{t("profile.options.none")}</option>
+          <option value="occasional">{t("profile.options.occasional")}</option>
+          <option value="moderate">{t("profile.options.moderate")}</option>
+          <option value="heavy">{t("profile.options.heavy")}</option>
         </Select>
       </Field>
-      <Field label="Chronic conditions" className="sm:col-span-2">
+      <Field label={t("profile.fields.chronicConditions")} className="sm:col-span-2">
         <Textarea
           value={draft.conditions}
           rows={3}
-          placeholder="e.g. Hypothyroidism, Type 2 diabetes… (free text)"
+          placeholder={t("profile.placeholders.chronicConditions")}
           onChange={(e) => patch({ conditions: e.target.value })}
         />
       </Field>

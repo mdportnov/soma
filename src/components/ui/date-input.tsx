@@ -28,6 +28,63 @@ function toISO(date: Date): string {
   return `${date.getFullYear()}-${mm}-${dd}`;
 }
 
+function DatePopover({
+  open,
+  selected,
+  defaultMonth,
+  onSelect,
+  onClose,
+}: {
+  open: boolean;
+  selected: Date | undefined;
+  defaultMonth: Date | undefined;
+  onSelect: (date: Date) => void;
+  onClose: () => void;
+}) {
+  const [rendered, setRendered] = React.useState(open);
+  const [closing, setClosing] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setRendered(true);
+      setClosing(false);
+    } else if (rendered) {
+      setClosing(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  if (!rendered) return null;
+
+  return (
+    <div
+      onAnimationEnd={() => {
+        if (closing) {
+          setRendered(false);
+          setClosing(false);
+        }
+      }}
+      className={cn(
+        "absolute left-0 top-full z-50 mt-1.5 rounded-xl border bg-popover text-popover-foreground p-3 shadow-xl",
+        closing ? "animate-dialog-out" : "animate-dialog-in",
+      )}
+    >
+      <DayPicker
+        mode="single"
+        selected={selected}
+        defaultMonth={selected ?? defaultMonth}
+        captionLayout="dropdown"
+        startMonth={new Date(1900, 0)}
+        endMonth={new Date(new Date().getFullYear() + 1, 11)}
+        onSelect={(date) => {
+          if (date) onSelect(date);
+          else onClose();
+        }}
+      />
+    </div>
+  );
+}
+
 /**
  * Themed replacement for `<input type="date">` — the native WebKit calendar
  * popup ignores the app theme entirely. Renders an input-styled trigger and
@@ -108,22 +165,16 @@ export function DateInput({
         )}
       </button>
 
-      {open && (
-        <div className="animate-dialog-in absolute left-0 top-full z-50 mt-1.5 rounded-xl border bg-card p-3 shadow-xl">
-          <DayPicker
-            mode="single"
-            selected={selected}
-            defaultMonth={selected ?? defaultMonth}
-            captionLayout="dropdown"
-            startMonth={new Date(1900, 0)}
-            endMonth={new Date(new Date().getFullYear() + 1, 11)}
-            onSelect={(date) => {
-              if (date) onChange(toISO(date));
-              setOpen(false);
-            }}
-          />
-        </div>
-      )}
+      <DatePopover
+        open={open}
+        selected={selected}
+        defaultMonth={defaultMonth}
+        onSelect={(date) => {
+          onChange(toISO(date));
+          setOpen(false);
+        }}
+        onClose={() => setOpen(false)}
+      />
     </div>
   );
 }

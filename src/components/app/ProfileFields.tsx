@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Field } from "@/components/app/Field";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cmToFtIn, ftInToCm, kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
@@ -171,10 +172,10 @@ export function CoreFields({ draft, patch }: { draft: ProfileDraft; patch: Patch
         <Input value={draft.name} onChange={(e) => patch({ name: e.target.value })} />
       </Field>
       <Field label="Date of birth">
-        <Input
-          type="date"
+        <DateInput
           value={draft.birthDate}
-          onChange={(e) => patch({ birthDate: e.target.value })}
+          onChange={(birthDate) => patch({ birthDate })}
+          defaultMonth={new Date(1990, 0)}
         />
       </Field>
       <Field label="Biological sex">

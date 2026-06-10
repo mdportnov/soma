@@ -89,7 +89,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Welcome to Soma</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm">
                   Your health record, on your terms — labs, medications and visits in one private
                   timeline. A minute of setup lets Soma read your results against the reference
                   ranges that actually apply to you.
@@ -113,7 +113,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
             <Card>
               <CardHeader>
                 <CardTitle>About you</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm">
                   Sex and age decide which reference ranges apply to your biomarkers — that&apos;s
                   why these few are required.
                 </CardDescription>
@@ -136,7 +136,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
             <Card>
               <CardHeader>
                 <CardTitle>Fine-tuning</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm">
                   Optional, and worth it: these refine a few reference ranges and help track goals.
                   Skip anything — it&apos;s all editable later in Settings.
                 </CardDescription>
@@ -166,7 +166,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 <CardTitle className="text-lg">
                   {firstName ? `You're all set, ${firstName}` : "You're all set"}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm">
                   Your profile is saved locally. Import a lab report, log what you take, and Soma
                   starts connecting the dots.
                 </CardDescription>

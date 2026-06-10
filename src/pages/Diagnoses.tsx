@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
@@ -207,7 +208,7 @@ export function DiagnosisForm({
             />
           </Field>
           <Field label="Date">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateInput value={date} onChange={setDate} />
           </Field>
           <Field label="Status">
             <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>

@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
@@ -270,10 +271,10 @@ function MedicationForm({
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Start date">
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <DateInput value={startDate} onChange={setStartDate} />
           </Field>
           <Field label="End date (empty = ongoing)">
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <DateInput value={endDate} onChange={setEndDate} clearable />
           </Field>
         </div>
         <Field label="Purpose (optional)">

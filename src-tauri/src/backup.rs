@@ -98,6 +98,7 @@ fn dropbox_from_info_json(info: &Path) -> Option<String> {
 }
 
 /// Scans `~/Library/CloudStorage` (macOS) for an entry with the given prefix.
+#[cfg(target_os = "macos")]
 fn cloud_storage_entry(home: &Path, prefix: &str) -> Option<PathBuf> {
     let dir = home.join("Library/CloudStorage");
     let entries = fs::read_dir(dir).ok()?;

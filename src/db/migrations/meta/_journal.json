@@ -15,6 +15,34 @@
       "when": 1781050526989,
       "tag": "0001_quick_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1781221497814,
+      "tag": "0002_worthless_mother_askani",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1781222105600,
+      "tag": "0003_magical_landau",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1781222123390,
+      "tag": "0004_absurd_gladiator",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1781222230527,
+      "tag": "0005_odd_invisible_woman",
+      "breakpoints": true
     }
   ]
 }

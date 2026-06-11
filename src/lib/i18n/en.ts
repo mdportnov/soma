@@ -8,7 +8,12 @@ export const en = {
     medications: "Medications",
     visits: "Visits",
     diagnoses: "Diagnoses",
+    allergies: "Allergies",
+    vaccines: "Vaccines",
     settings: "Settings",
+    records: "Records",
+    labsVitals: "Labs & Vitals",
+    care: "Care",
   },
 
   // Theme
@@ -306,6 +311,10 @@ export const en = {
       medication: "medication",
       diagnosis: "diagnosis",
       visit: "visit",
+      allergy: "allergy",
+      vaccine: "vaccine",
+      symptom: "symptom",
+      imaging: "imaging",
     },
     outOfRange: "out of range",
     now: "now",
@@ -434,7 +443,98 @@ export const en = {
       icd: "ICD",
       icdCodeOptional: "ICD code (optional)",
       status: "Status",
+      notesOptional: "Notes (optional)",
+      resolvedDate: "Resolved date",
     },
+    sections: {
+      active: "Active",
+      remission: "Remission",
+      resolved: "Resolved",
+    },
+    actions: {
+      moveToRemission: "Move to remission",
+      resolve: "Resolve",
+      confirmResolve: "Confirm",
+    },
+  },
+
+  // Allergies page
+  allergies: {
+    title: "Allergies",
+    description: "Drug, food and environmental allergies with severity and reaction.",
+    emptyTitle: "No allergies recorded",
+    emptyDescription: "Track allergic reactions and intolerances.",
+    addFirst: "Add first allergy",
+    addDialog: {
+      titleAdd: "Add allergy",
+      titleEdit: "Edit allergy",
+    },
+    fields: {
+      allergen: "Allergen",
+      category: "Category",
+      severity: "Severity",
+      status: "Status",
+      onsetDateOptional: "Onset date (optional)",
+      reactionOptional: "Reaction (optional)",
+      notesOptional: "Notes (optional)",
+    },
+    sections: {
+      active: "Active",
+      resolved: "Resolved",
+    },
+    actions: {
+      resolve: "Resolve",
+    },
+    deleteAnaphylacticTooltip: "Anaphylactic allergy cannot be deleted — resolve it first.",
+  },
+
+  // Allergy category options
+  allergyCategory: {
+    drug: "Drug",
+    food: "Food",
+    environmental: "Environmental",
+    other: "Other",
+  },
+
+  // Allergy severity options
+  allergySeverity: {
+    mild: "Mild",
+    moderate: "Moderate",
+    severe: "Severe",
+    anaphylactic: "Anaphylactic",
+  },
+
+  // Vaccines page
+  vaccines: {
+    title: "Vaccines",
+    description: "Immunisation history with doses, batches and expiry dates.",
+    emptyTitle: "No vaccines recorded",
+    emptyDescription: "Log your immunisation history.",
+    addFirst: "Add first vaccine",
+    addDialog: {
+      titleAdd: "Add vaccine record",
+      titleEdit: "Edit vaccine record",
+    },
+    fields: {
+      vaccineName: "Vaccine name",
+      date: "Date",
+      doseNumber: "Dose #",
+      manufacturer: "Manufacturer",
+      batchNumber: "Batch #",
+      expiresOptional: "Expires (optional)",
+      country: "Country",
+      administeredByOptional: "Administered by (optional)",
+      notesOptional: "Notes (optional)",
+    },
+    table: {
+      date: "Date",
+      dose: "Dose #",
+      manufacturerBatch: "Manufacturer / Batch",
+      country: "Country",
+      administeredBy: "Administered by",
+      expires: "Expires",
+    },
+    expired: "Expired",
   },
 
   // Backup card

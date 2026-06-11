@@ -8,7 +8,12 @@ export const ru = {
     medications: "Лекарства",
     visits: "Визиты",
     diagnoses: "Диагнозы",
+    allergies: "Аллергии",
+    vaccines: "Прививки",
     settings: "Настройки",
+    records: "Записи",
+    labsVitals: "Анализы и показатели",
+    care: "Лечение",
   },
 
   // Theme
@@ -309,6 +314,10 @@ export const ru = {
       medication: "лекарство",
       diagnosis: "диагноз",
       visit: "визит",
+      allergy: "аллергия",
+      vaccine: "прививка",
+      symptom: "симптом",
+      imaging: "снимок",
     },
     outOfRange: "вне диапазона",
     now: "сейчас",
@@ -437,7 +446,99 @@ export const ru = {
       icd: "МКБ",
       icdCodeOptional: "Код МКБ (опционально)",
       status: "Статус",
+      notesOptional: "Заметки (опционально)",
+      resolvedDate: "Дата разрешения",
     },
+    sections: {
+      active: "Активные",
+      remission: "В ремиссии",
+      resolved: "Разрешённые",
+    },
+    actions: {
+      moveToRemission: "В ремиссию",
+      resolve: "Разрешить",
+      confirmResolve: "Подтвердить",
+    },
+  },
+
+  // Allergies page
+  allergies: {
+    title: "Аллергии",
+    description:
+      "Аллергии на лекарства, продукты питания и окружающую среду с указанием тяжести и реакции.",
+    emptyTitle: "Аллергии не записаны",
+    emptyDescription: "Отслеживайте аллергические реакции и непереносимость.",
+    addFirst: "Добавить первую аллергию",
+    addDialog: {
+      titleAdd: "Добавить аллергию",
+      titleEdit: "Редактировать аллергию",
+    },
+    fields: {
+      allergen: "Аллерген",
+      category: "Категория",
+      severity: "Тяжесть",
+      status: "Статус",
+      onsetDateOptional: "Дата начала (опционально)",
+      reactionOptional: "Реакция (опционально)",
+      notesOptional: "Заметки (опционально)",
+    },
+    sections: {
+      active: "Активные",
+      resolved: "Разрешённые",
+    },
+    actions: {
+      resolve: "Разрешить",
+    },
+    deleteAnaphylacticTooltip: "Анафилактическую аллергию нельзя удалить — сначала разрешите её.",
+  },
+
+  // Allergy category options
+  allergyCategory: {
+    drug: "Лекарство",
+    food: "Еда",
+    environmental: "Окружающая среда",
+    other: "Другое",
+  },
+
+  // Allergy severity options
+  allergySeverity: {
+    mild: "Лёгкая",
+    moderate: "Умеренная",
+    severe: "Тяжёлая",
+    anaphylactic: "Анафилактическая",
+  },
+
+  // Vaccines page
+  vaccines: {
+    title: "Прививки",
+    description: "История вакцинации с дозами, сериями и сроками годности.",
+    emptyTitle: "Прививки не записаны",
+    emptyDescription: "Ведите историю своей иммунизации.",
+    addFirst: "Добавить первую прививку",
+    addDialog: {
+      titleAdd: "Добавить запись о прививке",
+      titleEdit: "Редактировать запись о прививке",
+    },
+    fields: {
+      vaccineName: "Название вакцины",
+      date: "Дата",
+      doseNumber: "Доза №",
+      manufacturer: "Производитель",
+      batchNumber: "Серия",
+      expiresOptional: "Срок годности (опционально)",
+      country: "Страна",
+      administeredByOptional: "Кто ввёл (опционально)",
+      notesOptional: "Заметки (опционально)",
+    },
+    table: {
+      date: "Дата",
+      dose: "Доза №",
+      manufacturerBatch: "Производитель / Серия",
+      country: "Страна",
+      administeredBy: "Кто ввёл",
+      expires: "Годен до",
+    },
+    expired: "Истёк",
   },
 
   // Backup card

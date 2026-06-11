@@ -8,8 +8,10 @@ import {
   Moon,
   Pill,
   Settings,
+  ShieldAlert,
   Stethoscope,
   Sun,
+  Syringe,
   TestTubes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,14 +20,23 @@ import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import logo from "@/assets/logo.svg";
 
-const NAV = [
-  { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
-  { to: "/timeline", labelKey: "nav.timeline", icon: CalendarRange },
-  { to: "/biomarkers", labelKey: "nav.biomarkers", icon: Activity },
-  { to: "/labs", labelKey: "nav.labResults", icon: TestTubes },
-  { to: "/medications", labelKey: "nav.medications", icon: Pill },
-  { to: "/visits", labelKey: "nav.visits", icon: Stethoscope },
-  { to: "/diagnoses", labelKey: "nav.diagnoses", icon: FlaskConical },
+type NavItem =
+  | { kind: "link"; to: string; labelKey: string; icon: React.ElementType; end?: boolean }
+  | { kind: "label"; labelKey: string };
+
+const NAV: NavItem[] = [
+  { kind: "link", to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
+  { kind: "link", to: "/timeline", labelKey: "nav.timeline", icon: CalendarRange },
+  { kind: "label", labelKey: "nav.records" },
+  { kind: "link", to: "/diagnoses", labelKey: "nav.diagnoses", icon: FlaskConical },
+  { kind: "link", to: "/allergies", labelKey: "nav.allergies", icon: ShieldAlert },
+  { kind: "link", to: "/vaccines", labelKey: "nav.vaccines", icon: Syringe },
+  { kind: "label", labelKey: "nav.labsVitals" },
+  { kind: "link", to: "/labs", labelKey: "nav.labResults", icon: TestTubes },
+  { kind: "link", to: "/biomarkers", labelKey: "nav.biomarkers", icon: Activity },
+  { kind: "label", labelKey: "nav.care" },
+  { kind: "link", to: "/medications", labelKey: "nav.medications", icon: Pill },
+  { kind: "link", to: "/visits", labelKey: "nav.visits", icon: Stethoscope },
 ];
 
 export function Shell() {
@@ -43,13 +54,23 @@ export function Shell() {
           <span className="hidden text-sm font-semibold tracking-tight md:block">Soma</span>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-          {NAV.map(({ to, labelKey, icon: Icon, end }) => {
-            const label = t(labelKey);
+          {NAV.map((item) => {
+            if (item.kind === "label") {
+              return (
+                <span
+                  key={item.labelKey}
+                  className="mt-2 hidden px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground md:block"
+                >
+                  {t(item.labelKey)}
+                </span>
+              );
+            }
+            const label = t(item.labelKey);
             return (
               <NavLink
-                key={to}
-                to={to}
-                end={end}
+                key={item.to}
+                to={item.to}
+                end={item.end}
                 title={label}
                 className={({ isActive }) =>
                   cn(
@@ -60,7 +81,7 @@ export function Shell() {
                   )
                 }
               >
-                <Icon className="size-4 shrink-0" />
+                <item.icon className="size-4 shrink-0" />
                 <span className="hidden md:block">{label}</span>
               </NavLink>
             );

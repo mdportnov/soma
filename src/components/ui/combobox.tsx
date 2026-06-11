@@ -10,6 +10,8 @@ export type ComboboxOption = {
   label: string;
   group?: string;
   keywords?: string[];
+  /** Internal: synthetic "use what you typed" row added by `allowCustom`. */
+  isCustom?: boolean;
 };
 
 type ComboboxProps = {
@@ -19,6 +21,8 @@ type ComboboxProps = {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Offer the typed query as a free-form value when it matches no option. */
+  allowCustom?: boolean;
 };
 
 type PanelStyle = {
@@ -45,7 +49,15 @@ function filterOptions(options: ComboboxOption[], query: string): ComboboxOption
   return scored.sort((a, b) => b.score - a.score).map((s) => s.opt);
 }
 
-export function Combobox({ value, onChange, options, placeholder, disabled, className }: ComboboxProps) {
+export function Combobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+  className,
+  allowCustom,
+}: ComboboxProps) {
   const { t } = useI18n();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -57,9 +69,20 @@ export function Combobox({ value, onChange, options, placeholder, disabled, clas
   const listRef = React.useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((o) => o.value === value) ?? null;
+  // A custom (free-form) value has no matching option but should still display.
+  const selectedLabel = selectedOption?.label ?? (allowCustom && value ? value : null);
   const isSearching = query.trim().length > 0;
   const filtered = filterOptions(options, query);
-  const flatOptions = filtered;
+  const trimmedQuery = query.trim();
+  const customOption: ComboboxOption | null =
+    allowCustom &&
+    trimmedQuery &&
+    !options.some(
+      (o) => o.value === trimmedQuery || normalizeLabel(o.label) === normalizeLabel(trimmedQuery),
+    )
+      ? { value: trimmedQuery, label: trimmedQuery, isCustom: true }
+      : null;
+  const flatOptions = customOption ? [...filtered, customOption] : filtered;
 
   const computePanel = React.useCallback(() => {
     if (!triggerRef.current) return;
@@ -201,12 +224,10 @@ export function Combobox({ value, onChange, options, placeholder, disabled, clas
           "flex h-9 w-full items-center justify-between rounded-md border border-input bg-card pl-3 pr-2.5 text-sm transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring",
           "disabled:cursor-not-allowed disabled:opacity-50",
-          !selectedOption && "text-muted-foreground",
+          !selectedLabel && "text-muted-foreground",
         )}
       >
-        <span className="truncate">
-          {selectedOption ? selectedOption.label : (placeholder ?? t("common.select"))}
-        </span>
+        <span className="truncate">{selectedLabel ?? placeholder ?? t("common.select")}</span>
         <ChevronDown
           className={cn(
             "ml-1.5 size-4 shrink-0 text-muted-foreground transition-transform duration-150",
@@ -253,8 +274,12 @@ export function Combobox({ value, onChange, options, placeholder, disabled, clas
               ) : isSearching ? (
                 flatOptions.map((opt, i) => (
                   <OptionRow
-                    key={opt.value}
-                    opt={opt}
+                    key={opt.isCustom ? "__custom__" : opt.value}
+                    opt={
+                      opt.isCustom
+                        ? { ...opt, label: t("common.useCustomValue", { value: opt.value }) }
+                        : opt
+                    }
                     isActive={i === activeIndex}
                     isSelected={opt.value === value}
                     showGroup
@@ -309,7 +334,14 @@ type OptionRowProps = {
   onClick: () => void;
 };
 
-function OptionRow({ opt, isActive, isSelected, showGroup, onMouseEnter, onClick }: OptionRowProps) {
+function OptionRow({
+  opt,
+  isActive,
+  isSelected,
+  showGroup,
+  onMouseEnter,
+  onClick,
+}: OptionRowProps) {
   return (
     <div
       role="option"

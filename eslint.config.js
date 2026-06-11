@@ -11,6 +11,7 @@ export default tseslint.config(
       "node_modules/**",
       "src-tauri/target/**",
       "src/db/migrations/**",
+      "mcp/dist/**",
       ".claude/**",
     ],
   },

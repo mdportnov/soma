@@ -16,6 +16,7 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { todayISO } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { allKnownUnits, convertibleUnits, convertToDefaultUnit, normalizeUnit } from "@/lib/units";
 import type { Biomarker } from "@/db/schema";
 
 type Row = { key: number; biomarkerId: number | ""; value: string; unit: string };
@@ -44,9 +45,31 @@ export function LabPanelNew() {
     list.push(b);
     byCategory.set(b.category, list);
   }
-  const biomarkerOptions: ComboboxOption[] = [...byCategory.entries()].flatMap(([category, items]) =>
-    items.map((b) => ({ value: String(b.id), label: b.canonicalName, group: category, keywords: b.aliases })),
+  const biomarkerOptions: ComboboxOption[] = [...byCategory.entries()].flatMap(
+    ([category, items]) =>
+      items.map((b) => ({
+        value: String(b.id),
+        label: b.canonicalName,
+        group: category,
+        keywords: b.aliases,
+      })),
   );
+
+  const unitCatalog = allKnownUnits(biomarkers.map((b) => b.defaultUnit));
+  const unitOptionsFor = (bio: Biomarker): ComboboxOption[] => {
+    const compatible = convertibleUnits(bio, unitCatalog);
+    const compatibleNorm = new Set(compatible.map(normalizeUnit));
+    return [
+      ...compatible.map((u) => ({
+        value: u,
+        label: u,
+        group: t("labPanelNew.unitGroups.compatible"),
+      })),
+      ...unitCatalog
+        .filter((u) => !compatibleNorm.has(normalizeUnit(u)))
+        .map((u) => ({ value: u, label: u, group: t("labPanelNew.unitGroups.other") })),
+    ];
+  };
 
   const updateRow = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -132,6 +155,8 @@ export function LabPanelNew() {
         <CardContent className="space-y-2">
           {rows.map((row) => {
             const bio = row.biomarkerId !== "" ? byId.get(row.biomarkerId) : undefined;
+            const unitUnknown =
+              bio != null && row.unit.trim() !== "" && !convertToDefaultUnit(1, row.unit, bio).ok;
             return (
               <div key={row.key} className="flex flex-wrap items-end gap-2">
                 <Field label={t("labPanelNew.fields.biomarker")} className="min-w-56 flex-1">
@@ -156,11 +181,14 @@ export function LabPanelNew() {
                     onChange={(e) => updateRow(row.key, { value: e.target.value })}
                   />
                 </Field>
-                <Field label={t("fields.unit")} className="w-28">
-                  <Input
-                    value={row.unit}
-                    placeholder={bio?.defaultUnit ?? ""}
-                    onChange={(e) => updateRow(row.key, { unit: e.target.value })}
+                <Field label={t("fields.unit")} className="w-32">
+                  <Combobox
+                    value={row.unit || null}
+                    onChange={(v) => updateRow(row.key, { unit: v })}
+                    options={bio ? unitOptionsFor(bio) : []}
+                    placeholder={bio?.defaultUnit ?? "—"}
+                    disabled={!bio}
+                    allowCustom
                   />
                 </Field>
                 <Button
@@ -173,6 +201,11 @@ export function LabPanelNew() {
                 >
                   <Trash2 />
                 </Button>
+                {unitUnknown && (
+                  <p className="w-full text-[11px] text-amber-600 dark:text-amber-500">
+                    {t("labPanelNew.unitWarning", { unit: bio.defaultUnit })}
+                  </p>
+                )}
               </div>
             );
           })}
@@ -196,7 +229,9 @@ export function LabPanelNew() {
           {t("common.cancel")}
         </Button>
         <Button onClick={save} disabled={saving || validRows.length === 0 || !date}>
-          {validRows.length === 1 ? t("labPanelNew.savePanelSingular", { count: validRows.length.toString() }) : t("labPanelNew.savePanelPlural", { count: validRows.length.toString() })}
+          {validRows.length === 1
+            ? t("labPanelNew.savePanelSingular", { count: validRows.length.toString() })
+            : t("labPanelNew.savePanelPlural", { count: validRows.length.toString() })}
         </Button>
       </div>
     </>

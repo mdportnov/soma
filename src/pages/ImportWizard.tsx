@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/table";
 import { CreateBiomarkerDialog } from "./Biomarkers";
 import { formatValue, todayISO } from "@/lib/utils";
+import { allKnownUnits } from "@/lib/units";
 import { useI18n } from "@/lib/i18n";
 import type { Biomarker } from "@/db/schema";
 
@@ -217,10 +218,7 @@ export function ImportWizard() {
   return (
     <>
       <BackLink />
-      <PageHeader
-        title={t("importWizard.title")}
-        description={t("importWizard.description")}
-      />
+      <PageHeader title={t("importWizard.title")} description={t("importWizard.description")} />
 
       {error && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -323,6 +321,7 @@ export function ImportWizard() {
             : ""
         }
         existingCategories={[...new Set(boot.biomarkers.map((b) => b.category))]}
+        unitCatalog={allKnownUnits(boot.biomarkers.map((b) => b.defaultUnit))}
         onCreated={async (id) => {
           const key = customForKey;
           setCustomForKey(null);
@@ -410,8 +409,14 @@ function ReviewStep({
     list.push(b);
     byCategory.set(b.category, list);
   }
-  const biomarkerOptions: ComboboxOption[] = [...byCategory.entries()].flatMap(([category, items]) =>
-    items.map((b) => ({ value: String(b.id), label: b.canonicalName, group: category, keywords: b.aliases })),
+  const biomarkerOptions: ComboboxOption[] = [...byCategory.entries()].flatMap(
+    ([category, items]) =>
+      items.map((b) => ({
+        value: String(b.id),
+        label: b.canonicalName,
+        group: category,
+        keywords: b.aliases,
+      })),
   );
 
   return (

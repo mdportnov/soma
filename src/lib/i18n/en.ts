@@ -35,6 +35,7 @@ export const en = {
     select: "Select",
     selectModel: "Select model…",
     noMatches: "No matches",
+    useCustomValue: 'Use "{{value}}"',
     search: "Search…",
     saveChanges: "Save changes",
     addVisit: "Add visit",
@@ -86,7 +87,8 @@ export const en = {
   // Settings
   settings: {
     title: "Settings",
-    description: "AI providers, profile and data export. Everything stays on this device unless you say otherwise.",
+    description:
+      "AI providers, profile and data export. Everything stays on this device unless you say otherwise.",
 
     // Language section
     language: {
@@ -99,7 +101,8 @@ export const en = {
     // Profile section
     profile: {
       title: "Profile",
-      description: "Used for sex- and age-aware biomarker reference ranges. Single profile for now; multi-profile sharing comes later.",
+      description:
+        "Used for sex- and age-aware biomarker reference ranges. Single profile for now; multi-profile sharing comes later.",
       saveProfile: "Save profile",
       saved: "Saved ✓",
     },
@@ -107,11 +110,13 @@ export const en = {
     // AI Settings
     ai: {
       title: "AI analysis",
-      description: "Off by default. Bring your own API key — it is stored in the OS keychain, never in the database or config files. Only multimodal models (vision + PDF) are offered, since the import pipeline reads photos and PDFs.",
+      description:
+        "Off by default. Bring your own API key — it is stored in the OS keychain, never in the database or config files. Only multimodal models (vision + PDF) are offered, since the import pipeline reads photos and PDFs.",
       provider: "Provider",
       aiDisabled: "AI disabled",
       model: "Model (multimodal only)",
-      customModel: "Custom model id (optional, overrides the list — must support vision + PDF input)",
+      customModel:
+        "Custom model id (optional, overrides the list — must support vision + PDF input)",
       customModelPlaceholder: "e.g. a newer model id not in the registry yet",
       apiKeyFor: "API key for",
       checking: "checking…",
@@ -120,8 +125,10 @@ export const en = {
       saveKey: "Save key",
       testKey: "Test key",
       keyWorks: "Key works — model responded.",
-      disclaimer: "AI output is never medical advice. Documents you import are sent to the selected provider only when you explicitly run an AI action.",
-      aiDisclaimer: "AI-generated content. Not medical advice — always consult a qualified clinician.",
+      disclaimer:
+        "AI output is never medical advice. Documents you import are sent to the selected provider only when you explicitly run an AI action.",
+      aiDisclaimer:
+        "AI-generated content. Not medical advice — always consult a qualified clinician.",
     },
 
     // Backup section
@@ -194,19 +201,23 @@ export const en = {
   // Onboarding
   onboarding: {
     welcomeTitle: "Welcome to Soma",
-    welcomeDescription: "Your health record, on your terms — labs, medications and visits in one private timeline. A minute of setup lets Soma read your results against the reference ranges that actually apply to you.",
+    welcomeDescription:
+      "Your health record, on your terms — labs, medications and visits in one private timeline. A minute of setup lets Soma read your results against the reference ranges that actually apply to you.",
     privacyNote: "Everything you enter stays on this device — no account, no cloud, no tracking.",
     getStarted: "Get started",
 
     aboutYouTitle: "About you",
-    aboutYouDescription: "Sex and age decide which reference ranges apply to your biomarkers — that's why these few are required.",
+    aboutYouDescription:
+      "Sex and age decide which reference ranges apply to your biomarkers — that's why these few are required.",
 
     fineTuningTitle: "Fine-tuning",
-    fineTuningDescription: "Optional, and worth it: these refine a few reference ranges and help track goals. Skip anything — it's all editable later in Settings.",
+    fineTuningDescription:
+      "Optional, and worth it: these refine a few reference ranges and help track goals. Skip anything — it's all editable later in Settings.",
 
     allSetTitle: "You're all set",
     allSetTitleWithName: "You're all set, {{name}}",
-    allSetDescription: "Your profile is saved locally. Import a lab report, log what you take, and Soma starts connecting the dots.",
+    allSetDescription:
+      "Your profile is saved locally. Import a lab report, log what you take, and Soma starts connecting the dots.",
     tip: "Tip: overlay any medication on a biomarker chart to see whether what you take actually moves the numbers.",
     openDashboard: "Open dashboard",
   },
@@ -323,7 +334,8 @@ export const en = {
   // Biomarkers page
   biomarkers: {
     title: "Biomarkers",
-    description: "Reference dictionary with norm and optimal ranges. Click a biomarker to see its trend.",
+    description:
+      "Reference dictionary with norm and optimal ranges. Click a biomarker to see its trend.",
     customBiomarker: "Custom biomarker",
     searchPlaceholder: "Search by name or alias…",
     withDataOnly: "With data only",
@@ -356,15 +368,23 @@ export const en = {
   // Medications page
   medications: {
     title: "Medications & supplements",
-    description: "What you take, in what dose, and since when — overlayable on any biomarker trend.",
+    description:
+      "What you take, in what dose, and since when — overlayable on any biomarker trend.",
     emptyTitle: "Nothing tracked yet",
-    emptyDescription: "Add drugs and supplements with doses and periods to correlate them with your labs.",
+    emptyDescription:
+      "Add drugs and supplements with doses and periods to correlate them with your labs.",
     addFirst: "Add first item",
     currentlyTaking: "Currently taking",
     past: "Past",
     addDialog: {
       titleAdd: "Add medication or supplement",
       titleEdit: "Edit medication",
+    },
+    doseUnits: {
+      drops: "drops",
+      tablets: "tablets",
+      capsules: "capsules",
+      sprays: "sprays",
     },
     fields: {
       dose: "Dose",
@@ -420,7 +440,8 @@ export const en = {
   // Backup card
   backup: {
     title: "Backups",
-    description: "Encrypted snapshots of your database, saved into a folder your cloud client (iCloud Drive, Google Drive, Dropbox, OneDrive) already syncs. Soma never uploads anything itself and stores only encrypted .somabk files there — your live data never leaves this device.",
+    description:
+      "Encrypted snapshots of your database, saved into a folder your cloud client (iCloud Drive, Google Drive, Dropbox, OneDrive) already syncs. Soma never uploads anything itself and stores only encrypted .somabk files there — your live data never leaves this device.",
     setupBackups: "Set up backups",
     disable: "Disable",
     backupNow: "Back up now",
@@ -432,7 +453,8 @@ export const en = {
     noBackupYet: "No backup has run yet.",
     rotationNote: "Old snapshots are rotated automatically (newest 12 are kept).",
     lastAttemptFailed: "Last attempt failed",
-    disableNote: "Disabling only stops future backups — existing snapshots and your passphrase are kept, so you can re-enable any time.",
+    disableNote:
+      "Disabling only stops future backups — existing snapshots and your passphrase are kept, so you can re-enable any time.",
 
     // Setup wizard
     setupStep: "Set up backups · step {{step}} of 3",
@@ -445,14 +467,18 @@ export const en = {
     notFoundOnComputer: "Not found on this computer",
     detected: "Detected",
     chooseManually: "Choose a folder manually…",
-    customWarning: "This folder is not one of the detected cloud folders. Backups saved here will only reach a cloud if something on this computer syncs this folder.",
+    customWarning:
+      "This folder is not one of the detected cloud folders. Backups saved here will only reach a cloud if something on this computer syncs this folder.",
     folderNotExist: "That folder does not exist.",
     folderNotWritable: "Soma cannot write into that folder — pick another one.",
-    subfolderNote: "A Soma Backups subfolder is created inside, with a README explaining the files. Only encrypted snapshots go there — never your live data.",
+    subfolderNote:
+      "A Soma Backups subfolder is created inside, with a README explaining the files. Only encrypted snapshots go there — never your live data.",
 
     // Step 2 - passphrase
-    passphraseTitle: "This passphrase encrypts every backup. It is stored only in this device's keychain.",
-    passphraseWarning: "If you lose this device and the passphrase, your backups cannot be recovered — by anyone. Save it in your password manager now.",
+    passphraseTitle:
+      "This passphrase encrypts every backup. It is stored only in this device's keychain.",
+    passphraseWarning:
+      "If you lose this device and the passphrase, your backups cannot be recovered — by anyone. Save it in your password manager now.",
     passphraseLabel: "Passphrase (min 8 characters)",
     passphraseRepeat: "Repeat passphrase",
     passphraseSaved: "I saved the passphrase somewhere safe",
@@ -462,7 +488,8 @@ export const en = {
     // Step 3 - frequency
     backupFrequency: "Backup frequency",
     destinationSummary: "Destination:",
-    catchupNote: "Soma also checks on every launch and catches up if a backup was missed. The newest 12 snapshots are kept; older ones are deleted automatically.",
+    catchupNote:
+      "Soma also checks on every launch and catches up if a backup was missed. The newest 12 snapshots are kept; older ones are deleted automatically.",
     enableAndBackup: "Enable & back up now",
 
     // Restore dialog
@@ -475,10 +502,13 @@ export const en = {
     fileDate: "file date:",
     schema: "schema",
     appHas: "app has",
-    newerVersionError: "This backup was made by a newer version of Soma. Update the app first, then restore.",
-    olderSchemaNote: "The backup uses an older schema — it will be migrated automatically after the restart.",
+    newerVersionError:
+      "This backup was made by a newer version of Soma. Update the app first, then restore.",
+    olderSchemaNote:
+      "The backup uses an older schema — it will be migrated automatically after the restart.",
     replaceWarningTitle: "This replaces your current database and restarts the app.",
-    replaceWarningDescription: "A timestamped safety copy of the current database is kept next to it, so this can be undone manually if needed.",
+    replaceWarningDescription:
+      "A timestamped safety copy of the current database is kept next to it, so this can be undone manually if needed.",
     replaceAndRestart: "Replace data & restart",
 
     // Native dialogs
@@ -502,6 +532,12 @@ export const en = {
       biomarker: "Biomarker",
     },
     removeRow: "Remove row",
+    unitGroups: {
+      compatible: "Convertible units",
+      other: "Other units",
+    },
+    unitWarning:
+      "Unknown conversion to {{unit}} — the value will be saved as entered, without normalization or an out-of-range flag.",
   },
 
   // BiomarkerDetail page
@@ -516,7 +552,8 @@ export const en = {
   // ImportWizard page
   importWizard: {
     title: "AI import",
-    description: "PDF or photo → extracted values → you confirm the mapping → saved. Nothing is written without your review.",
+    description:
+      "PDF or photo → extracted values → you confirm the mapping → saved. Nothing is written without your review.",
     notMapped: "— not mapped —",
     savingPanel: "Saving panel…",
     chooseLabReport: "Choose a lab report",
@@ -524,7 +561,8 @@ export const en = {
     matchColumn: "Match",
     panelDetailsTitle: "Panel details",
     aiDisabledTitle: "AI analysis is disabled",
-    aiDisabledDescription: "To import lab reports from PDF or photos, enable AI analysis and paste your API key in Settings. Your documents are sent only to the provider you choose, only when you run an import.",
+    aiDisabledDescription:
+      "To import lab reports from PDF or photos, enable AI analysis and paste your API key in Settings. Your documents are sent only to the provider you choose, only when you run an import.",
     openSettings: "Open Settings",
   },
 
@@ -549,7 +587,8 @@ export const en = {
     visitNotFound: "Visit not found",
     deleteVisit: "Delete visit",
     deleteVisitTitle: "Delete this visit?",
-    deleteVisitDescription: "Prescriptions of this visit are removed; linked diagnoses are kept but unlinked.",
+    deleteVisitDescription:
+      "Prescriptions of this visit are removed; linked diagnoses are kept but unlinked.",
     addPrescription: "Add prescription",
     diagnosesTitle: "Diagnoses",
     prescriptionsTitle: "Prescriptions",

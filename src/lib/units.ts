@@ -167,6 +167,70 @@ function round(v: number): number {
   return Math.round(v * 1000) / 1000;
 }
 
+// ── unit catalog (for unit pickers) ─────────────────────────────────────────
+
+/** Display spellings for normalized unit tokens that appear in factor keys. */
+const UNIT_DISPLAY: Record<string, string> = {
+  "g/dl": "g/dL",
+  "g/l": "g/L",
+  "mg/dl": "mg/dL",
+  "mg/l": "mg/L",
+  "ng/ml": "ng/mL",
+  "ng/dl": "ng/dL",
+  "µg/l": "µg/L",
+  "µg/dl": "µg/dL",
+  "mmol/l": "mmol/L",
+  "µmol/l": "µmol/L",
+  "nmol/l": "nmol/L",
+  "pmol/l": "pmol/L",
+  "pg/ml": "pg/mL",
+  "µiu/ml": "µIU/mL",
+  "miu/l": "mIU/L",
+  "x10^9/l": "10^9/L",
+  "тыс/мкл": "10^9/L",
+};
+
+/**
+ * Every unit spelling the conversion layer can work with, deduped by
+ * normalized form. Spellings coming from the biomarker dictionary win over
+ * the factor-table fallbacks, so the picker shows the same strings users see
+ * elsewhere in the app.
+ */
+export function allKnownUnits(dictionaryUnits: string[]): string[] {
+  const byNorm = new Map<string, string>();
+  const add = (u: string) => {
+    const n = normalizeUnit(u);
+    if (n && !byNorm.has(n)) byNorm.set(n, u);
+  };
+  for (const u of dictionaryUnits) add(u);
+  const factorKeys = [
+    ...Object.keys(GENERIC_FACTORS),
+    ...Object.values(MOLAR_FACTORS).flatMap((m) => Object.keys(m)),
+  ];
+  for (const key of factorKeys) {
+    for (const side of key.split("->")) add(UNIT_DISPLAY[side] ?? side);
+  }
+  return [...byNorm.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Units from `catalog` that will normalize for `bio`: the default unit first,
+ * then everything `convertToDefaultUnit` accepts (synonym spellings and
+ * known generic/molar conversions).
+ */
+export function convertibleUnits(
+  bio: Pick<Biomarker, "code" | "defaultUnit">,
+  catalog: string[],
+): string[] {
+  const defaultNorm = normalizeUnit(bio.defaultUnit);
+  const out = [bio.defaultUnit];
+  for (const u of catalog) {
+    if (normalizeUnit(u) === defaultNorm) continue;
+    if (convertToDefaultUnit(1, u, bio).ok) out.push(u);
+  }
+  return out;
+}
+
 // ── body measurements (profile) ─────────────────────────────────────────────
 // Profile height/weight are stored canonically in metric (cm / kg); these
 // helpers convert to and from imperial for display and entry.

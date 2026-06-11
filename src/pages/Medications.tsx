@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Combobox } from "@/components/ui/combobox";
 import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatValue, todayISO } from "@/lib/utils";
@@ -250,10 +251,24 @@ function MedicationForm({
             />
           </Field>
           <Field label={t("fields.unit")}>
-            <Input
-              value={doseUnit}
-              onChange={(e) => setDoseUnit(e.target.value)}
+            <Combobox
+              value={doseUnit || null}
+              onChange={setDoseUnit}
+              options={[
+                "mg",
+                "µg",
+                "g",
+                "mg/mL",
+                "IU",
+                "mL",
+                "%",
+                t("medications.doseUnits.drops"),
+                t("medications.doseUnits.tablets"),
+                t("medications.doseUnits.capsules"),
+                t("medications.doseUnits.sprays"),
+              ].map((u) => ({ value: u, label: u }))}
               placeholder="mg / IU / g"
+              allowCustom
             />
           </Field>
           <Field label={t("medications.fields.frequency")}>

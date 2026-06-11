@@ -14,8 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Combobox } from "@/components/ui/combobox";
 import { formatDate, formatValue } from "@/lib/utils";
 import { normalizeLabel } from "@/lib/fuzzy";
+import { allKnownUnits } from "@/lib/units";
 import { useI18n } from "@/lib/i18n";
 
 export function Biomarkers() {
@@ -118,7 +120,8 @@ export function Biomarkers() {
                         </div>
                       ) : (
                         <p className="mt-1.5 text-xs text-muted-foreground">
-                          {t("biomarkers.noData")} · {b.refLow ?? "—"}–{b.refHigh ?? "—"} {b.defaultUnit}
+                          {t("biomarkers.noData")} · {b.refLow ?? "—"}–{b.refHigh ?? "—"}{" "}
+                          {b.defaultUnit}
                         </p>
                       )}
                     </Link>
@@ -138,6 +141,7 @@ export function Biomarkers() {
           void reload();
         }}
         existingCategories={[...new Set(data.biomarkers.map((b) => b.category))]}
+        unitCatalog={allKnownUnits(data.biomarkers.map((b) => b.defaultUnit))}
       />
     </>
   );
@@ -148,12 +152,14 @@ export function CreateBiomarkerDialog({
   onClose,
   onCreated,
   existingCategories,
+  unitCatalog,
   initialName = "",
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (id: number) => void;
   existingCategories: string[];
+  unitCatalog: string[];
   initialName?: string;
 }) {
   const { t } = useI18n();
@@ -226,7 +232,13 @@ export function CreateBiomarkerDialog({
             </datalist>
           </Field>
           <Field label={t("biomarkers.createDialog.unitLabel")}>
-            <Input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder={t("biomarkers.createDialog.unitPlaceholder")} />
+            <Combobox
+              value={unit || null}
+              onChange={setUnit}
+              options={unitCatalog.map((u) => ({ value: u, label: u }))}
+              placeholder={t("biomarkers.createDialog.unitPlaceholder")}
+              allowCustom
+            />
           </Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -242,8 +254,12 @@ export function CreateBiomarkerDialog({
               onChange={(e) => setDirection(e.target.value as typeof direction)}
             >
               <option value="range">{t("biomarkers.createDialog.directionOptions.range")}</option>
-              <option value="higher_better">{t("biomarkers.createDialog.directionOptions.higherBetter")}</option>
-              <option value="lower_better">{t("biomarkers.createDialog.directionOptions.lowerBetter")}</option>
+              <option value="higher_better">
+                {t("biomarkers.createDialog.directionOptions.higherBetter")}
+              </option>
+              <option value="lower_better">
+                {t("biomarkers.createDialog.directionOptions.lowerBetter")}
+              </option>
             </Select>
           </Field>
         </div>

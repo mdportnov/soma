@@ -14,6 +14,10 @@ const LANES: { kind: TimelineEvent["kind"]; label: string; dot: string }[] = [
   { kind: "lab_panel", label: "Labs", dot: "bg-primary" },
   { kind: "visit", label: "Visits", dot: "bg-blue-500" },
   { kind: "diagnosis", label: "Diagnoses", dot: "bg-amber-500" },
+  { kind: "allergy", label: "Allergies", dot: "bg-rose-500" },
+  { kind: "vaccine", label: "Vaccines", dot: "bg-violet-500" },
+  { kind: "symptom", label: "Symptoms", dot: "bg-orange-500" },
+  { kind: "imaging", label: "Imaging", dot: "bg-slate-500" },
 ];
 
 /**
@@ -73,6 +77,14 @@ export function HorizontalTimeline({
         return "/medications";
       case "diagnosis":
         return "/diagnoses";
+      case "allergy":
+        return "/allergies";
+      case "vaccine":
+        return "/vaccines";
+      case "symptom":
+        return "/journal?tab=symptoms";
+      case "imaging":
+        return `/imaging/${e.id}`;
     }
   };
 

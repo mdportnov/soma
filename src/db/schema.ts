@@ -39,6 +39,19 @@ export const profile = sqliteTable("profile", {
   unitSystem: text("unit_system", { enum: ["metric", "imperial"] })
     .notNull()
     .default("metric"),
+  /** Emergency contact — surfaced on the emergency card export. */
+  emergencyContactName: text("emergency_contact_name"),
+  emergencyContactPhone: text("emergency_contact_phone"),
+  emergencyContactRelation: text("emergency_contact_relation"),
+  /** Secondary emergency-card identity: citizenship + languages the user speaks. */
+  citizenship: text("citizenship"),
+  languages: text("languages"),
+  /** Travel/health insurance — insurer, policy number, 24/7 assistance phone. */
+  insurer: text("insurer"),
+  insurancePolicyNumber: text("insurance_policy_number"),
+  insurancePhone: text("insurance_phone"),
+  /** Free-form critical notes: pacemaker, implants, transfusion refusal, … */
+  emergencyNotes: text("emergency_notes"),
   /** Set when onboarding is completed; null = onboarding not done. */
   onboardedAt: text("onboarded_at"),
   createdAt: text("created_at")
@@ -81,7 +94,9 @@ export const attachment = sqliteTable("attachment", {
     .references(() => profile.id),
   filePath: text("file_path").notNull(),
   mimeType: text("mime_type").notNull(),
-  kind: text("kind", { enum: ["lab_pdf", "photo", "discharge", "other"] })
+  kind: text("kind", {
+    enum: ["lab_pdf", "photo", "discharge", "imaging", "vaccination_cert", "other"],
+  })
     .notNull()
     .default("other"),
   /** Polymorphic link: "lab_panel" | "visit" | "medication" | "diagnosis" | … */
@@ -162,13 +177,21 @@ export const visit = sqliteTable(
 );
 
 // ── prescription ───────────────────────────────────────────────────────────
+// A prescription is a structured record of what was prescribed. It survives
+// visit deletion (visitId is set null, not cascaded) because medication rows
+// reference it; user-facing removal is archival, not hard delete.
 export const prescription = sqliteTable("prescription", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  visitId: integer("visit_id")
-    .notNull()
-    .references(() => visit.id, { onDelete: "cascade" }),
+  visitId: integer("visit_id").references(() => visit.id, { onDelete: "set null" }),
+  drugName: text("drug_name"),
+  doseAmount: real("dose_amount"),
+  doseUnit: text("dose_unit"),
+  frequency: text("frequency"),
+  durationDays: integer("duration_days"),
+  refills: integer("refills"),
   notes: text("notes"),
   sourceLinks: text("source_links", { mode: "json" }).$type<string[]>().notNull().default([]),
+  archivedAt: text("archived_at"),
 });
 
 // ── medication (drugs and supplements, with intake period) ────────────────
@@ -232,9 +255,155 @@ export const diagnosis = sqliteTable(
     status: text("status", { enum: ["active", "remission", "resolved"] })
       .notNull()
       .default("active"),
+    notes: text("notes"),
+    /** Set when status becomes resolved/remission; informational, user-editable. */
+    resolvedDate: text("resolved_date"),
     visitId: integer("visit_id").references(() => visit.id),
   },
   (t) => [index("diagnosis_profile_idx").on(t.profileId)],
+);
+
+// ── allergy ────────────────────────────────────────────────────────────────
+export const allergy = sqliteTable(
+  "allergy",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    /** Free text — allergy names vary across countries/languages; no dictionary. */
+    allergen: text("allergen").notNull(),
+    category: text("category", { enum: ["drug", "food", "environmental", "other"] })
+      .notNull()
+      .default("other"),
+    severity: text("severity", {
+      enum: ["mild", "moderate", "severe", "anaphylactic"],
+    }).notNull(),
+    reaction: text("reaction"),
+    onsetDate: text("onset_date"),
+    status: text("status", { enum: ["active", "resolved"] })
+      .notNull()
+      .default("active"),
+    notes: text("notes"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("allergy_profile_idx").on(t.profileId)],
+);
+
+// ── vaccine ────────────────────────────────────────────────────────────────
+// Append-only historical record: no user-visible delete, edit for typo fixes.
+export const vaccine = sqliteTable(
+  "vaccine",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    vaccineName: text("vaccine_name").notNull(),
+    /** Administration date. */
+    date: text("date").notNull(),
+    manufacturer: text("manufacturer"),
+    batchNumber: text("batch_number"),
+    /** Dose number within a multi-dose series (1 of 3). */
+    dose: integer("dose"),
+    /** Validity end (e.g. yellow fever +10y); expiry is computed, never stored. */
+    expiresAt: text("expires_at"),
+    administeredBy: text("administered_by"),
+    country: text("country"),
+    notes: text("notes"),
+    attachmentId: integer("attachment_id").references(() => attachment.id),
+  },
+  (t) => [index("vaccine_profile_date_idx").on(t.profileId, t.date)],
+);
+
+// ── symptom_log ────────────────────────────────────────────────────────────
+// Point events (not periods): free-text names, severity 1–10 (app-level check).
+export const symptomLog = sqliteTable(
+  "symptom_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    date: text("date").notNull(),
+    /** Optional HH:MM — multiple entries per day are allowed. */
+    time: text("time"),
+    symptomName: text("symptom_name").notNull(),
+    severity: integer("severity").notNull(),
+    notes: text("notes"),
+    visitId: integer("visit_id").references(() => visit.id),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [
+    index("symptom_profile_date_idx").on(t.profileId, t.date),
+    index("symptom_name_idx").on(t.symptomName),
+  ],
+);
+
+// ── imaging_record (MRI / CT / X-ray / ultrasound studies) ─────────────────
+export const imagingRecord = sqliteTable(
+  "imaging_record",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    date: text("date").notNull(),
+    modalityType: text("modality_type", {
+      enum: ["xray", "ct", "mri", "ultrasound", "pet", "other"],
+    }).notNull(),
+    bodyArea: text("body_area").notNull(),
+    findings: text("findings"),
+    radiologistName: text("radiologist_name"),
+    clinic: text("clinic"),
+    city: text("city"),
+    country: text("country"),
+    visitId: integer("visit_id").references(() => visit.id),
+    attachmentId: integer("attachment_id").references(() => attachment.id),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("imaging_profile_date_idx").on(t.profileId, t.date)],
+);
+
+// ── weight_log / bp_log (home measurements; charts + overlays, not timeline) ─
+export const weightLog = sqliteTable(
+  "weight_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    date: text("date").notNull(),
+    /** Canonical metric storage, same convention as profile.weightKg. */
+    weightKg: real("weight_kg").notNull(),
+    notes: text("notes"),
+  },
+  (t) => [index("weight_log_profile_date_idx").on(t.profileId, t.date)],
+);
+
+export const bpLog = sqliteTable(
+  "bp_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    date: text("date").notNull(),
+    time: text("time"),
+    systolic: integer("systolic").notNull(),
+    diastolic: integer("diastolic").notNull(),
+    heartRateBpm: integer("heart_rate_bpm"),
+    position: text("position", { enum: ["sitting", "standing", "supine"] }),
+    armSide: text("arm_side", { enum: ["left", "right"] }),
+    notes: text("notes"),
+  },
+  (t) => [index("bp_log_profile_date_idx").on(t.profileId, t.date)],
 );
 
 // ── Inferred row types ─────────────────────────────────────────────────────
@@ -257,3 +426,15 @@ export type Prescription = typeof prescription.$inferSelect;
 export type NewPrescription = typeof prescription.$inferInsert;
 export type Attachment = typeof attachment.$inferSelect;
 export type NewAttachment = typeof attachment.$inferInsert;
+export type Allergy = typeof allergy.$inferSelect;
+export type NewAllergy = typeof allergy.$inferInsert;
+export type Vaccine = typeof vaccine.$inferSelect;
+export type NewVaccine = typeof vaccine.$inferInsert;
+export type SymptomLog = typeof symptomLog.$inferSelect;
+export type NewSymptomLog = typeof symptomLog.$inferInsert;
+export type ImagingRecord = typeof imagingRecord.$inferSelect;
+export type NewImagingRecord = typeof imagingRecord.$inferInsert;
+export type WeightLog = typeof weightLog.$inferSelect;
+export type NewWeightLog = typeof weightLog.$inferInsert;
+export type BpLog = typeof bpLog.$inferSelect;
+export type NewBpLog = typeof bpLog.$inferInsert;

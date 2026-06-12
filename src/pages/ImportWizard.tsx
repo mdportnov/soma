@@ -8,6 +8,8 @@ import {
   Plus,
   Settings as SettingsIcon,
   Sparkles,
+  Syringe,
+  TestTubes,
   Upload,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -16,12 +18,16 @@ import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import {
   createAttachment,
+  createDiagnosis,
+  createMedication,
   createPanelWithResults,
+  createVaccine,
+  createVisit,
   listBiomarkers,
   updateAttachment,
 } from "@/db/repos";
 import { getConfiguredProvider } from "@/ai";
-import type { AIProvider, RawExtraction } from "@/ai/types";
+import type { AIProvider, RawExtraction, RawVaccineExtraction } from "@/ai/types";
 import {
   buildBiomarkerIndex,
   mapExtractions,
@@ -37,7 +43,7 @@ import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Combobox } from "@/components/ui/combobox";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
@@ -51,18 +57,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CreateBiomarkerDialog } from "./Biomarkers";
-import { formatValue, todayISO } from "@/lib/utils";
+import { cn, formatValue, todayISO } from "@/lib/utils";
 import { allKnownUnits } from "@/lib/units";
 import { useI18n } from "@/lib/i18n";
 import type { Biomarker } from "@/db/schema";
 
+type DocType = "lab" | "vaccine" | "discharge";
+
 type Step =
+  | { name: "selectType" }
   | { name: "pick" }
   | { name: "extracting" }
   | { name: "review"; rows: ReviewRow[] }
+  | { name: "vaccineReview"; rows: VaccineRow[] }
+  | { name: "dischargeReview"; meta: DischargeMeta; rows: DischargeRow[] }
   | { name: "saving" };
 
 type ReviewRow = MappedRow & { include: boolean; key: number };
+
+type VaccineRow = RawVaccineExtraction & { include: boolean; key: number };
+
+type DischargeMeta = { visitDate: string; clinic: string; doctorName: string; notes: string };
+
+type DischargeRow =
+  | { key: number; include: boolean; type: "diagnosis"; name: string; icdCode: string | null }
+  | { key: number; include: boolean; type: "medication"; name: string; dose: string | null };
 
 export function ImportWizard() {
   const { profileId } = useApp();
@@ -78,8 +97,9 @@ export function ImportWizard() {
     return { provider, biomarkers };
   }, []);
 
+  const [docType, setDocType] = React.useState<DocType | null>(null);
   const [filePath, setFilePath] = React.useState<string | null>(null);
-  const [step, setStep] = React.useState<Step>({ name: "pick" });
+  const [step, setStep] = React.useState<Step>({ name: "selectType" });
   const [error, setError] = React.useState<string | null>(null);
   const [customForKey, setCustomForKey] = React.useState<number | null>(null);
 
@@ -142,7 +162,57 @@ export function ImportWizard() {
         mimeType: mimeFromPath(filePath),
         fileName: filePath.split(/[/\\]/).pop(),
       };
-      // Phase 1: raw extraction (structure only, never written to lab_result).
+
+      if (docType === "vaccine") {
+        const vaccines = await provider.extractVaccinesFromDocument(doc);
+        if (!vaccines.length) throw new Error(t("importWizard.vaccineReview.empty"));
+        // §8: vaccines have no dictionary fallback — every row starts UNCHECKED.
+        setStep({
+          name: "vaccineReview",
+          rows: vaccines.map((v, i) => ({ ...v, include: false, key: i })),
+        });
+        return;
+      }
+
+      if (docType === "discharge") {
+        const d = await provider.extractDischargeFromDocument(doc);
+        const rows: DischargeRow[] = [
+          ...d.diagnoses.map(
+            (dx, i): DischargeRow => ({
+              key: i,
+              include: false,
+              type: "diagnosis",
+              name: dx.name,
+              icdCode: dx.icdCode,
+            }),
+          ),
+          ...d.medications.map(
+            (m, i): DischargeRow => ({
+              key: d.diagnoses.length + i,
+              include: false,
+              type: "medication",
+              name: m.name,
+              dose: m.dose,
+            }),
+          ),
+        ];
+        if (!rows.length && !d.visitDate && !d.clinic && !d.doctorName) {
+          throw new Error(t("importWizard.dischargeReview.empty"));
+        }
+        setStep({
+          name: "dischargeReview",
+          meta: {
+            visitDate: d.visitDate ?? "",
+            clinic: d.clinic ?? "",
+            doctorName: d.doctorName ?? "",
+            notes: d.notes,
+          },
+          rows,
+        });
+        return;
+      }
+
+      // Lab report (default): Phase 1 raw extraction (never written to lab_result).
       const raws: RawExtraction[] = await provider.extractFromDocument(doc);
       if (!raws.length) throw new Error("No quantitative results found in the document.");
       // Phase 2: deterministic mapping + narrow AI disambiguation.
@@ -156,6 +226,102 @@ export function ImportWizard() {
       setError(e instanceof Error ? e.message : String(e));
       setStep({ name: "pick" });
     }
+  };
+
+  const saveVaccines = async (rows: VaccineRow[]) => {
+    setStep({ name: "saving" });
+    try {
+      const attachmentId = await storeSourceAttachment("vaccination_cert", "vaccine");
+      const included = rows.filter((r) => r.include && r.vaccineName.trim() && r.date);
+      for (const r of included) {
+        await createVaccine({
+          profileId,
+          vaccineName: r.vaccineName.trim(),
+          date: r.date!,
+          manufacturer: r.manufacturer?.trim() || null,
+          batchNumber: r.batchNumber?.trim() || null,
+          dose: r.doseNumber ?? null,
+          expiresAt: r.expiresAt || null,
+          attachmentId,
+        });
+      }
+      navigate("/vaccines");
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : String(e));
+      setStep({ name: "vaccineReview", rows });
+    }
+  };
+
+  const saveDischarge = async (meta: DischargeMeta, rows: DischargeRow[]) => {
+    setStep({ name: "saving" });
+    try {
+      const attachmentId = await storeSourceAttachment("discharge", "visit");
+      const visitDate = meta.visitDate || null;
+      const recordDate = visitDate ?? todayISO();
+      let visitId: number | null = null;
+      if (visitDate || meta.clinic.trim() || meta.doctorName.trim()) {
+        visitId = await createVisit({
+          profileId,
+          date: recordDate,
+          doctorName: meta.doctorName.trim() || null,
+          clinic: meta.clinic.trim() || null,
+          notes: meta.notes.trim() || null,
+        });
+        if (attachmentId != null) {
+          await updateAttachment(attachmentId, {
+            linkedEntityType: "visit",
+            linkedEntityId: visitId,
+          });
+        }
+      }
+
+      const included = rows.filter((r) => r.include && r.name.trim());
+      for (const r of included) {
+        if (r.type === "diagnosis") {
+          await createDiagnosis({
+            profileId,
+            name: r.name.trim(),
+            icdCode: r.icdCode?.trim() || null,
+            date: recordDate,
+            visitId,
+          });
+        } else {
+          const parsed = parseDose(r.dose);
+          await createMedication({
+            profileId,
+            name: r.name.trim(),
+            type: "drug",
+            doseAmount: parsed.amount,
+            doseUnit: parsed.unit,
+            schedule: null,
+            startDate: recordDate,
+            endDate: null,
+          });
+        }
+      }
+      navigate(visitId != null ? `/visits/${visitId}` : "/visits");
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : String(e));
+      setStep({ name: "dischargeReview", meta, rows });
+    }
+  };
+
+  /** Stores the source file as an attachment; returns its id (or null). */
+  const storeSourceAttachment = async (
+    kind: "vaccination_cert" | "discharge",
+    entityType: string,
+  ): Promise<number | null> => {
+    if (!filePath) return null;
+    const stored = await storeAttachmentFile(filePath);
+    return createAttachment({
+      profileId,
+      filePath: stored,
+      mimeType: mimeFromPath(filePath),
+      kind,
+      linkedEntityType: entityType,
+    });
   };
 
   const updateRows = (rows: ReviewRow[], mutate: (rs: ReviewRow[]) => void) => {
@@ -229,6 +395,14 @@ export function ImportWizard() {
 
       {/* key={step.name} re-mounts the stage so transitions slide in */}
       <div key={step.name} className="animate-step-in">
+        {step.name === "selectType" && (
+          <SelectTypeStep
+            value={docType}
+            onChange={setDocType}
+            onContinue={() => setStep({ name: "pick" })}
+          />
+        )}
+
         {step.name === "pick" && (
           <Card className="mx-auto max-w-lg">
             <CardContent className="flex flex-col items-center py-10 text-center">
@@ -258,7 +432,13 @@ export function ImportWizard() {
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-medium">{t("importWizard.chooseLabReport")}</p>
+                  <p className="text-sm font-medium">
+                    {docType === "vaccine"
+                      ? t("importWizard.vaccineReview.choose")
+                      : docType === "discharge"
+                        ? t("importWizard.dischargeReview.choose")
+                        : t("importWizard.chooseLabReport")}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">PDF, JPG, PNG or WebP</p>
                   <Button className="mt-4" onClick={pickFile}>
                     <Upload /> Choose file
@@ -273,11 +453,19 @@ export function ImportWizard() {
           <Card className="mx-auto max-w-lg">
             <CardContent className="flex flex-col items-center py-12 text-center">
               <Loader2 className="mb-3 size-6 animate-spin text-primary" />
-              <p className="text-sm font-medium">Extracting and mapping…</p>
-              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                Phase 1: structured extraction. Phase 2: matching against your biomarker dictionary
-                (exact → alias → fuzzy → AI disambiguation).
+              <p className="text-sm font-medium">
+                {docType === "vaccine"
+                  ? t("importWizard.vaccineReview.extracting")
+                  : docType === "discharge"
+                    ? t("importWizard.dischargeReview.extracting")
+                    : "Extracting and mapping…"}
               </p>
+              {docType === "lab" && (
+                <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                  Phase 1: structured extraction. Phase 2: matching against your biomarker
+                  dictionary (exact → alias → fuzzy → AI disambiguation).
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -306,6 +494,54 @@ export function ImportWizard() {
             meta={{ date, labName, city, country, panelType }}
             setMeta={{ setDate, setLabName, setCity, setCountry, setPanelType }}
             onSave={() => save(step.rows)}
+          />
+        )}
+
+        {step.name === "vaccineReview" && (
+          <VaccineReviewStep
+            rows={step.rows}
+            onChangeRow={(key, patch) =>
+              setStep({
+                name: "vaccineReview",
+                rows: step.rows.map((r) => (r.key === key ? { ...r, ...patch } : r)),
+              })
+            }
+            onToggleInclude={(key) =>
+              setStep({
+                name: "vaccineReview",
+                rows: step.rows.map((r) => (r.key === key ? { ...r, include: !r.include } : r)),
+              })
+            }
+            onSave={() => saveVaccines(step.rows)}
+          />
+        )}
+
+        {step.name === "dischargeReview" && (
+          <DischargeReviewStep
+            meta={step.meta}
+            rows={step.rows}
+            onChangeMeta={(patch) =>
+              setStep({
+                name: "dischargeReview",
+                meta: { ...step.meta, ...patch },
+                rows: step.rows,
+              })
+            }
+            onChangeRow={(key, name) =>
+              setStep({
+                name: "dischargeReview",
+                meta: step.meta,
+                rows: step.rows.map((r) => (r.key === key ? { ...r, name } : r)),
+              })
+            }
+            onToggleInclude={(key) =>
+              setStep({
+                name: "dischargeReview",
+                meta: step.meta,
+                rows: step.rows.map((r) => (r.key === key ? { ...r, include: !r.include } : r)),
+              })
+            }
+            onSave={() => saveDischarge(step.meta, step.rows)}
           />
         )}
 
@@ -537,14 +773,15 @@ function ReviewStep({
             <Input value={meta.country} onChange={(e) => setMeta.setCountry(e.target.value)} />
           </Field>
           <Field label={t("fields.type")}>
-            <Select
+            <SelectMenu
               value={meta.panelType}
-              onChange={(e) => setMeta.setPanelType(e.target.value as "blood" | "urine" | "other")}
-            >
-              <option value="blood">{t("types.blood")}</option>
-              <option value="urine">{t("types.urine")}</option>
-              <option value="other">{t("types.other")}</option>
-            </Select>
+              onChange={(v) => setMeta.setPanelType(v as "blood" | "urine" | "other")}
+              options={[
+                { value: "blood", label: t("types.blood") },
+                { value: "urine", label: t("types.urine") },
+                { value: "other", label: t("types.other") },
+              ]}
+            />
           </Field>
         </CardContent>
       </Card>
@@ -558,6 +795,325 @@ function ReviewStep({
         )}
         <Button onClick={onSave} disabled={includedCount === 0 || !meta.date}>
           Confirm & save {includedCount} result{includedCount === 1 ? "" : "s"}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+/** Best-effort dose split: "500 mg" → { amount: 500, unit: "mg" }. */
+function parseDose(dose: string | null): { amount: number | null; unit: string | null } {
+  if (!dose) return { amount: null, unit: null };
+  const m = /^\s*([\d.,]+)\s*([^\d\s].*)?$/.exec(dose.trim());
+  if (!m) return { amount: null, unit: dose.trim() || null };
+  const amount = Number.parseFloat(m[1].replace(",", "."));
+  return {
+    amount: Number.isFinite(amount) ? amount : null,
+    unit: m[2]?.trim() || null,
+  };
+}
+
+function SelectTypeStep({
+  value,
+  onChange,
+  onContinue,
+}: {
+  value: DocType | null;
+  onChange: (v: DocType) => void;
+  onContinue: () => void;
+}) {
+  const { t } = useI18n();
+  const options: { type: DocType; icon: typeof TestTubes; label: string; description: string }[] = [
+    {
+      type: "lab",
+      icon: TestTubes,
+      label: t("importWizard.docTypes.lab"),
+      description: t("importWizard.docTypes.labDescription"),
+    },
+    {
+      type: "vaccine",
+      icon: Syringe,
+      label: t("importWizard.docTypes.vaccine"),
+      description: t("importWizard.docTypes.vaccineDescription"),
+    },
+    {
+      type: "discharge",
+      icon: FileText,
+      label: t("importWizard.docTypes.discharge"),
+      description: t("importWizard.docTypes.dischargeDescription"),
+    },
+  ];
+
+  return (
+    <Card className="mx-auto max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("importWizard.selectType.title")}</CardTitle>
+        <CardDescription>{t("importWizard.selectType.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        {options.map((o) => {
+          const Icon = o.icon;
+          const selected = value === o.type;
+          return (
+            <button
+              key={o.type}
+              type="button"
+              onClick={() => onChange(o.type)}
+              className={cn(
+                "flex items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                selected ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+              )}
+            >
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary">
+                <Icon className="size-4.5 text-secondary-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{o.label}</p>
+                <p className="text-xs text-muted-foreground">{o.description}</p>
+              </div>
+            </button>
+          );
+        })}
+        <Button className="mt-2 self-end" disabled={value == null} onClick={onContinue}>
+          {t("importWizard.selectType.continue")}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewBanner() {
+  const { t } = useI18n();
+  return (
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+      <div>
+        <p className="font-medium">{t("importWizard.reviewBanner.title")}</p>
+        <p className="text-xs opacity-90">{t("importWizard.reviewBanner.description")}</p>
+      </div>
+    </div>
+  );
+}
+
+function VaccineReviewStep({
+  rows,
+  onChangeRow,
+  onToggleInclude,
+  onSave,
+}: {
+  rows: VaccineRow[];
+  onChangeRow: (key: number, patch: Partial<VaccineRow>) => void;
+  onToggleInclude: (key: number) => void;
+  onSave: () => void;
+}) {
+  const { t } = useI18n();
+  const included = rows.filter((r) => r.include);
+  const canSave = included.length > 0 && included.every((r) => r.vaccineName.trim() && r.date);
+
+  return (
+    <>
+      <ReviewBanner />
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("importWizard.vaccineReview.title")}</CardTitle>
+          <CardDescription>{t("importWizard.vaccineReview.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">{t("common.save")}</TableHead>
+                <TableHead>{t("importWizard.vaccineReview.columns.vaccine")}</TableHead>
+                <TableHead>{t("fields.date")}</TableHead>
+                <TableHead className="w-16">
+                  {t("importWizard.vaccineReview.columns.dose")}
+                </TableHead>
+                <TableHead>{t("importWizard.vaccineReview.columns.manufacturer")}</TableHead>
+                <TableHead>{t("importWizard.vaccineReview.columns.batch")}</TableHead>
+                <TableHead>{t("importWizard.vaccineReview.columns.expires")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => {
+                const missing = row.include && (!row.vaccineName.trim() || !row.date);
+                return (
+                  <TableRow key={row.key}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-[var(--primary)]"
+                        checked={row.include}
+                        onChange={() => onToggleInclude(row.key)}
+                      />
+                    </TableCell>
+                    <TableCell className="min-w-44">
+                      <Input
+                        value={row.vaccineName}
+                        onChange={(e) => onChangeRow(row.key, { vaccineName: e.target.value })}
+                        className={missing && !row.vaccineName.trim() ? "border-destructive" : ""}
+                      />
+                    </TableCell>
+                    <TableCell className="min-w-36">
+                      <DateInput
+                        value={row.date ?? ""}
+                        onChange={(v) => onChangeRow(row.key, { date: v || null })}
+                        clearable
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={row.doseNumber != null ? String(row.doseNumber) : ""}
+                        onChange={(e) => {
+                          const n = Number.parseInt(e.target.value, 10);
+                          onChangeRow(row.key, { doseNumber: Number.isFinite(n) ? n : null });
+                        }}
+                        inputMode="numeric"
+                      />
+                    </TableCell>
+                    <TableCell className="min-w-36">
+                      <Input
+                        value={row.manufacturer ?? ""}
+                        onChange={(e) =>
+                          onChangeRow(row.key, { manufacturer: e.target.value || null })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="min-w-28">
+                      <Input
+                        value={row.batchNumber ?? ""}
+                        onChange={(e) =>
+                          onChangeRow(row.key, { batchNumber: e.target.value || null })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="min-w-36">
+                      <DateInput
+                        value={row.expiresAt ?? ""}
+                        onChange={(v) => onChangeRow(row.key, { expiresAt: v || null })}
+                        clearable
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          <div className="px-5 pb-4">
+            <AiDisclaimer />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="mt-5 flex justify-end">
+        <Button onClick={onSave} disabled={!canSave}>
+          {t("importWizard.vaccineReview.save", { count: String(included.length) })}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function DischargeReviewStep({
+  meta,
+  rows,
+  onChangeMeta,
+  onChangeRow,
+  onToggleInclude,
+  onSave,
+}: {
+  meta: DischargeMeta;
+  rows: DischargeRow[];
+  onChangeMeta: (patch: Partial<DischargeMeta>) => void;
+  onChangeRow: (key: number, name: string) => void;
+  onToggleInclude: (key: number) => void;
+  onSave: () => void;
+}) {
+  const { t } = useI18n();
+  const included = rows.filter((r) => r.include && r.name.trim());
+
+  return (
+    <>
+      <ReviewBanner />
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("importWizard.dischargeReview.title")}</CardTitle>
+          <CardDescription>{t("importWizard.dischargeReview.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <Field label={t("fields.date")}>
+            <DateInput
+              value={meta.visitDate}
+              onChange={(v) => onChangeMeta({ visitDate: v })}
+              clearable
+            />
+          </Field>
+          <Field label={t("visits.fields.clinic")}>
+            <Input value={meta.clinic} onChange={(e) => onChangeMeta({ clinic: e.target.value })} />
+          </Field>
+          <Field label={t("visits.fields.doctor")}>
+            <Input
+              value={meta.doctorName}
+              onChange={(e) => onChangeMeta({ doctorName: e.target.value })}
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">{t("common.save")}</TableHead>
+                <TableHead className="w-28">
+                  {t("importWizard.dischargeReview.typeColumn")}
+                </TableHead>
+                <TableHead>{t("fields.name")}</TableHead>
+                <TableHead>{t("importWizard.dischargeReview.detailColumn")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.key}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-[var(--primary)]"
+                      checked={row.include}
+                      onChange={() => onToggleInclude(row.key)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {row.type === "diagnosis" ? (
+                      <Badge variant="secondary">
+                        {t("importWizard.dischargeReview.diagnosisBadge")}
+                      </Badge>
+                    ) : (
+                      <Badge>{t("importWizard.dischargeReview.medicationBadge")}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="min-w-52">
+                    <Input
+                      value={row.name}
+                      onChange={(e) => onChangeRow(row.key, e.target.value)}
+                    />
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                    {row.type === "diagnosis" ? (row.icdCode ?? "—") : (row.dose ?? "—")}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="px-5 pb-4">
+            <AiDisclaimer />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="mt-5 flex justify-end">
+        <Button onClick={onSave} disabled={included.length === 0}>
+          {t("importWizard.dischargeReview.save", { count: String(included.length) })}
         </Button>
       </div>
     </>

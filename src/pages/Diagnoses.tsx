@@ -11,9 +11,11 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -35,8 +37,19 @@ export function Diagnoses() {
   } = useQuery(() => listDiagnoses(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Diagnosis | null>(null);
+  const [resolvingId, setResolvingId] = React.useState<number | null>(null);
+  const [resolveDate, setResolveDate] = React.useState(todayISO());
 
   if (loading || !diagnoses) return <Loading />;
+
+  const active = diagnoses.filter((d) => d.status === "active");
+  const remission = diagnoses.filter((d) => d.status === "remission");
+  const resolved = diagnoses.filter((d) => d.status === "resolved");
+
+  const openNew = () => {
+    setEditing(null);
+    setFormOpen(true);
+  };
 
   return (
     <>
@@ -44,12 +57,7 @@ export function Diagnoses() {
         title={t("diagnoses.title")}
         description={t("diagnoses.description")}
         actions={
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
+          <Button onClick={openNew}>
             <Plus /> {t("common.add")}
           </Button>
         }
@@ -60,69 +68,151 @@ export function Diagnoses() {
           icon={FlaskConical}
           title={t("diagnoses.emptyTitle")}
           description={t("diagnoses.emptyDescription")}
+          action={
+            <Button size="sm" onClick={openNew}>
+              {t("diagnoses.addFirst")}
+            </Button>
+          }
         />
       ) : (
-        <div className="rounded-xl border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("diagnoses.fields.diagnosis")}</TableHead>
-                <TableHead>{t("diagnoses.fields.icd")}</TableHead>
-                <TableHead>{t("fields.date")}</TableHead>
-                <TableHead>{t("diagnoses.fields.status")}</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {diagnoses.map((d) => (
-                <TableRow key={d.id}>
-                  <TableCell className="font-medium">{d.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{d.icdCode ?? "—"}</TableCell>
-                  <TableCell>{formatDate(d.date)}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        d.status === "active"
-                          ? "warning"
-                          : d.status === "resolved"
-                            ? "success"
-                            : "secondary"
-                      }
-                    >
-                      {t(`status.${d.status}`)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-0.5">
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        aria-label={t("common.edit")}
-                        onClick={() => {
-                          setEditing(d);
-                          setFormOpen(true);
-                        }}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        aria-label={t("common.delete")}
-                        className="text-destructive"
-                        onClick={async () => {
-                          await deleteDiagnosis(d.id);
-                          void reload();
-                        }}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="space-y-6">
+          {active.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("diagnoses.sections.active")}
+              </h2>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {active.map((d) => (
+                  <Card key={d.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{d.name}</p>
+                          {d.icdCode && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">{d.icdCode}</p>
+                          )}
+                        </div>
+                        <Badge variant="warning" className="shrink-0">
+                          {t("status.active")}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {t("diagnoses.fields.diagnosis")}: {formatDate(d.date)}
+                      </p>
+                      {d.notes && (
+                        <p className="mt-1 truncate text-xs text-muted-foreground" title={d.notes}>
+                          {d.notes}
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditing(d);
+                            setFormOpen(true);
+                          }}
+                        >
+                          <Pencil /> {t("common.edit")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            await updateDiagnosis(d.id, { status: "remission" });
+                            void reload();
+                          }}
+                        >
+                          {t("diagnoses.actions.moveToRemission")}
+                        </Button>
+                        {resolvingId === d.id ? (
+                          <div className="flex w-full items-center gap-1.5 pt-1">
+                            <DateInput value={resolveDate} onChange={setResolveDate} />
+                            <Button
+                              size="sm"
+                              onClick={async () => {
+                                await updateDiagnosis(d.id, {
+                                  status: "resolved",
+                                  resolvedDate: resolveDate,
+                                });
+                                setResolvingId(null);
+                                void reload();
+                              }}
+                            >
+                              {t("diagnoses.actions.confirmResolve")}
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setResolvingId(null)}>
+                              {t("common.cancel")}
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setResolveDate(todayISO());
+                              setResolvingId(d.id);
+                            }}
+                          >
+                            {t("diagnoses.actions.resolve")}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-auto text-destructive"
+                          onClick={async () => {
+                            await deleteDiagnosis(d.id);
+                            void reload();
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {remission.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("diagnoses.sections.remission")}
+              </h2>
+              <DiagnosisTable
+                diagnoses={remission}
+                onEdit={(d) => {
+                  setEditing(d);
+                  setFormOpen(true);
+                }}
+                onDelete={async (d) => {
+                  await deleteDiagnosis(d.id);
+                  void reload();
+                }}
+              />
+            </section>
+          )}
+
+          {resolved.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("diagnoses.sections.resolved")}
+              </h2>
+              <DiagnosisTable
+                diagnoses={resolved}
+                onEdit={(d) => {
+                  setEditing(d);
+                  setFormOpen(true);
+                }}
+                onDelete={async (d) => {
+                  await deleteDiagnosis(d.id);
+                  void reload();
+                }}
+              />
+            </section>
+          )}
         </div>
       )}
 
@@ -137,6 +227,69 @@ export function Diagnoses() {
         }}
       />
     </>
+  );
+}
+
+function DiagnosisTable({
+  diagnoses,
+  onEdit,
+  onDelete,
+}: {
+  diagnoses: Diagnosis[];
+  onEdit: (d: Diagnosis) => void;
+  onDelete: (d: Diagnosis) => Promise<void>;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <div className="rounded-xl border bg-card">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("diagnoses.fields.diagnosis")}</TableHead>
+            <TableHead>{t("diagnoses.fields.icd")}</TableHead>
+            <TableHead>{t("fields.date")}</TableHead>
+            <TableHead>{t("diagnoses.fields.status")}</TableHead>
+            <TableHead className="w-20" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {diagnoses.map((d) => (
+            <TableRow key={d.id}>
+              <TableCell className="font-medium">{d.name}</TableCell>
+              <TableCell className="text-muted-foreground">{d.icdCode ?? "—"}</TableCell>
+              <TableCell>{formatDate(d.date)}</TableCell>
+              <TableCell>
+                <Badge variant={d.status === "resolved" ? "success" : "secondary"}>
+                  {t(`status.${d.status}`)}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <div className="flex justify-end gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label={t("common.edit")}
+                    onClick={() => onEdit(d)}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label={t("common.delete")}
+                    className="text-destructive"
+                    onClick={() => onDelete(d)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -162,6 +315,8 @@ export function DiagnosisForm({
   const [icdCode, setIcdCode] = React.useState("");
   const [date, setDate] = React.useState(todayISO());
   const [status, setStatus] = React.useState<"active" | "remission" | "resolved">("active");
+  const [notes, setNotes] = React.useState("");
+  const [resolvedDate, setResolvedDate] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
@@ -170,7 +325,14 @@ export function DiagnosisForm({
     setIcdCode(editing?.icdCode ?? "");
     setDate(editing?.date ?? defaultDate ?? todayISO());
     setStatus(editing?.status ?? "active");
+    setNotes(editing?.notes ?? "");
+    setResolvedDate(editing?.resolvedDate ?? "");
   }, [open, editing, defaultDate]);
+
+  const changeStatus = (next: typeof status) => {
+    setStatus(next);
+    if (next === "resolved" && !resolvedDate) setResolvedDate(todayISO());
+  };
 
   const save = async () => {
     if (!name.trim() || !date) return;
@@ -182,6 +344,8 @@ export function DiagnosisForm({
         icdCode: icdCode.trim() || null,
         date,
         status,
+        notes: notes.trim() || null,
+        resolvedDate: status === "active" ? null : resolvedDate || null,
         visitId: editing ? editing.visitId : (defaultVisitId ?? null),
       };
       if (editing) await updateDiagnosis(editing.id, data);
@@ -220,21 +384,25 @@ export function DiagnosisForm({
             <DateInput value={date} onChange={setDate} />
           </Field>
           <Field label={t("diagnoses.fields.status")}>
-            <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-              <option value="active">{t("status.active")}</option>
-              <option value="remission">{t("status.remission")}</option>
-              <option value="resolved">{t("status.resolved")}</option>
-            </Select>
+            <SelectMenu
+              value={status}
+              onChange={(v) => changeStatus(v as typeof status)}
+              options={[
+                { value: "active", label: t("status.active") },
+                { value: "remission", label: t("status.remission") },
+                { value: "resolved", label: t("status.resolved") },
+              ]}
+            />
           </Field>
         </div>
-        <div className="mt-1 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={save} disabled={saving || !name.trim() || !date}>
-            {editing ? t("common.saveChanges") : t("common.add")}
-          </Button>
-        </div>
+        {status !== "active" && (
+          <Field label={t("diagnoses.fields.resolvedDate")}>
+            <DateInput value={resolvedDate} onChange={setResolvedDate} />
+          </Field>
+        )}
+        <Field label={t("diagnoses.fields.notesOptional")}>
+          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
       </div>
     </Dialog>
   );

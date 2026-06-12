@@ -4,6 +4,7 @@ import {
   Line,
   LineChart,
   ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -19,6 +20,13 @@ export type MedOverlay = {
   start: string; // ISO date
   end: string | null;
   color: string;
+};
+
+export type SymptomOverlay = {
+  date: string; // ISO date
+  name: string;
+  severity: number;
+  notes?: string | null;
 };
 
 export const OVERLAY_COLORS = [
@@ -47,10 +55,12 @@ export function TrendChart({
   series,
   biomarker,
   overlays = [],
+  symptomOverlays = [],
 }: {
   series: SeriesPoint[];
   biomarker: Biomarker;
   overlays?: MedOverlay[];
+  symptomOverlays?: SymptomOverlay[];
 }) {
   const data = series.map((p) => ({ ...p, t: ts(p.date) }));
   // Captured once per mount: keeps render pure and the domain stable.
@@ -87,6 +97,7 @@ export function TrendChart({
             axisLine={{ stroke: "var(--border)" }}
           />
           <YAxis
+            yAxisId="value"
             domain={yDomain}
             stroke="var(--muted-foreground)"
             fontSize={11}
@@ -95,10 +106,13 @@ export function TrendChart({
             width={48}
             tickFormatter={(v) => formatValue(v)}
           />
+          {/* Hidden secondary axis for symptom-severity overlays. */}
+          <YAxis yAxisId="severity" domain={[0, 10]} hide />
 
           {/* Reference band (lab norm) and optimal band (biohacking target) */}
           {refLow != null && refHigh != null && (
             <ReferenceArea
+              yAxisId="value"
               y1={refLow}
               y2={refHigh}
               fill="var(--success)"
@@ -110,6 +124,7 @@ export function TrendChart({
           )}
           {optimalLow != null && optimalHigh != null && (
             <ReferenceArea
+              yAxisId="value"
               y1={optimalLow}
               y2={optimalHigh}
               fill="var(--success)"
@@ -125,6 +140,7 @@ export function TrendChart({
             return (
               <ReferenceArea
                 key={`med-${o.id}`}
+                yAxisId="value"
                 x1={x1}
                 x2={x2}
                 fill={o.color}
@@ -132,6 +148,31 @@ export function TrendChart({
                 stroke={o.color}
                 strokeOpacity={0.35}
                 strokeDasharray="2 4"
+              />
+            );
+          })}
+
+          {/* Symptom events as vertical reference lines (severity-coded). */}
+          {symptomOverlays.map((s, i) => {
+            const x = ts(s.date);
+            if (x < domain[0] || x > domain[1]) return null;
+            const severe = s.severity >= 6;
+            const moderate = s.severity >= 3;
+            const stroke = severe ? "#dc2626" : moderate ? "#d97706" : "#9ca3af";
+            return (
+              <ReferenceLine
+                key={`symptom-${i}-${s.date}`}
+                yAxisId="severity"
+                x={x}
+                stroke={stroke}
+                strokeWidth={1}
+                strokeDasharray={severe ? undefined : "4 3"}
+                label={{
+                  value: String(s.severity),
+                  position: "top",
+                  fill: stroke,
+                  fontSize: 9,
+                }}
               />
             );
           })}
@@ -155,6 +196,7 @@ export function TrendChart({
             }}
           />
           <Line
+            yAxisId="value"
             type="monotone"
             dataKey="value"
             stroke="var(--primary)"

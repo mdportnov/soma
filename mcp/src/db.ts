@@ -1,13 +1,23 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import Database from "better-sqlite3";
-import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { Database } from "bun:sqlite";
+import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "../../src/db/schema";
+import journal from "../../src/db/migrations/meta/_journal.json";
 
 const APP_IDENTIFIER = "com.soma.health";
 const DB_FILE = "soma.db";
+
+/**
+ * Migration filenames this checkout expects, embedded at build time from the
+ * drizzle journal. The app stamps `__migrations.name` as `<tag>.sql`
+ * (see src/db/migrate.ts), so we mirror that here — the compiled binary has
+ * no migrations directory on disk to read.
+ */
+const EXPECTED_MIGRATIONS = journal.entries
+  .map((e) => `${e.tag}.sql`)
+  .sort((a, b) => a.localeCompare(b));
 
 /** Mirrors Tauri's `app_config_dir()` — where tauri-plugin-sql keeps soma.db. */
 export function defaultDbPath(): string {
@@ -38,8 +48,8 @@ export function resolveDbPath(): string {
 }
 
 export type SomaDb = {
-  orm: BetterSQLite3Database<typeof schema>;
-  sqlite: Database.Database;
+  orm: BunSQLiteDatabase<typeof schema>;
+  sqlite: Database;
   /** False when the DB schema doesn't match this checkout's migrations — writes are refused. */
   writable: boolean;
   schemaNote: string | null;
@@ -47,23 +57,11 @@ export type SomaDb = {
 
 /**
  * Compares migrations applied by the app (`__migrations` table, written by
- * src/db/migrate.ts) against the .sql files in src/db/migrations. Any
- * mismatch in either direction makes the connection read-only: writing
- * through a stale or newer schema could corrupt data the app relies on.
+ * src/db/migrate.ts) against the migration list embedded from the drizzle
+ * journal. Any mismatch in either direction makes the connection read-only:
+ * writing through a stale or newer schema could corrupt data the app relies on.
  */
-function checkSchema(sqlite: Database.Database): { writable: boolean; note: string | null } {
-  const migrationsDir = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../../src/db/migrations",
-  );
-  if (!fs.existsSync(migrationsDir)) {
-    return { writable: false, note: `migrations dir not found at ${migrationsDir}` };
-  }
-  const expected = fs
-    .readdirSync(migrationsDir)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
-
+function checkSchema(sqlite: Database): { writable: boolean; note: string | null } {
   const hasTable = sqlite
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='__migrations'")
     .get();
@@ -76,14 +74,14 @@ function checkSchema(sqlite: Database.Database): { writable: boolean; note: stri
     ),
   );
 
-  const pending = expected.filter((name) => !applied.has(name));
+  const pending = EXPECTED_MIGRATIONS.filter((name) => !applied.has(name));
   if (pending.length > 0) {
     return {
       writable: false,
       note: `database is behind this checkout (unapplied migrations: ${pending.join(", ")}); open the Soma app once to migrate`,
     };
   }
-  const unknown = [...applied].filter((name) => !expected.includes(name));
+  const unknown = [...applied].filter((name) => !EXPECTED_MIGRATIONS.includes(name));
   if (unknown.length > 0) {
     return {
       writable: false,
@@ -100,9 +98,9 @@ export function openDb(dbPath: string): SomaDb {
     );
   }
   const sqlite = new Database(dbPath);
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("busy_timeout = 5000");
-  sqlite.pragma("foreign_keys = ON");
+  sqlite.exec("PRAGMA journal_mode = WAL;");
+  sqlite.exec("PRAGMA busy_timeout = 5000;");
+  sqlite.exec("PRAGMA foreign_keys = ON;");
 
   const { writable, note } = checkSchema(sqlite);
   return { orm: drizzle(sqlite, { schema }), sqlite, writable, schemaNote: note };

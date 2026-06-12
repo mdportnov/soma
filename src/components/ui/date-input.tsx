@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { DayPicker } from "react-day-picker";
 import { CalendarDays, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,14 +29,24 @@ function toISO(date: Date): string {
   return `${date.getFullYear()}-${mm}-${dd}`;
 }
 
+// Approximate DayPicker panel footprint, used to decide whether to open upward.
+const PANEL_HEIGHT = 340;
+const PANEL_GAP = 6;
+
+type PanelPos = { top: number; left: number; transformOrigin: string };
+
 function DatePopover({
   open,
+  triggerRef,
+  panelRef,
   selected,
   defaultMonth,
   onSelect,
   onClose,
 }: {
   open: boolean;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  panelRef: React.RefObject<HTMLDivElement | null>;
   selected: Date | undefined;
   defaultMonth: Date | undefined;
   onSelect: (date: Date) => void;
@@ -43,9 +54,27 @@ function DatePopover({
 }) {
   const [rendered, setRendered] = React.useState(open);
   const [closing, setClosing] = React.useState(false);
+  const [pos, setPos] = React.useState<PanelPos | null>(null);
+
+  const computePos = React.useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Use the rendered panel size when available; fall back to estimates on
+    // the first paint (corrected by the post-mount layout effect below).
+    const panelW = panelRef.current?.offsetWidth ?? 330;
+    const panelH = panelRef.current?.offsetHeight ?? PANEL_HEIGHT;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const openUp = spaceBelow < panelH && rect.top > spaceBelow;
+    setPos({
+      top: openUp ? rect.top - PANEL_GAP : rect.bottom + PANEL_GAP,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - panelW - 8)),
+      transformOrigin: openUp ? "bottom left" : "top left",
+    });
+  }, [triggerRef, panelRef]);
 
   React.useEffect(() => {
     if (open) {
+      computePos();
       setRendered(true);
       setClosing(false);
     } else if (rendered) {
@@ -54,10 +83,38 @@ function DatePopover({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  if (!rendered) return null;
+  // Re-clamp once the panel has real dimensions (first estimate may be off).
+  React.useLayoutEffect(() => {
+    if (rendered && open) computePos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rendered]);
 
-  return (
+  // Track scroll/resize while open so the panel sticks to its trigger.
+  React.useEffect(() => {
+    if (!open) return;
+    window.addEventListener("scroll", computePos, true);
+    window.addEventListener("resize", computePos);
+    return () => {
+      window.removeEventListener("scroll", computePos, true);
+      window.removeEventListener("resize", computePos);
+    };
+  }, [open, computePos]);
+
+  if (!rendered || !pos) return null;
+
+  const openUp = pos.transformOrigin.startsWith("bottom");
+
+  return createPortal(
     <div
+      ref={panelRef}
+      style={{
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        transform: openUp ? "translateY(-100%)" : undefined,
+        transformOrigin: pos.transformOrigin,
+        zIndex: 9999,
+      }}
       onAnimationEnd={() => {
         if (closing) {
           setRendered(false);
@@ -65,7 +122,7 @@ function DatePopover({
         }
       }}
       className={cn(
-        "absolute left-0 top-full z-50 mt-1.5 rounded-xl border bg-popover text-popover-foreground p-3 shadow-xl",
+        "rounded-xl border bg-popover p-3 text-popover-foreground shadow-xl",
         closing ? "animate-dialog-out" : "animate-dialog-in",
       )}
     >
@@ -81,14 +138,16 @@ function DatePopover({
           else onClose();
         }}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 /**
  * Themed replacement for `<input type="date">` — the native WebKit calendar
  * popup ignores the app theme entirely. Renders an input-styled trigger and
- * a DayPicker dropdown with month/year selects (styled in index.css).
+ * a portaled DayPicker dropdown (fixed positioning, flips upward near the
+ * viewport bottom) so it never clips inside dialogs or scroll containers.
  */
 export function DateInput({
   value,
@@ -100,13 +159,17 @@ export function DateInput({
   className,
 }: DateInputProps) {
   const [open, setOpen] = React.useState(false);
-  const rootRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
   const selected = parseISO(value);
 
   React.useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) {
+        setOpen(false);
+      }
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDown);
@@ -118,8 +181,9 @@ export function DateInput({
   }, [open]);
 
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
+    <div className={cn("relative", className)}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
@@ -167,6 +231,8 @@ export function DateInput({
 
       <DatePopover
         open={open}
+        triggerRef={triggerRef}
+        panelRef={panelRef}
         selected={selected}
         defaultMonth={defaultMonth}
         onSelect={(date) => {

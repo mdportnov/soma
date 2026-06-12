@@ -10,7 +10,7 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Combobox } from "@/components/ui/combobox";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -136,14 +136,15 @@ export function LabPanelNew() {
             <Input value={country} onChange={(e) => setCountry(e.target.value)} />
           </Field>
           <Field label={t("fields.type")}>
-            <Select
+            <SelectMenu
               value={panelType}
-              onChange={(e) => setPanelType(e.target.value as typeof panelType)}
-            >
-              <option value="blood">{t("types.blood")}</option>
-              <option value="urine">{t("types.urine")}</option>
-              <option value="other">{t("types.other")}</option>
-            </Select>
+              onChange={(v) => setPanelType(v as typeof panelType)}
+              options={[
+                { value: "blood", label: t("types.blood") },
+                { value: "urine", label: t("types.urine") },
+                { value: "other", label: t("types.other") },
+              ]}
+            />
           </Field>
         </CardContent>
       </Card>

@@ -3,6 +3,10 @@ import {
   CheckCircle2,
   Download,
   Globe,
+  MonitorSmartphone,
+  Moon,
+  Sun,
+  HeartPulse,
   KeyRound,
   Loader2,
   ShieldCheck,
@@ -23,8 +27,12 @@ import {
   type AiSettings,
 } from "@/ai";
 import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
+import { appLogDir, join } from "@tauri-apps/api/path";
+import { applyThemePreference, loadThemePreference, type ThemePreference } from "@/lib/theme";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
+import { McpCard } from "@/components/app/McpCard";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import {
@@ -36,7 +44,8 @@ import {
 } from "@/components/app/ProfileFields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible } from "@/components/ui/collapsible";
@@ -47,16 +56,16 @@ export function Settings() {
 
   return (
     <>
-      <PageHeader
-        title={t("settings.title")}
-        description={t("settings.description")}
-      />
+      <PageHeader title={t("settings.title")} description={t("settings.description")} />
       <div className="space-y-4">
-        <LanguageCard />
+        <AppearanceCard />
         <ProfileCard />
+        <EmergencyContactCard />
         <AiSettingsCard />
+        <McpCard />
         <BackupCard />
         <ExportCard />
+        <LogsCard />
       </div>
     </>
   );
@@ -64,24 +73,69 @@ export function Settings() {
 
 // ── Language ───────────────────────────────────────────────────────────────
 
-function LanguageCard() {
+function AppearanceCard() {
   const { lang, setLang, t } = useI18n();
+  const [theme, setTheme] = React.useState<ThemePreference>(() => loadThemePreference());
+
+  const changeTheme = (next: ThemePreference) => {
+    setTheme(next);
+    applyThemePreference(next);
+  };
+
+  const segment = (active: boolean): "secondary" | "ghost" => (active ? "secondary" : "ghost");
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <Globe className="size-4 text-muted-foreground" />
-          <CardTitle>{t("settings.language.title")}</CardTitle>
+          <CardTitle>{t("settings.appearance.title")}</CardTitle>
         </div>
-        <CardDescription>{t("settings.language.description")}</CardDescription>
+        <CardDescription>{t("settings.appearance.description")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Field label={t("settings.language.title")}>
-          <Select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ru")}>
-            <option value="en">{t("settings.language.english")}</option>
-            <option value="ru">{t("settings.language.russian")}</option>
-          </Select>
+      <CardContent className="flex flex-wrap gap-6">
+        <Field label={t("settings.appearance.language")}>
+          <div className="flex w-fit rounded-lg border p-0.5">
+            {(["en", "ru"] as const).map((l) => (
+              <Button
+                key={l}
+                variant={segment(lang === l)}
+                size="sm"
+                className="h-7 px-3"
+                onClick={() => setLang(l)}
+              >
+                {l === "en" ? "English" : "Русский"}
+              </Button>
+            ))}
+          </div>
+        </Field>
+        <Field label={t("settings.appearance.theme")}>
+          <div className="flex w-fit rounded-lg border p-0.5">
+            <Button
+              variant={segment(theme === "light")}
+              size="sm"
+              className="h-7 gap-1.5 px-3"
+              onClick={() => changeTheme("light")}
+            >
+              <Sun className="size-3.5" /> {t("settings.appearance.light")}
+            </Button>
+            <Button
+              variant={segment(theme === "dark")}
+              size="sm"
+              className="h-7 gap-1.5 px-3"
+              onClick={() => changeTheme("dark")}
+            >
+              <Moon className="size-3.5" /> {t("settings.appearance.dark")}
+            </Button>
+            <Button
+              variant={segment(theme === "system")}
+              size="sm"
+              className="h-7 gap-1.5 px-3"
+              onClick={() => changeTheme("system")}
+            >
+              <MonitorSmartphone className="size-3.5" /> {t("settings.appearance.system")}
+            </Button>
+          </div>
         </Field>
       </CardContent>
     </Card>
@@ -163,31 +217,24 @@ function AiSettingsCard() {
       <div className="grid gap-4 p-5 pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("settings.ai.provider")}>
-            <Select
-              value={settings.providerId}
-              onChange={(e) => update({ providerId: e.target.value, modelId: "", customModel: "" })}
-            >
-              <option value="">{t("settings.ai.aiDisabled")}</option>
-              {modelRegistry.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
+            <SelectMenu
+              value={settings.providerId || null}
+              onChange={(v) => update({ providerId: v, modelId: "", customModel: "" })}
+              placeholder={t("settings.ai.aiDisabled")}
+              options={[
+                { value: "", label: t("settings.ai.aiDisabled") },
+                ...modelRegistry.map((p) => ({ value: p.id, label: p.label })),
+              ]}
+            />
           </Field>
           {provider && (
             <Field label={t("settings.ai.model")}>
-              <Select
-                value={settings.modelId}
-                onChange={(e) => update({ modelId: e.target.value })}
-              >
-                <option value="">{t("common.selectModel")}</option>
-                {usableModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </Select>
+              <SelectMenu
+                value={settings.modelId || null}
+                onChange={(v) => update({ modelId: v })}
+                placeholder={t("common.selectModel")}
+                options={usableModels.map((m) => ({ value: m.id, label: m.label }))}
+              />
             </Field>
           )}
         </div>
@@ -262,9 +309,7 @@ function AiSettingsCard() {
           </>
         )}
 
-        <p className="text-[11px] text-muted-foreground">
-          {t("settings.ai.disclaimer")}
-        </p>
+        <p className="text-[11px] text-muted-foreground">{t("settings.ai.disclaimer")}</p>
       </div>
     </Collapsible>
   );
@@ -289,9 +334,7 @@ function ProfileCard() {
     <Card>
       <CardHeader>
         <CardTitle>{t("settings.profile.title")}</CardTitle>
-        <CardDescription>
-          {t("settings.profile.description")}
-        </CardDescription>
+        <CardDescription>{t("settings.profile.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <CoreFields draft={draft} patch={patch} />
@@ -312,7 +355,157 @@ function ProfileCard() {
   );
 }
 
+// ── emergency contact ───────────────────────────────────────────────────────
+
+function EmergencyContactCard() {
+  const { t } = useI18n();
+  const { profileId } = useApp();
+  const { data: prof, loading } = useQuery(() => getProfile(profileId), [profileId]);
+  const [name, setName] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [relation, setRelation] = React.useState("");
+  const [citizenship, setCitizenship] = React.useState("");
+  const [languages, setLanguages] = React.useState("");
+  const [insurer, setInsurer] = React.useState("");
+  const [policyNumber, setPolicyNumber] = React.useState("");
+  const [insurancePhone, setInsurancePhone] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!prof) return;
+    setName(prof.emergencyContactName ?? "");
+    setPhone(prof.emergencyContactPhone ?? "");
+    setRelation(prof.emergencyContactRelation ?? "");
+    setCitizenship(prof.citizenship ?? "");
+    setLanguages(prof.languages ?? "");
+    setInsurer(prof.insurer ?? "");
+    setPolicyNumber(prof.insurancePolicyNumber ?? "");
+    setInsurancePhone(prof.insurancePhone ?? "");
+    setNotes(prof.emergencyNotes ?? "");
+  }, [prof]);
+
+  if (loading) return <Loading />;
+
+  const trimToNull = (s: string) => (s.trim() ? s.trim() : null);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <HeartPulse className="size-4 text-muted-foreground" />
+          <CardTitle>{t("emergency.settings.title")}</CardTitle>
+        </div>
+        <CardDescription>{t("emergency.settings.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("emergency.settings.name")}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label={t("emergency.settings.phone")}>
+            <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </Field>
+          <Field label={t("emergency.settings.relation")}>
+            <Input value={relation} onChange={(e) => setRelation(e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("emergency.settings.citizenship")}>
+            <Input
+              value={citizenship}
+              onChange={(e) => setCitizenship(e.target.value)}
+              placeholder={t("emergency.settings.citizenshipPlaceholder")}
+            />
+          </Field>
+          <Field label={t("emergency.settings.languages")}>
+            <Input
+              value={languages}
+              onChange={(e) => setLanguages(e.target.value)}
+              placeholder={t("emergency.settings.languagesPlaceholder")}
+            />
+          </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label={t("emergency.settings.insurer")}>
+            <Input value={insurer} onChange={(e) => setInsurer(e.target.value)} />
+          </Field>
+          <Field label={t("emergency.settings.policyNumber")}>
+            <Input value={policyNumber} onChange={(e) => setPolicyNumber(e.target.value)} />
+          </Field>
+          <Field label={t("emergency.settings.assistancePhone")}>
+            <Input
+              type="tel"
+              value={insurancePhone}
+              onChange={(e) => setInsurancePhone(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label={t("emergency.settings.notes")} hint={t("emergency.settings.notesHint")}>
+          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+        <div>
+          <Button
+            onClick={async () => {
+              await updateProfile(profileId, {
+                emergencyContactName: trimToNull(name),
+                emergencyContactPhone: trimToNull(phone),
+                emergencyContactRelation: trimToNull(relation),
+                citizenship: trimToNull(citizenship),
+                languages: trimToNull(languages),
+                insurer: trimToNull(insurer),
+                insurancePolicyNumber: trimToNull(policyNumber),
+                insurancePhone: trimToNull(insurancePhone),
+                emergencyNotes: trimToNull(notes),
+              });
+              setSaved(true);
+              setTimeout(() => setSaved(false), 2000);
+            }}
+          >
+            {saved ? t("emergency.settings.saved") : t("emergency.settings.save")}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── export ─────────────────────────────────────────────────────────────────
+
+function LogsCard() {
+  const { t } = useI18n();
+  const [error, setError] = React.useState(false);
+
+  const openLogs = async () => {
+    setError(false);
+    const dir = await appLogDir();
+    try {
+      await openPath(await join(dir, "soma.log"));
+    } catch {
+      // File may not exist yet or no default app for .log — fall back to the folder.
+      try {
+        await openPath(dir);
+      } catch {
+        setError(true);
+      }
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("settings.logs.title")}</CardTitle>
+        <CardDescription>{t("settings.logs.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" onClick={() => void openLogs()}>
+          {t("settings.logs.open")}
+        </Button>
+        {error && <p className="text-xs text-destructive">{t("settings.logs.error")}</p>}
+      </CardContent>
+    </Card>
+  );
+}
 
 function ExportCard() {
   const { t } = useI18n();
@@ -340,14 +533,16 @@ function ExportCard() {
           disabled={busy !== null}
           onClick={() => run("json", exportAllJson)}
         >
-          <Download /> {busy === "json" ? t("settings.export.exporting") : t("settings.export.exportAll")}
+          <Download />{" "}
+          {busy === "json" ? t("settings.export.exporting") : t("settings.export.exportAll")}
         </Button>
         <Button
           variant="outline"
           disabled={busy !== null}
           onClick={() => run("csv", () => exportLabsCsv(profileId))}
         >
-          <Download /> {busy === "csv" ? t("settings.export.exporting") : t("settings.export.exportLabs")}
+          <Download />{" "}
+          {busy === "csv" ? t("settings.export.exporting") : t("settings.export.exportLabs")}
         </Button>
       </CardContent>
     </Card>

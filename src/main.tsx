@@ -1,13 +1,19 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { applyTheme, loadTheme } from "./lib/theme";
+import { ErrorBoundary } from "./components/app/ErrorBoundary";
+import { initLogging } from "./lib/logger";
+import { applyThemePreference, loadThemePreference, watchSystemTheme } from "./lib/theme";
 import "./index.css";
 
-applyTheme(loadTheme());
+initLogging();
+applyThemePreference(loadThemePreference());
+watchSystemTheme();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

@@ -81,7 +81,7 @@ export function Dialog({
         aria-label={title}
         onAnimationEnd={handleAnimationEnd}
         className={cn(
-          "relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl border bg-card p-5 shadow-xl",
+          "relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden rounded-xl border bg-card p-5 shadow-xl",
           closing ? "animate-dialog-out" : "animate-dialog-in",
           className,
         )}

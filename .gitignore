@@ -17,3 +17,6 @@ src-tauri/gen
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# MCP sidecar binary (built via `pnpm --filter soma-mcp build:sidecar`)
+src-tauri/binaries/

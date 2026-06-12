@@ -2,7 +2,8 @@ import * as React from "react";
 import { Field } from "@/components/app/Field";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 import { cmToFtIn, ftInToCm, kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
@@ -155,7 +156,9 @@ function WeightInput({
       type="number"
       min={0}
       step="0.1"
-      placeholder={placeholder ?? (imperial ? t("profile.placeholders.lb") : t("profile.placeholders.kg"))}
+      placeholder={
+        placeholder ?? (imperial ? t("profile.placeholders.lb") : t("profile.placeholders.kg"))
+      }
       value={display}
       onChange={(e) => {
         if (e.target.value === "") return onChange(null);
@@ -185,24 +188,25 @@ export function CoreFields({ draft, patch }: { draft: ProfileDraft; patch: Patch
         />
       </Field>
       <Field label={t("profile.fields.biologicalSex")}>
-        <Select
-          value={draft.sex}
-          onChange={(e) => patch({ sex: e.target.value as ProfileDraft["sex"] })}
-        >
-          <option value="">—</option>
-          <option value="male">{t("profile.options.male")}</option>
-          <option value="female">{t("profile.options.female")}</option>
-          <option value="other">{t("profile.options.otherIntersex")}</option>
-        </Select>
+        <SelectMenu
+          value={draft.sex || null}
+          onChange={(v) => patch({ sex: v as ProfileDraft["sex"] })}
+          options={[
+            { value: "male", label: t("profile.options.male") },
+            { value: "female", label: t("profile.options.female") },
+            { value: "other", label: t("profile.options.otherIntersex") },
+          ]}
+        />
       </Field>
       <Field label={t("profile.fields.units")}>
-        <Select
+        <SelectMenu
           value={draft.unitSystem}
-          onChange={(e) => patch({ unitSystem: e.target.value as UnitSystem })}
-        >
-          <option value="metric">{t("profile.options.metricSystem")}</option>
-          <option value="imperial">{t("profile.options.imperialSystem")}</option>
-        </Select>
+          onChange={(v) => patch({ unitSystem: v as UnitSystem })}
+          options={[
+            { value: "metric", label: t("profile.options.metricSystem") },
+            { value: "imperial", label: t("profile.options.imperialSystem") },
+          ]}
+        />
       </Field>
       <Field label={t("profile.fields.height")}>
         <HeightInput
@@ -222,42 +226,84 @@ export function CoreFields({ draft, patch }: { draft: ProfileDraft; patch: Patch
   );
 }
 
+const ETHNICITY_KEYS = [
+  "white",
+  "black",
+  "eastAsian",
+  "southAsian",
+  "southeastAsian",
+  "centralAsian",
+  "mena",
+  "hispanic",
+  "nativeAmerican",
+  "pacificIslander",
+  "ashkenaziJewish",
+  "caribbean",
+  "mixed",
+  "other",
+] as const;
+
+/** Canonical English ethnicity values stored in the DB, keyed by i18n label. */
+const ETHNICITY_VALUES: Record<(typeof ETHNICITY_KEYS)[number], string> = {
+  white: "White / European",
+  black: "Black / African",
+  eastAsian: "East Asian",
+  southAsian: "South Asian",
+  southeastAsian: "Southeast Asian",
+  centralAsian: "Central Asian",
+  mena: "Middle Eastern / North African",
+  hispanic: "Hispanic / Latino",
+  nativeAmerican: "Native American / Indigenous",
+  pacificIslander: "Pacific Islander",
+  ashkenaziJewish: "Ashkenazi Jewish",
+  caribbean: "Caribbean",
+  mixed: "Mixed / multiracial",
+  other: "Other",
+};
+
 /** Optional fields: blood type, ethnicity, target weight, lifestyle, conditions. */
 export function OptionalFields({ draft, patch }: { draft: ProfileDraft; patch: Patch }) {
   const { t } = useI18n();
 
+  const ethnicityOptions: ComboboxOption[] = ETHNICITY_KEYS.map((k) => ({
+    value: ETHNICITY_VALUES[k],
+    label: t(`profile.ethnicity.${k}`),
+  }));
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label={t("profile.fields.bloodGroup")}>
-        <Select
-          value={draft.bloodType}
-          onChange={(e) => patch({ bloodType: e.target.value as ProfileDraft["bloodType"] })}
-        >
-          <option value="">—</option>
-          <option value="A">A</option>
-          <option value="B">B</option>
-          <option value="AB">AB</option>
-          <option value="O">O</option>
-        </Select>
-      </Field>
-      <Field label={t("profile.fields.rhFactor")}>
-        <Select
-          value={draft.rhFactor}
-          onChange={(e) => patch({ rhFactor: e.target.value as ProfileDraft["rhFactor"] })}
-        >
-          <option value="">—</option>
-          <option value="positive">{t("profile.options.positiveRh")}</option>
-          <option value="negative">{t("profile.options.negativeRh")}</option>
-        </Select>
-      </Field>
-      <Field label={t("profile.fields.ethnicity")}>
-        <Input
-          value={draft.ethnicity}
-          placeholder={t("profile.placeholders.ethnicity")}
-          onChange={(e) => patch({ ethnicity: e.target.value })}
+        <SelectMenu
+          value={draft.bloodType || null}
+          onChange={(v) => patch({ bloodType: v as ProfileDraft["bloodType"] })}
+          options={[
+            { value: "O", label: t("profile.options.bloodO") },
+            { value: "A", label: t("profile.options.bloodA") },
+            { value: "B", label: t("profile.options.bloodB") },
+            { value: "AB", label: t("profile.options.bloodAB") },
+          ]}
         />
       </Field>
-      <Field label={t("profile.fields.targetWeight")}>
+      <Field label={t("profile.fields.rhFactor")}>
+        <SelectMenu
+          value={draft.rhFactor || null}
+          onChange={(v) => patch({ rhFactor: v as ProfileDraft["rhFactor"] })}
+          options={[
+            { value: "positive", label: t("profile.options.positiveRh") },
+            { value: "negative", label: t("profile.options.negativeRh") },
+          ]}
+        />
+      </Field>
+      <Field label={t("profile.fields.ethnicity")} hint={t("profile.hints.ethnicity")}>
+        <Combobox
+          value={draft.ethnicity || null}
+          onChange={(v) => patch({ ethnicity: v })}
+          options={ethnicityOptions}
+          placeholder={t("profile.placeholders.ethnicity")}
+          allowCustom
+        />
+      </Field>
+      <Field label={t("profile.fields.targetWeight")} hint={t("profile.hints.targetWeight")}>
         <WeightInput
           kg={draft.targetWeightKg}
           system={draft.unitSystem}
@@ -266,42 +312,72 @@ export function OptionalFields({ draft, patch }: { draft: ProfileDraft; patch: P
         />
       </Field>
       <Field label={t("profile.fields.activityLevel")}>
-        <Select
-          value={draft.activityLevel}
-          onChange={(e) =>
-            patch({ activityLevel: e.target.value as ProfileDraft["activityLevel"] })
-          }
-        >
-          <option value="">—</option>
-          <option value="sedentary">{t("profile.options.sedentary")}</option>
-          <option value="light">{t("profile.options.lightlyActive")}</option>
-          <option value="moderate">{t("profile.options.moderatelyActive")}</option>
-          <option value="active">{t("profile.options.active")}</option>
-          <option value="very_active">{t("profile.options.veryActive")}</option>
-        </Select>
+        <SelectMenu
+          value={draft.activityLevel || null}
+          onChange={(v) => patch({ activityLevel: v as ProfileDraft["activityLevel"] })}
+          options={[
+            {
+              value: "sedentary",
+              label: t("profile.options.sedentary"),
+              description: t("profile.descriptions.sedentary"),
+            },
+            {
+              value: "light",
+              label: t("profile.options.lightlyActive"),
+              description: t("profile.descriptions.lightlyActive"),
+            },
+            {
+              value: "moderate",
+              label: t("profile.options.moderatelyActive"),
+              description: t("profile.descriptions.moderatelyActive"),
+            },
+            {
+              value: "active",
+              label: t("profile.options.active"),
+              description: t("profile.descriptions.active"),
+            },
+            {
+              value: "very_active",
+              label: t("profile.options.veryActive"),
+              description: t("profile.descriptions.veryActive"),
+            },
+          ]}
+        />
       </Field>
       <Field label={t("profile.fields.smoking")}>
-        <Select
-          value={draft.smoking}
-          onChange={(e) => patch({ smoking: e.target.value as ProfileDraft["smoking"] })}
-        >
-          <option value="">—</option>
-          <option value="never">{t("profile.options.never")}</option>
-          <option value="former">{t("profile.options.former")}</option>
-          <option value="current">{t("profile.options.current")}</option>
-        </Select>
+        <SelectMenu
+          value={draft.smoking || null}
+          onChange={(v) => patch({ smoking: v as ProfileDraft["smoking"] })}
+          options={[
+            { value: "never", label: t("profile.options.never") },
+            {
+              value: "former",
+              label: t("profile.options.former"),
+              description: t("profile.descriptions.smokingFormer"),
+            },
+            { value: "current", label: t("profile.options.current") },
+          ]}
+        />
       </Field>
       <Field label={t("profile.fields.alcohol")}>
-        <Select
-          value={draft.alcohol}
-          onChange={(e) => patch({ alcohol: e.target.value as ProfileDraft["alcohol"] })}
-        >
-          <option value="">—</option>
-          <option value="none">{t("profile.options.none")}</option>
-          <option value="occasional">{t("profile.options.occasional")}</option>
-          <option value="moderate">{t("profile.options.moderate")}</option>
-          <option value="heavy">{t("profile.options.heavy")}</option>
-        </Select>
+        <SelectMenu
+          value={draft.alcohol || null}
+          onChange={(v) => patch({ alcohol: v as ProfileDraft["alcohol"] })}
+          options={[
+            { value: "none", label: t("profile.options.none") },
+            {
+              value: "occasional",
+              label: t("profile.options.occasional"),
+              description: t("profile.descriptions.alcoholOccasional"),
+            },
+            {
+              value: "moderate",
+              label: t("profile.options.moderate"),
+              description: t("profile.descriptions.alcoholModerate"),
+            },
+            { value: "heavy", label: t("profile.options.heavy") },
+          ]}
+        />
       </Field>
       <Field label={t("profile.fields.chronicConditions")} className="sm:col-span-2">
         <Textarea

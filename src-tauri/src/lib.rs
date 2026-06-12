@@ -1,4 +1,5 @@
 mod backup;
+mod mcp;
 
 use keyring::Entry;
 
@@ -34,9 +35,52 @@ fn keychain_delete(provider: String) -> Result<(), String> {
     }
 }
 
+#[derive(serde::Serialize)]
+struct McpServerInfo {
+    /// Absolute path to the bundled `soma-mcp` stdio binary.
+    path: String,
+    /// Whether that binary is present on disk (false before the sidecar is built).
+    exists: bool,
+}
+
+/// Resolves the path to the bundled MCP server binary so the Settings UI can
+/// generate copy-paste config for external AI clients (Claude Code, Codex,
+/// Gemini, Cursor). Tauri places `externalBin` next to the main executable.
+#[tauri::command]
+fn mcp_server_path() -> Result<McpServerInfo, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "could not resolve executable directory".to_string())?;
+    let bin_name = if cfg!(windows) {
+        "soma-mcp.exe"
+    } else {
+        "soma-mcp"
+    };
+    let path = dir.join(bin_name);
+    Ok(McpServerInfo {
+        exists: path.exists(),
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("soma".into()),
+                    }),
+                ])
+                // Rotate at 10 MB; keep one previous file alongside the live one.
+                .max_file_size(10 * 1024 * 1024)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -46,6 +90,9 @@ pub fn run() {
             keychain_set,
             keychain_get,
             keychain_delete,
+            mcp_server_path,
+            mcp::mcp_clients_status,
+            mcp::mcp_install,
             backup::detect_backup_providers,
             backup::verify_backup_dir,
             backup::backup_passphrase_set,

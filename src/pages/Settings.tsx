@@ -3,6 +3,8 @@ import {
   CheckCircle2,
   Download,
   Globe,
+  Moon,
+  Sun,
   HeartPulse,
   KeyRound,
   Loader2,
@@ -25,6 +27,7 @@ import {
 } from "@/ai";
 import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
 import { appLogDir, join } from "@tauri-apps/api/path";
+import { applyTheme, loadTheme, type Theme } from "@/lib/theme";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
@@ -52,7 +55,7 @@ export function Settings() {
     <>
       <PageHeader title={t("settings.title")} description={t("settings.description")} />
       <div className="space-y-4">
-        <LanguageCard />
+        <AppearanceCard />
         <ProfileCard />
         <EmergencyContactCard />
         <AiSettingsCard />
@@ -66,28 +69,61 @@ export function Settings() {
 
 // ── Language ───────────────────────────────────────────────────────────────
 
-function LanguageCard() {
+function AppearanceCard() {
   const { lang, setLang, t } = useI18n();
+  const [theme, setTheme] = React.useState<Theme>(() => loadTheme());
+
+  const changeTheme = (next: Theme) => {
+    setTheme(next);
+    applyTheme(next);
+  };
+
+  const segment = (active: boolean): "secondary" | "ghost" => (active ? "secondary" : "ghost");
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <Globe className="size-4 text-muted-foreground" />
-          <CardTitle>{t("settings.language.title")}</CardTitle>
+          <CardTitle>{t("settings.appearance.title")}</CardTitle>
         </div>
-        <CardDescription>{t("settings.language.description")}</CardDescription>
+        <CardDescription>{t("settings.appearance.description")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Field label={t("settings.language.title")}>
-          <SelectMenu
-            value={lang}
-            onChange={(v) => setLang(v as "en" | "ru")}
-            options={[
-              { value: "en", label: t("settings.language.english") },
-              { value: "ru", label: t("settings.language.russian") },
-            ]}
-          />
+      <CardContent className="flex flex-wrap gap-6">
+        <Field label={t("settings.appearance.language")}>
+          <div className="flex w-fit rounded-lg border p-0.5">
+            {(["en", "ru"] as const).map((l) => (
+              <Button
+                key={l}
+                variant={segment(lang === l)}
+                size="sm"
+                className="h-7 px-3"
+                onClick={() => setLang(l)}
+              >
+                {l === "en" ? "English" : "Русский"}
+              </Button>
+            ))}
+          </div>
+        </Field>
+        <Field label={t("settings.appearance.theme")}>
+          <div className="flex w-fit rounded-lg border p-0.5">
+            <Button
+              variant={segment(theme === "light")}
+              size="sm"
+              className="h-7 gap-1.5 px-3"
+              onClick={() => changeTheme("light")}
+            >
+              <Sun className="size-3.5" /> {t("settings.appearance.light")}
+            </Button>
+            <Button
+              variant={segment(theme === "dark")}
+              size="sm"
+              className="h-7 gap-1.5 px-3"
+              onClick={() => changeTheme("dark")}
+            >
+              <Moon className="size-3.5" /> {t("settings.appearance.dark")}
+            </Button>
+          </div>
         </Field>
       </CardContent>
     </Card>

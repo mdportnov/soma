@@ -5,7 +5,6 @@ import {
   CalendarRange,
   FlaskConical,
   LayoutDashboard,
-  Moon,
   NotebookPen,
   Pill,
   Search,
@@ -13,12 +12,10 @@ import {
   Settings,
   ShieldAlert,
   Stethoscope,
-  Sun,
   Syringe,
   TestTubes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { applyTheme, loadTheme, type Theme } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/app/CommandPalette";
@@ -47,11 +44,8 @@ const NAV: NavItem[] = [
 
 export function Shell() {
   const { t } = useI18n();
-  const [theme, setTheme] = React.useState<Theme>(() => loadTheme());
   const [searchOpen, setSearchOpen] = React.useState(false);
   const location = useLocation();
-
-  React.useEffect(() => applyTheme(theme), [theme]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -70,6 +64,16 @@ export function Shell() {
         <div className="flex h-14 items-center gap-2.5 border-b px-3 md:px-4">
           <img src={logo} alt="Soma" className="size-7 shrink-0" />
           <span className="hidden text-sm font-semibold tracking-tight md:block">Soma</span>
+          <Button
+            variant="ghost"
+            size="iconSm"
+            className="ml-auto hidden text-muted-foreground md:inline-flex"
+            onClick={() => setSearchOpen(true)}
+            title={`${t("search.open")} (⌘K)`}
+            aria-label={t("search.open")}
+          >
+            <Search className="size-4" />
+          </Button>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
           {NAV.map((item) => {
@@ -121,26 +125,6 @@ export function Shell() {
             <Settings className="size-4 shrink-0" />
             <span className="hidden md:block">{t("nav.settings")}</span>
           </NavLink>
-          <Button
-            variant="ghost"
-            className="justify-start gap-2.5 px-2.5 text-muted-foreground"
-            onClick={() => setSearchOpen(true)}
-            title={t("search.open")}
-          >
-            <Search className="size-4 shrink-0" />
-            <span className="hidden md:block">{t("search.open")}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            className="justify-start gap-2.5 px-2.5 text-muted-foreground"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            title={t("theme.toggleTheme")}
-          >
-            {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            <span className="hidden md:block">
-              {theme === "dark" ? t("theme.lightMode") : t("theme.darkMode")}
-            </span>
-          </Button>
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto">

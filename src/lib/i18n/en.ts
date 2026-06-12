@@ -93,6 +93,14 @@ export const en = {
 
   // Settings
   settings: {
+    appearance: {
+      title: "Appearance",
+      description: "Language and theme.",
+      language: "Language",
+      theme: "Theme",
+      light: "Light",
+      dark: "Dark",
+    },
     logs: {
       title: "Logs",
       description: "Application log with errors and diagnostics. Rotates at 10 MB.",

@@ -93,6 +93,14 @@ export const ru = {
 
   // Settings
   settings: {
+    appearance: {
+      title: "Внешний вид",
+      description: "Язык и тема оформления.",
+      language: "Язык",
+      theme: "Тема",
+      light: "Светлая",
+      dark: "Тёмная",
+    },
     logs: {
       title: "Логи",
       description: "Журнал приложения с ошибками и диагностикой. Ротация при 10 МБ.",

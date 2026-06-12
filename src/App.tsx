@@ -16,6 +16,7 @@ import { VisitDetail } from "@/pages/VisitDetail";
 import { Diagnoses } from "@/pages/Diagnoses";
 import { Allergies } from "@/pages/Allergies";
 import { Vaccines } from "@/pages/Vaccines";
+import { EmergencyCard } from "@/pages/EmergencyCard";
 import { Settings } from "@/pages/Settings";
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="diagnoses" element={<Diagnoses />} />
               <Route path="allergies" element={<Allergies />} />
               <Route path="vaccines" element={<Vaccines />} />
+              <Route path="emergency" element={<EmergencyCard />} />
               <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>

@@ -3,17 +3,21 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
+  allergy,
   biomarker,
+  bpLog,
   diagnosis,
   labPanel,
   labResult,
   medication,
   profile,
+  symptomLog,
+  vaccine,
+  weightLog,
 } from "../../src/db/schema";
 import { computeFlag, convertToDefaultUnit } from "../../src/lib/units";
 import { openDb, resolveDbPath } from "./db";
 import { describeCandidates, matchBiomarker } from "./mapping";
-import { allergy, bpLog, symptomLog, vaccine, weightLog } from "./schema-extra";
 
 const INSTRUCTIONS = `Soma is a local-first personal health database (labs, medications, visits, diagnoses, allergies, vaccines, symptoms, weight and blood pressure).
 Domain rules you must follow:
@@ -308,7 +312,7 @@ server.registerTool(
       .select({
         name: vaccine.vaccineName,
         date: vaccine.date,
-        dose: vaccine.doseNumber,
+        dose: vaccine.dose,
         expiresAt: vaccine.expiresAt,
       })
       .from(vaccine)
@@ -737,7 +741,7 @@ server.registerTool(
       profileId: pid.id,
       vaccineName,
       date,
-      doseNumber: doseNumber ?? null,
+      dose: doseNumber ?? null,
       manufacturer: manufacturer ?? null,
       batchNumber: batchNumber ?? null,
       expiresAt: expiresAt ?? null,

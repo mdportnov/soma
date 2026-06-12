@@ -37,7 +37,7 @@ import {
 } from "@/components/app/ProfileFields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible } from "@/components/ui/collapsible";
@@ -77,10 +77,14 @@ function LanguageCard() {
       </CardHeader>
       <CardContent>
         <Field label={t("settings.language.title")}>
-          <Select value={lang} onChange={(e) => setLang(e.target.value as "en" | "ru")}>
-            <option value="en">{t("settings.language.english")}</option>
-            <option value="ru">{t("settings.language.russian")}</option>
-          </Select>
+          <SelectMenu
+            value={lang}
+            onChange={(v) => setLang(v as "en" | "ru")}
+            options={[
+              { value: "en", label: t("settings.language.english") },
+              { value: "ru", label: t("settings.language.russian") },
+            ]}
+          />
         </Field>
       </CardContent>
     </Card>
@@ -162,31 +166,24 @@ function AiSettingsCard() {
       <div className="grid gap-4 p-5 pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("settings.ai.provider")}>
-            <Select
-              value={settings.providerId}
-              onChange={(e) => update({ providerId: e.target.value, modelId: "", customModel: "" })}
-            >
-              <option value="">{t("settings.ai.aiDisabled")}</option>
-              {modelRegistry.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
+            <SelectMenu
+              value={settings.providerId || null}
+              onChange={(v) => update({ providerId: v, modelId: "", customModel: "" })}
+              placeholder={t("settings.ai.aiDisabled")}
+              options={[
+                { value: "", label: t("settings.ai.aiDisabled") },
+                ...modelRegistry.map((p) => ({ value: p.id, label: p.label })),
+              ]}
+            />
           </Field>
           {provider && (
             <Field label={t("settings.ai.model")}>
-              <Select
-                value={settings.modelId}
-                onChange={(e) => update({ modelId: e.target.value })}
-              >
-                <option value="">{t("common.selectModel")}</option>
-                {usableModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </Select>
+              <SelectMenu
+                value={settings.modelId || null}
+                onChange={(v) => update({ modelId: v })}
+                placeholder={t("common.selectModel")}
+                options={usableModels.map((m) => ({ value: m.id, label: m.label }))}
+              />
             </Field>
           )}
         </div>

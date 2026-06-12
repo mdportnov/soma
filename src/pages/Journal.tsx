@@ -38,7 +38,7 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog } from "@/components/ui/dialog";
@@ -718,22 +718,27 @@ function BpForm({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t("bp.fields.position")}>
-            <Select
-              value={position}
-              onChange={(e) => setPosition(e.target.value as typeof position)}
-            >
-              <option value="">—</option>
-              <option value="sitting">{t("bp.position.sitting")}</option>
-              <option value="standing">{t("bp.position.standing")}</option>
-              <option value="supine">{t("bp.position.supine")}</option>
-            </Select>
+            <SelectMenu
+              value={position || null}
+              onChange={(v) => setPosition(v as typeof position)}
+              options={[
+                { value: "", label: "—" },
+                { value: "sitting", label: t("bp.position.sitting") },
+                { value: "standing", label: t("bp.position.standing") },
+                { value: "supine", label: t("bp.position.supine") },
+              ]}
+            />
           </Field>
           <Field label={t("bp.fields.arm")}>
-            <Select value={arm} onChange={(e) => setArm(e.target.value as typeof arm)}>
-              <option value="">—</option>
-              <option value="left">{t("bp.arm.left")}</option>
-              <option value="right">{t("bp.arm.right")}</option>
-            </Select>
+            <SelectMenu
+              value={arm || null}
+              onChange={(v) => setArm(v as typeof arm)}
+              options={[
+                { value: "", label: "—" },
+                { value: "left", label: t("bp.arm.left") },
+                { value: "right", label: t("bp.arm.right") },
+              ]}
+            />
           </Field>
         </div>
         <Field label={t("bp.fields.notesOptional")}>
@@ -1018,13 +1023,14 @@ function SymptomForm({
           </Field>
         </div>
         <Field label={t("symptoms.fields.severity")}>
-          <Select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-            {Array.from({ length: 10 }, (_, i) => String(i + 1)).map((n) => (
-              <option key={n} value={n}>
-                {t(`symptomSeverity.${n}`)}
-              </option>
-            ))}
-          </Select>
+          <SelectMenu
+            value={severity}
+            onChange={setSeverity}
+            options={Array.from({ length: 10 }, (_, i) => String(i + 1)).map((n) => ({
+              value: n,
+              label: t(`symptomSeverity.${n}`),
+            }))}
+          />
         </Field>
         <Field label={t("symptoms.fields.notesOptional")}>
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} />

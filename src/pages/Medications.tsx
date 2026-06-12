@@ -11,7 +11,7 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog } from "@/components/ui/dialog";
@@ -235,10 +235,14 @@ function MedicationForm({
             />
           </Field>
           <Field label={t("fields.type")}>
-            <Select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-              <option value="supplement">{t("types.supplement")}</option>
-              <option value="drug">{t("types.drug")}</option>
-            </Select>
+            <SelectMenu
+              value={type}
+              onChange={(v) => setType(v as typeof type)}
+              options={[
+                { value: "supplement", label: t("types.supplement") },
+                { value: "drug", label: t("types.drug") },
+              ]}
+            />
           </Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -272,14 +276,18 @@ function MedicationForm({
             />
           </Field>
           <Field label={t("medications.fields.frequency")}>
-            <Select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-              <option value="daily">{t("frequency.daily")}</option>
-              <option value="2x_daily">{t("frequency.twiceDaily")}</option>
-              <option value="3x_daily">{t("frequency.thriceDaily")}</option>
-              <option value="weekly">{t("frequency.weekly")}</option>
-              <option value="as_needed">{t("frequency.asNeeded")}</option>
-              <option value="custom">{t("frequency.custom")}</option>
-            </Select>
+            <SelectMenu
+              value={frequency}
+              onChange={setFrequency}
+              options={[
+                { value: "daily", label: t("frequency.daily") },
+                { value: "2x_daily", label: t("frequency.twiceDaily") },
+                { value: "3x_daily", label: t("frequency.thriceDaily") },
+                { value: "weekly", label: t("frequency.weekly") },
+                { value: "as_needed", label: t("frequency.asNeeded") },
+                { value: "custom", label: t("frequency.custom") },
+              ]}
+            />
           </Field>
         </div>
         <Field label={t("medications.fields.scheduleNotesOptional")}>

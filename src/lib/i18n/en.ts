@@ -192,6 +192,36 @@ export const en = {
       occasional: "Occasional",
       moderate: "Moderate",
       heavy: "Heavy",
+      bloodO: "O (I)",
+      bloodA: "A (II)",
+      bloodB: "B (III)",
+      bloodAB: "AB (IV)",
+    },
+    descriptions: {
+      sedentary: "Desk work, no regular exercise",
+      lightlyActive: "Walks or light exercise 1–2× a week",
+      moderatelyActive: "Exercise 2–4× a week",
+      active: "Hard training 4–6× a week",
+      veryActive: "Daily intense training or physical job",
+      smokingFormer: "Quit — affects some ranges for years",
+      alcoholOccasional: "A few drinks a month",
+      alcoholModerate: "Up to ~7 drinks a week",
+    },
+    ethnicity: {
+      white: "White / European",
+      black: "Black / African",
+      eastAsian: "East Asian",
+      southAsian: "South Asian",
+      southeastAsian: "Southeast Asian",
+      centralAsian: "Central Asian",
+      mena: "Middle Eastern / North African",
+      hispanic: "Hispanic / Latino",
+      nativeAmerican: "Native American / Indigenous",
+      pacificIslander: "Pacific Islander",
+      ashkenaziJewish: "Ashkenazi Jewish",
+      caribbean: "Caribbean",
+      mixed: "Mixed / multiracial",
+      other: "Other",
     },
     placeholders: {
       ft: "ft",
@@ -212,6 +242,7 @@ export const en = {
       "Your health record, on your terms — labs, medications and visits in one private timeline. A minute of setup lets Soma read your results against the reference ranges that actually apply to you.",
     privacyNote: "Everything you enter stays on this device — no account, no cloud, no tracking.",
     getStarted: "Get started",
+    language: "Language",
 
     aboutYouTitle: "About you",
     aboutYouDescription:
@@ -507,6 +538,13 @@ export const en = {
     moderate: "Moderate",
     severe: "Severe",
     anaphylactic: "Anaphylactic",
+  },
+
+  allergySeverityDescription: {
+    mild: "Discomfort, no treatment needed",
+    moderate: "Needs antihistamines or treatment",
+    severe: "Strong systemic reaction",
+    anaphylactic: "Life-threatening — emergency epinephrine",
   },
 
   // Vaccines page

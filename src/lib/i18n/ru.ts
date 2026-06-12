@@ -192,6 +192,36 @@ export const ru = {
       occasional: "Иногда",
       moderate: "Умеренно",
       heavy: "Часто",
+      bloodO: "O (I)",
+      bloodA: "A (II)",
+      bloodB: "B (III)",
+      bloodAB: "AB (IV)",
+    },
+    descriptions: {
+      sedentary: "Сидячая работа, без регулярных тренировок",
+      lightlyActive: "Прогулки или лёгкие нагрузки 1–2 раза в неделю",
+      moderatelyActive: "Тренировки 2–4 раза в неделю",
+      active: "Интенсивные тренировки 4–6 раз в неделю",
+      veryActive: "Ежедневные интенсивные тренировки или физический труд",
+      smokingFormer: "Бросил(а) — влияет на некоторые диапазоны годами",
+      alcoholOccasional: "Несколько порций в месяц",
+      alcoholModerate: "До ~7 порций в неделю",
+    },
+    ethnicity: {
+      white: "Европеоидная",
+      black: "Негроидная / африканская",
+      eastAsian: "Восточноазиатская",
+      southAsian: "Южноазиатская",
+      southeastAsian: "Юго-восточноазиатская",
+      centralAsian: "Центральноазиатская",
+      mena: "Ближневосточная / североафриканская",
+      hispanic: "Латиноамериканская",
+      nativeAmerican: "Коренные народы Америки",
+      pacificIslander: "Народы Океании",
+      ashkenaziJewish: "Евреи-ашкеназы",
+      caribbean: "Карибская",
+      mixed: "Смешанная",
+      other: "Другая",
     },
     placeholders: {
       ft: "ft",
@@ -213,6 +243,7 @@ export const ru = {
     privacyNote:
       "Всё, что вы вводите, остаётся на этом устройстве — никаких аккаунтов, облака или отслеживания.",
     getStarted: "Начать",
+    language: "Язык",
 
     aboutYouTitle: "О вас",
     aboutYouDescription:
@@ -511,6 +542,13 @@ export const ru = {
     moderate: "Умеренная",
     severe: "Тяжёлая",
     anaphylactic: "Анафилактическая",
+  },
+
+  allergySeverityDescription: {
+    mild: "Дискомфорт, лечение не требуется",
+    moderate: "Нужны антигистаминные или лечение",
+    severe: "Сильная системная реакция",
+    anaphylactic: "Угроза жизни — экстренный адреналин",
   },
 
   // Vaccines page

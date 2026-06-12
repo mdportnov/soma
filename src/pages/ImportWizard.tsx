@@ -43,7 +43,7 @@ import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Combobox } from "@/components/ui/combobox";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
@@ -773,14 +773,15 @@ function ReviewStep({
             <Input value={meta.country} onChange={(e) => setMeta.setCountry(e.target.value)} />
           </Field>
           <Field label={t("fields.type")}>
-            <Select
+            <SelectMenu
               value={meta.panelType}
-              onChange={(e) => setMeta.setPanelType(e.target.value as "blood" | "urine" | "other")}
-            >
-              <option value="blood">{t("types.blood")}</option>
-              <option value="urine">{t("types.urine")}</option>
-              <option value="other">{t("types.other")}</option>
-            </Select>
+              onChange={(v) => setMeta.setPanelType(v as "blood" | "urine" | "other")}
+              options={[
+                { value: "blood", label: t("types.blood") },
+                { value: "urine", label: t("types.urine") },
+                { value: "other", label: t("types.other") },
+              ]}
+            />
           </Field>
         </CardContent>
       </Card>

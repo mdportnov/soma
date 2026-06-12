@@ -11,7 +11,7 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -282,34 +282,56 @@ function AllergyForm({
             />
           </Field>
           <Field label={t("allergies.fields.category")}>
-            <Select
+            <SelectMenu
               value={category}
-              onChange={(e) => setCategory(e.target.value as Allergy["category"])}
-            >
-              <option value="drug">{t("allergyCategory.drug")}</option>
-              <option value="food">{t("allergyCategory.food")}</option>
-              <option value="environmental">{t("allergyCategory.environmental")}</option>
-              <option value="other">{t("allergyCategory.other")}</option>
-            </Select>
+              onChange={(v) => setCategory(v as Allergy["category"])}
+              options={[
+                { value: "drug", label: t("allergyCategory.drug") },
+                { value: "food", label: t("allergyCategory.food") },
+                { value: "environmental", label: t("allergyCategory.environmental") },
+                { value: "other", label: t("allergyCategory.other") },
+              ]}
+            />
           </Field>
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label={t("allergies.fields.severity")}>
-            <Select
+            <SelectMenu
               value={severity}
-              onChange={(e) => setSeverity(e.target.value as Allergy["severity"])}
-            >
-              <option value="mild">{t("allergySeverity.mild")}</option>
-              <option value="moderate">{t("allergySeverity.moderate")}</option>
-              <option value="severe">{t("allergySeverity.severe")}</option>
-              <option value="anaphylactic">{t("allergySeverity.anaphylactic")}</option>
-            </Select>
+              onChange={(v) => setSeverity(v as Allergy["severity"])}
+              options={[
+                {
+                  value: "mild",
+                  label: t("allergySeverity.mild"),
+                  description: t("allergySeverityDescription.mild"),
+                },
+                {
+                  value: "moderate",
+                  label: t("allergySeverity.moderate"),
+                  description: t("allergySeverityDescription.moderate"),
+                },
+                {
+                  value: "severe",
+                  label: t("allergySeverity.severe"),
+                  description: t("allergySeverityDescription.severe"),
+                },
+                {
+                  value: "anaphylactic",
+                  label: t("allergySeverity.anaphylactic"),
+                  description: t("allergySeverityDescription.anaphylactic"),
+                },
+              ]}
+            />
           </Field>
           <Field label={t("allergies.fields.status")}>
-            <Select value={status} onChange={(e) => setStatus(e.target.value as Allergy["status"])}>
-              <option value="active">{t("status.active")}</option>
-              <option value="resolved">{t("status.resolved")}</option>
-            </Select>
+            <SelectMenu
+              value={status}
+              onChange={(v) => setStatus(v as Allergy["status"])}
+              options={[
+                { value: "active", label: t("status.active") },
+                { value: "resolved", label: t("status.resolved") },
+              ]}
+            />
           </Field>
           <Field label={t("allergies.fields.onsetDateOptional")}>
             <DateInput value={onsetDate} onChange={setOnsetDate} clearable />

@@ -11,7 +11,7 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -384,11 +384,15 @@ export function DiagnosisForm({
             <DateInput value={date} onChange={setDate} />
           </Field>
           <Field label={t("diagnoses.fields.status")}>
-            <Select value={status} onChange={(e) => changeStatus(e.target.value as typeof status)}>
-              <option value="active">{t("status.active")}</option>
-              <option value="remission">{t("status.remission")}</option>
-              <option value="resolved">{t("status.resolved")}</option>
-            </Select>
+            <SelectMenu
+              value={status}
+              onChange={(v) => changeStatus(v as typeof status)}
+              options={[
+                { value: "active", label: t("status.active") },
+                { value: "remission", label: t("status.remission") },
+                { value: "resolved", label: t("status.resolved") },
+              ]}
+            />
           </Field>
         </div>
         {status !== "active" && (

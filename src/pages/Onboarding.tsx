@@ -21,7 +21,7 @@ const ORDER: StepId[] = ["welcome", "core", "optional", "done"];
  * Optional steps can be skipped. On finish it stamps `onboardedAt`.
  */
 export function Onboarding({ profileId, onDone }: { profileId: number; onDone: () => void }) {
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const { draft, patch } = useProfileDraft();
   const [step, setStep] = React.useState<StepId>("welcome");
   const [saving, setSaving] = React.useState(false);
@@ -90,7 +90,25 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
           {step === "welcome" && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">{t("onboarding.welcomeTitle")}</CardTitle>
+                <div className="flex items-start justify-between gap-3">
+                  <CardTitle className="text-lg">{t("onboarding.welcomeTitle")}</CardTitle>
+                  <div
+                    className="flex shrink-0 rounded-lg border p-0.5"
+                    aria-label={t("onboarding.language")}
+                  >
+                    {(["en", "ru"] as const).map((l) => (
+                      <Button
+                        key={l}
+                        size="sm"
+                        variant={lang === l ? "secondary" : "ghost"}
+                        className="h-7 px-2.5 text-xs"
+                        onClick={() => setLang(l)}
+                      >
+                        {l.toUpperCase()}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                 <CardDescription className="text-sm">
                   {t("onboarding.welcomeDescription")}
                 </CardDescription>
@@ -164,8 +182,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 <CardTitle className="text-lg">
                   {firstName
                     ? t("onboarding.allSetTitleWithName", { name: firstName })
-                    : t("onboarding.allSetTitle")
-                  }
+                    : t("onboarding.allSetTitle")}
                 </CardTitle>
                 <CardDescription className="text-sm">
                   {t("onboarding.allSetDescription")}

@@ -46,11 +46,15 @@ export function severityClass(severity: Allergy["severity"]): "danger" | "warn" 
   return "muted";
 }
 
+/** ABO numeral used in Russian/European tradition: O=I, A=II, B=III, AB=IV. */
+const BLOOD_NUMERAL: Record<string, string> = { O: "I", A: "II", B: "III", AB: "IV" };
+
 function bloodTypeLabel(data: EmergencyCardData): string {
   const { bloodType, rhFactor } = data.profile;
   if (!bloodType) return "—";
-  const rh = rhFactor === "positive" ? "+" : rhFactor === "negative" ? "−" : "";
-  return `${bloodType}${rh}`;
+  const rh = rhFactor === "positive" ? " Rh+" : rhFactor === "negative" ? " Rh−" : "";
+  const numeral = BLOOD_NUMERAL[bloodType];
+  return `${bloodType}${rhFactor === "positive" ? "+" : rhFactor === "negative" ? "−" : ""} (${numeral}${rh})`;
 }
 
 function row(cells: string[]): string {

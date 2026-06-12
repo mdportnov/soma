@@ -17,7 +17,7 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
 import type { ComboboxOption } from "@/components/ui/combobox";
@@ -147,13 +147,11 @@ function ImagingForm({
             <DateInput value={date} onChange={setDate} />
           </Field>
           <Field label={t("imaging.fields.modality")}>
-            <Select value={modality} onChange={(e) => setModality(e.target.value as Modality)}>
-              {MODALITIES.map((m) => (
-                <option key={m} value={m}>
-                  {t(`imagingModality.${m}`)}
-                </option>
-              ))}
-            </Select>
+            <SelectMenu
+              value={modality}
+              onChange={(v) => setModality(v as Modality)}
+              options={MODALITIES.map((m) => ({ value: m, label: t(`imagingModality.${m}`) }))}
+            />
           </Field>
           <Field label={t("imaging.fields.bodyArea")}>
             <Input

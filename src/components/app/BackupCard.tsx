@@ -14,7 +14,7 @@ import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Field } from "@/components/app/Field";
 import { Dialog } from "@/components/ui/dialog";
@@ -92,16 +92,14 @@ export function BackupCard() {
                 </p>
               </Field>
               <Field label={t("backup.frequency")}>
-                <Select
+                <SelectMenu
                   value={settings.frequency}
-                  onChange={(e) => update({ frequency: e.target.value as BackupFrequency })}
-                >
-                  {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => update({ frequency: v as BackupFrequency })}
+                  options={Object.entries(FREQUENCY_LABELS).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
+                />
               </Field>
             </div>
 
@@ -109,7 +107,8 @@ export function BackupCard() {
               {settings.lastBackupAt
                 ? `${t("backup.lastBackup")}: ${formatDate(settings.lastBackupAt)}`
                 : t("backup.noBackupYet")}
-              {" · "}{t("backup.rotationNote")}
+              {" · "}
+              {t("backup.rotationNote")}
             </p>
             {settings.lastResult && !settings.lastResult.ok && (
               <p className="flex items-start gap-1.5 text-xs text-destructive">
@@ -134,9 +133,7 @@ export function BackupCard() {
                 {t("backup.disable")}
               </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              {t("backup.disableNote")}
-            </p>
+            <p className="text-[11px] text-muted-foreground">{t("backup.disableNote")}</p>
           </>
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -215,11 +212,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
     const detected = detection?.providers.find((p) => p.path && picked.startsWith(p.path));
     setProvider(detected ? detected.id : "custom");
     setDestDir(picked);
-    setCustomWarning(
-      detected
-        ? null
-        : t("backup.customWarning"),
-    );
+    setCustomWarning(detected ? null : t("backup.customWarning"));
     if (!viaDialog) setDirError(null);
   };
 
@@ -253,16 +246,16 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
     }
   };
 
-  const stepSubmit = step === 1
-    ? () => { if (destDir) setStep(2); }
-    : step === 2
-      ? submitPassphrase
-      : finish;
-  const stepDisabled = step === 1
-    ? !destDir
-    : step === 2
-      ? (!pass || !pass2 || !passSaved)
-      : finishing;
+  const stepSubmit =
+    step === 1
+      ? () => {
+          if (destDir) setStep(2);
+        }
+      : step === 2
+        ? submitPassphrase
+        : finish;
+  const stepDisabled =
+    step === 1 ? !destDir : step === 2 ? !pass || !pass2 || !passSaved : finishing;
 
   return (
     <Dialog
@@ -347,9 +340,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
               </p>
             )}
 
-            <p className="text-[11px] text-muted-foreground">
-              {t("backup.subfolderNote")}
-            </p>
+            <p className="text-[11px] text-muted-foreground">{t("backup.subfolderNote")}</p>
 
             <div className="mt-2 flex justify-end gap-2">
               <Button variant="ghost" onClick={onClose}>
@@ -369,9 +360,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
                 <KeyRound className="mt-0.5 size-3.5 shrink-0" />
                 {t("backup.passphraseTitle")}
               </p>
-              <p className="mt-1.5 text-muted-foreground">
-                {t("backup.passphraseWarning")}
-              </p>
+              <p className="mt-1.5 text-muted-foreground">{t("backup.passphraseWarning")}</p>
             </div>
             <Field label={t("backup.passphraseLabel")}>
               <Input
@@ -417,24 +406,20 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
         {step === 3 && (
           <div className="grid gap-3">
             <Field label={t("backup.backupFrequency")}>
-              <Select
+              <SelectMenu
                 value={frequency}
-                onChange={(e) => setFrequency(e.target.value as BackupFrequency)}
-              >
-                {Object.entries(FREQUENCY_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
+                onChange={(v) => setFrequency(v as BackupFrequency)}
+                options={Object.entries(FREQUENCY_LABELS).map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+              />
             </Field>
             <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
               <p>
                 {t("backup.destinationSummary")} <span className="font-mono">{destDir}</span>
               </p>
-              <p className="mt-1">
-                {t("backup.catchupNote")}
-              </p>
+              <p className="mt-1">{t("backup.catchupNote")}</p>
             </div>
             <div className="mt-1 flex justify-between gap-2">
               <Button variant="ghost" onClick={() => setStep(2)}>
@@ -508,11 +493,7 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
       open
       onClose={close}
       title={t("backup.restoreTitle")}
-      description={
-        meta
-          ? t("backup.restoreReviewDescription")
-          : t("backup.restorePickDescription")
-      }
+      description={meta ? t("backup.restoreReviewDescription") : t("backup.restorePickDescription")}
       onSubmit={meta ? undefined : inspect}
       submitDisabled={!filePath || !pass || busy}
     >
@@ -561,8 +542,15 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
               <p className="truncate font-mono">{filePath}</p>
               <p className="mt-1.5 text-muted-foreground">
                 {t("backup.decryptedSize")} {formatSize(meta.sizeBytes)}
-                {meta.fileModifiedAt && <> · {t("backup.fileDate")} {formatDate(meta.fileModifiedAt)}</>}
-                {" · "}{t("backup.schema")} v{meta.schemaVersion} ({t("backup.appHas")} v{currentSchemaVersion})
+                {meta.fileModifiedAt && (
+                  <>
+                    {" "}
+                    · {t("backup.fileDate")} {formatDate(meta.fileModifiedAt)}
+                  </>
+                )}
+                {" · "}
+                {t("backup.schema")} v{meta.schemaVersion} ({t("backup.appHas")} v
+                {currentSchemaVersion})
               </p>
             </div>
 
@@ -574,9 +562,7 @@ function RestoreDialog({ onClose }: { onClose: () => void }) {
             ) : (
               <>
                 {meta.schemaVersion < currentSchemaVersion && (
-                  <p className="text-xs text-muted-foreground">
-                    {t("backup.olderSchemaNote")}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("backup.olderSchemaNote")}</p>
                 )}
                 <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs">
                   <p className="flex items-start gap-1.5 font-medium text-destructive">

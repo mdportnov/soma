@@ -119,8 +119,9 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
   const sexLabel = p.sex
     ? t(`profile.options.${p.sex === "other" ? "otherIntersex" : p.sex}`)
     : "—";
+  const bloodNumeral: Record<string, string> = { O: "I", A: "II", B: "III", AB: "IV" };
   const blood = p.bloodType
-    ? `${p.bloodType}${p.rhFactor === "positive" ? "+" : p.rhFactor === "negative" ? "−" : ""}`
+    ? `${p.bloodType}${p.rhFactor === "positive" ? "+" : p.rhFactor === "negative" ? "−" : ""} (${bloodNumeral[p.bloodType]}${p.rhFactor === "positive" ? " Rh+" : p.rhFactor === "negative" ? " Rh−" : ""})`
     : "—";
 
   const hasContact = !!(p.emergencyContactName || p.emergencyContactPhone);

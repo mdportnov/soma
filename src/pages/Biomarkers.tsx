@@ -12,7 +12,7 @@ import { FlagBadge } from "@/components/app/FlagBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
-import { Select } from "@/components/ui/select";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { formatDate, formatValue } from "@/lib/utils";
@@ -249,18 +249,21 @@ export function CreateBiomarkerDialog({
             <Input type="number" value={refHigh} onChange={(e) => setRefHigh(e.target.value)} />
           </Field>
           <Field label={t("biomarkers.createDialog.directionLabel")}>
-            <Select
+            <SelectMenu
               value={direction}
-              onChange={(e) => setDirection(e.target.value as typeof direction)}
-            >
-              <option value="range">{t("biomarkers.createDialog.directionOptions.range")}</option>
-              <option value="higher_better">
-                {t("biomarkers.createDialog.directionOptions.higherBetter")}
-              </option>
-              <option value="lower_better">
-                {t("biomarkers.createDialog.directionOptions.lowerBetter")}
-              </option>
-            </Select>
+              onChange={(v) => setDirection(v as typeof direction)}
+              options={[
+                { value: "range", label: t("biomarkers.createDialog.directionOptions.range") },
+                {
+                  value: "higher_better",
+                  label: t("biomarkers.createDialog.directionOptions.higherBetter"),
+                },
+                {
+                  value: "lower_better",
+                  label: t("biomarkers.createDialog.directionOptions.lowerBetter"),
+                },
+              ]}
+            />
           </Field>
         </div>
         <Field label={t("biomarkers.createDialog.aliasesLabel")}>

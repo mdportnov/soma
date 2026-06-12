@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, CalendarRange, Pill, TestTubes } from "lucide-react";
+import { Activity, AlertTriangle, CalendarRange, HeartPulse, Pill, TestTubes } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { useI18n } from "@/lib/i18n";
@@ -41,7 +41,12 @@ export function Dashboard() {
       to: latestPanel ? `/labs/${latestPanel.id}` : "/labs",
       alert: !!latestPanel && latestPanel.outOfRangeCount > 0,
     },
-    { label: t("dashboard.stats.activeMedications"), value: activeMeds.length, icon: Pill, to: "/medications" },
+    {
+      label: t("dashboard.stats.activeMedications"),
+      value: activeMeds.length,
+      icon: Pill,
+      to: "/medications",
+    },
     {
       label: t("dashboard.stats.lastLabDraw"),
       value: latestPanel ? formatDate(latestPanel.date) : "—",
@@ -55,6 +60,13 @@ export function Dashboard() {
       <PageHeader
         title={t("pages.dashboard.title")}
         description={t("pages.dashboard.description")}
+        actions={
+          <Link to="/emergency">
+            <Button variant="outline">
+              <HeartPulse /> {t("emergency.openCard")}
+            </Button>
+          </Link>
+        }
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

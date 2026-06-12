@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Download,
   Globe,
+  HeartPulse,
   KeyRound,
   Loader2,
   ShieldCheck,
@@ -47,13 +48,11 @@ export function Settings() {
 
   return (
     <>
-      <PageHeader
-        title={t("settings.title")}
-        description={t("settings.description")}
-      />
+      <PageHeader title={t("settings.title")} description={t("settings.description")} />
       <div className="space-y-4">
         <LanguageCard />
         <ProfileCard />
+        <EmergencyContactCard />
         <AiSettingsCard />
         <BackupCard />
         <ExportCard />
@@ -262,9 +261,7 @@ function AiSettingsCard() {
           </>
         )}
 
-        <p className="text-[11px] text-muted-foreground">
-          {t("settings.ai.disclaimer")}
-        </p>
+        <p className="text-[11px] text-muted-foreground">{t("settings.ai.disclaimer")}</p>
       </div>
     </Collapsible>
   );
@@ -289,9 +286,7 @@ function ProfileCard() {
     <Card>
       <CardHeader>
         <CardTitle>{t("settings.profile.title")}</CardTitle>
-        <CardDescription>
-          {t("settings.profile.description")}
-        </CardDescription>
+        <CardDescription>{t("settings.profile.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <CoreFields draft={draft} patch={patch} />
@@ -305,6 +300,69 @@ function ProfileCard() {
             }}
           >
             {saved ? t("settings.profile.saved") : t("settings.profile.saveProfile")}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── emergency contact ───────────────────────────────────────────────────────
+
+function EmergencyContactCard() {
+  const { t } = useI18n();
+  const { profileId } = useApp();
+  const { data: prof, loading } = useQuery(() => getProfile(profileId), [profileId]);
+  const [name, setName] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [relation, setRelation] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!prof) return;
+    setName(prof.emergencyContactName ?? "");
+    setPhone(prof.emergencyContactPhone ?? "");
+    setRelation(prof.emergencyContactRelation ?? "");
+  }, [prof]);
+
+  if (loading) return <Loading />;
+
+  const trimToNull = (s: string) => (s.trim() ? s.trim() : null);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <HeartPulse className="size-4 text-muted-foreground" />
+          <CardTitle>{t("emergency.settings.title")}</CardTitle>
+        </div>
+        <CardDescription>{t("emergency.settings.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("emergency.settings.name")}>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label={t("emergency.settings.phone")}>
+            <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </Field>
+          <Field label={t("emergency.settings.relation")}>
+            <Input value={relation} onChange={(e) => setRelation(e.target.value)} />
+          </Field>
+        </div>
+        <div>
+          <Button
+            onClick={async () => {
+              await updateProfile(profileId, {
+                emergencyContactName: trimToNull(name),
+                emergencyContactPhone: trimToNull(phone),
+                emergencyContactRelation: trimToNull(relation),
+              });
+              setSaved(true);
+              setTimeout(() => setSaved(false), 2000);
+            }}
+          >
+            {saved ? t("emergency.settings.saved") : t("emergency.settings.save")}
           </Button>
         </div>
       </CardContent>
@@ -340,14 +398,16 @@ function ExportCard() {
           disabled={busy !== null}
           onClick={() => run("json", exportAllJson)}
         >
-          <Download /> {busy === "json" ? t("settings.export.exporting") : t("settings.export.exportAll")}
+          <Download />{" "}
+          {busy === "json" ? t("settings.export.exporting") : t("settings.export.exportAll")}
         </Button>
         <Button
           variant="outline"
           disabled={busy !== null}
           onClick={() => run("csv", () => exportLabsCsv(profileId))}
         >
-          <Download /> {busy === "csv" ? t("settings.export.exporting") : t("settings.export.exportLabs")}
+          <Download />{" "}
+          {busy === "csv" ? t("settings.export.exporting") : t("settings.export.exportLabs")}
         </Button>
       </CardContent>
     </Card>

@@ -696,6 +696,29 @@ export const en = {
       prescription: "Prescription",
     },
   },
+
+  // Full-text search + command palette
+  search: {
+    title: "Search",
+    open: "Search",
+    placeholder: "Search records…",
+    timelineFilter: "Filter events…",
+    esc: "Esc",
+    hint: "Type to search your health records",
+    noResults: 'No results for "{{query}}"',
+    footer: "↑↓ navigate · Enter open · Esc close",
+    types: {
+      biomarker: "Biomarker",
+      lab_panel: "Lab",
+      visit: "Visit",
+      diagnosis: "Diagnosis",
+      medication: "Medication",
+      allergy: "Allergy",
+      vaccine: "Vaccine",
+      symptom: "Symptom",
+      imaging: "Imaging",
+    },
+  },
 } as const;
 
 export type TranslationKeys = typeof en;

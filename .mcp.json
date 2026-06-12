@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "soma": {
-      "command": "node",
-      "args": ["mcp/dist/index.js"]
+      "command": "bun",
+      "args": ["run", "mcp/src/index.ts"]
     }
   }
 }

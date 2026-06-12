@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
+    "mcp:sidecar": "pnpm -C mcp run build:sidecar",
     "db:generate": "drizzle-kit generate",
     "lint": "eslint .",
     "format": "prettier --write .",

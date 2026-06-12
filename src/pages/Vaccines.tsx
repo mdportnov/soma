@@ -2,9 +2,10 @@ import * as React from "react";
 import { Pencil, Plus, Syringe } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createVaccine, listVaccines, updateVaccine } from "@/db/repos";
+import { createVaccine, getProfile, listVaccines, updateVaccine } from "@/db/repos";
 import type { Vaccine } from "@/db/schema";
 import { PageHeader } from "@/components/app/PageHeader";
+import { VaccineCalendar } from "@/components/app/VaccineCalendar";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
@@ -30,6 +31,7 @@ export function Vaccines() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const { data: vaccines, loading, reload } = useQuery(() => listVaccines(profileId), [profileId]);
+  const { data: profile } = useQuery(() => getProfile(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Vaccine | null>(null);
 
@@ -63,90 +65,97 @@ export function Vaccines() {
         }
       />
 
-      {vaccines.length === 0 ? (
-        <EmptyState
-          icon={Syringe}
-          title={t("vaccines.emptyTitle")}
-          description={t("vaccines.emptyDescription")}
-          action={
-            <Button size="sm" onClick={openNew}>
-              {t("vaccines.addFirst")}
-            </Button>
-          }
-        />
-      ) : (
-        <div className="space-y-4">
-          {Array.from(grouped.entries()).map(([name, rows]) => (
-            <section key={name}>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {name}
-              </h2>
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t("vaccines.table.date")}</TableHead>
-                        <TableHead>{t("vaccines.table.dose")}</TableHead>
-                        <TableHead>{t("vaccines.table.manufacturerBatch")}</TableHead>
-                        <TableHead>{t("vaccines.table.country")}</TableHead>
-                        <TableHead>{t("vaccines.table.administeredBy")}</TableHead>
-                        <TableHead>{t("vaccines.table.expires")}</TableHead>
-                        <TableHead className="w-10" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {rows.map((v) => {
-                        const isExpired = v.expiresAt != null && v.expiresAt < today;
-                        return (
-                          <TableRow key={v.id}>
-                            <TableCell>{formatDate(v.date)}</TableCell>
-                            <TableCell>{v.dose ?? "—"}</TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {[v.manufacturer, v.batchNumber].filter(Boolean).join(" / ") || "—"}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {v.country ?? "—"}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {v.administeredBy ?? "—"}
-                            </TableCell>
-                            <TableCell>
-                              {v.expiresAt ? (
-                                <span className="flex items-center gap-1.5">
-                                  {formatDate(v.expiresAt)}
-                                  {isExpired && (
-                                    <Badge variant="warning">{t("vaccines.expired")}</Badge>
-                                  )}
-                                </span>
-                              ) : (
-                                "—"
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="iconSm"
-                                aria-label={t("common.edit")}
-                                onClick={() => {
-                                  setEditing(v);
-                                  setFormOpen(true);
-                                }}
-                              >
-                                <Pencil />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </section>
-          ))}
-        </div>
-      )}
+      <div className="space-y-6">
+        <VaccineCalendar birthDate={profile?.birthDate ?? null} records={vaccines} />
+
+        {vaccines.length === 0 ? (
+          <EmptyState
+            icon={Syringe}
+            title={t("vaccines.emptyTitle")}
+            description={t("vaccines.emptyDescription")}
+            action={
+              <Button size="sm" onClick={openNew}>
+                {t("vaccines.addFirst")}
+              </Button>
+            }
+          />
+        ) : (
+          <section className="space-y-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("vaccines.recordsTitle")}
+            </h2>
+            {Array.from(grouped.entries()).map(([name, rows]) => (
+              <section key={name}>
+                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {name}
+                </h2>
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{t("vaccines.table.date")}</TableHead>
+                          <TableHead>{t("vaccines.table.dose")}</TableHead>
+                          <TableHead>{t("vaccines.table.manufacturerBatch")}</TableHead>
+                          <TableHead>{t("vaccines.table.country")}</TableHead>
+                          <TableHead>{t("vaccines.table.administeredBy")}</TableHead>
+                          <TableHead>{t("vaccines.table.expires")}</TableHead>
+                          <TableHead className="w-10" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rows.map((v) => {
+                          const isExpired = v.expiresAt != null && v.expiresAt < today;
+                          return (
+                            <TableRow key={v.id}>
+                              <TableCell>{formatDate(v.date)}</TableCell>
+                              <TableCell>{v.dose ?? "—"}</TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {[v.manufacturer, v.batchNumber].filter(Boolean).join(" / ") || "—"}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {v.country ?? "—"}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {v.administeredBy ?? "—"}
+                              </TableCell>
+                              <TableCell>
+                                {v.expiresAt ? (
+                                  <span className="flex items-center gap-1.5">
+                                    {formatDate(v.expiresAt)}
+                                    {isExpired && (
+                                      <Badge variant="warning">{t("vaccines.expired")}</Badge>
+                                    )}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="iconSm"
+                                  aria-label={t("common.edit")}
+                                  onClick={() => {
+                                    setEditing(v);
+                                    setFormOpen(true);
+                                  }}
+                                >
+                                  <Pencil />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </section>
+            ))}
+          </section>
+        )}
+      </div>
 
       <VaccineForm
         open={formOpen}

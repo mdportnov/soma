@@ -17,6 +17,36 @@ export type RawExtraction = {
   page: number | null;
 };
 
+/**
+ * Vaccination-certificate extraction. No dictionary fallback exists, so every
+ * row is reviewed manually before it reaches the database.
+ */
+export type RawVaccineExtraction = {
+  vaccineName: string;
+  /** ISO `YYYY-MM-DD` administration date, or null when not legible. */
+  date: string | null;
+  /** Dose number within a series (1 of 3), or null. */
+  doseNumber: number | null;
+  manufacturer: string | null;
+  batchNumber: string | null;
+  /** ISO `YYYY-MM-DD` validity end, or null. */
+  expiresAt: string | null;
+};
+
+/**
+ * Discharge-summary extraction. Free-form clinical document with mixed entities;
+ * always reviewed manually before any visit/diagnosis/medication is written.
+ */
+export type RawDischargeExtraction = {
+  /** ISO `YYYY-MM-DD`, or null when not legible. */
+  visitDate: string | null;
+  clinic: string | null;
+  doctorName: string | null;
+  diagnoses: { name: string; icdCode: string | null }[];
+  medications: { name: string; dose: string | null }[];
+  notes: string;
+};
+
 export type MappingCandidatePayload = {
   biomarker_id: number;
   canonical_name: string;
@@ -34,6 +64,13 @@ export interface AIProvider {
   readonly id: string;
   /** Phase 1: strict structured extraction from an image/PDF. */
   extractFromDocument(doc: DocumentInput): Promise<RawExtraction[]>;
+  /**
+   * Vaccination-certificate extraction. Output is always reviewed manually —
+   * there is no deterministic dictionary fallback for vaccines.
+   */
+  extractVaccinesFromDocument(doc: DocumentInput): Promise<RawVaccineExtraction[]>;
+  /** Discharge-summary extraction. Always reviewed manually before saving. */
+  extractDischargeFromDocument(doc: DocumentInput): Promise<RawDischargeExtraction>;
   /**
    * Phase 2 fallback: pick the most likely biomarker for a raw label from an
    * explicit candidate list, or null. The model never invents biomarkers.

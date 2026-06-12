@@ -664,6 +664,54 @@ export const en = {
     aiDisabledDescription:
       "To import lab reports from PDF or photos, enable AI analysis and paste your API key in Settings. Your documents are sent only to the provider you choose, only when you run an import.",
     openSettings: "Open Settings",
+    selectType: {
+      title: "What are you importing?",
+      description: "Pick the document type so the AI knows what to look for.",
+      continue: "Continue",
+    },
+    docTypes: {
+      lab: "Lab report",
+      labDescription: "Blood, urine and other quantitative results.",
+      vaccine: "Vaccination certificate",
+      vaccineDescription: "Vaccine doses, dates, manufacturers and batches.",
+      discharge: "Discharge summary",
+      dischargeDescription: "Visit, diagnoses and prescribed medications.",
+    },
+    reviewBanner: {
+      title: "Requires 100% manual review",
+      description:
+        "Verify every entry against the original document before saving. Nothing here is auto-accepted.",
+    },
+    vaccineReview: {
+      choose: "Choose a vaccination certificate",
+      extracting: "Reading the certificate…",
+      title: "Review extracted vaccines",
+      description: "Tick the doses to keep and correct any field against the original.",
+      saving: "Saving vaccines…",
+      columns: {
+        vaccine: "Vaccine name",
+        dose: "Dose #",
+        manufacturer: "Manufacturer",
+        batch: "Batch",
+        expires: "Expires",
+      },
+      empty: "No vaccine doses were found in the document.",
+      save: "Save {{count}} vaccines",
+    },
+    dischargeReview: {
+      choose: "Choose a discharge summary",
+      extracting: "Reading the discharge summary…",
+      title: "Review discharge summary",
+      description: "Confirm the visit details and pick which records to save.",
+      saving: "Saving records…",
+      visitTitle: "Visit details",
+      typeColumn: "Type",
+      detailColumn: "Detail",
+      diagnosisBadge: "diagnosis",
+      medicationBadge: "medication",
+      empty: "No diagnoses or medications were found in the document.",
+      save: "Save {{count}} records",
+    },
   },
 
   // Dashboard page

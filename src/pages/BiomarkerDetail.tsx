@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, LineChart } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { getBiomarker, getBiomarkerSeries, listMedications } from "@/db/repos";
+import { getBiomarker, getBiomarkerSeries, listMedications, listSymptomLog } from "@/db/repos";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -19,7 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TrendChart, OVERLAY_COLORS, type MedOverlay } from "@/components/charts/TrendChart";
+import {
+  TrendChart,
+  OVERLAY_COLORS,
+  type MedOverlay,
+  type SymptomOverlay,
+} from "@/components/charts/TrendChart";
 import { cn, formatDate, formatValue } from "@/lib/utils";
 
 export function BiomarkerDetail() {
@@ -28,20 +33,23 @@ export function BiomarkerDetail() {
   const { t } = useI18n();
   const biomarkerId = Number(id);
   const [activeOverlays, setActiveOverlays] = React.useState<Set<number>>(new Set());
+  const [showSymptoms, setShowSymptoms] = React.useState(false);
 
   const { data, loading } = useQuery(async () => {
-    const [bio, series, meds] = await Promise.all([
+    const [bio, series, meds, symptoms] = await Promise.all([
       getBiomarker(biomarkerId),
       getBiomarkerSeries(profileId, biomarkerId),
       listMedications(profileId),
+      listSymptomLog(profileId),
     ]);
-    return { bio, series, meds };
+    return { bio, series, meds, symptoms };
   }, [profileId, biomarkerId]);
 
   if (loading || !data) return <Loading />;
-  if (!data.bio) return <EmptyState icon={LineChart} title={t("biomarkerDetail.biomarkerNotFound")} />;
+  if (!data.bio)
+    return <EmptyState icon={LineChart} title={t("biomarkerDetail.biomarkerNotFound")} />;
 
-  const { bio, series, meds } = data;
+  const { bio, series, meds, symptoms } = data;
 
   const overlays: MedOverlay[] = meds
     .filter((m) => activeOverlays.has(m.id))
@@ -52,6 +60,17 @@ export function BiomarkerDetail() {
       end: m.endDate,
       color: OVERLAY_COLORS[i % OVERLAY_COLORS.length],
     }));
+
+  const symptomOverlays: SymptomOverlay[] = showSymptoms
+    ? symptoms
+        .filter((s) => s.severity >= 3)
+        .map((s) => ({
+          date: s.date,
+          name: s.symptomName,
+          severity: s.severity,
+          notes: s.notes,
+        }))
+    : [];
 
   return (
     <>
@@ -102,9 +121,27 @@ export function BiomarkerDetail() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <TrendChart series={series} biomarker={bio} overlays={overlays} />
-              {meds.length > 0 && (
+              <TrendChart
+                series={series}
+                biomarker={bio}
+                overlays={overlays}
+                symptomOverlays={symptomOverlays}
+              />
+              {(meds.length > 0 || symptoms.length > 0) && (
                 <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
+                  {symptoms.length > 0 && (
+                    <button
+                      onClick={() => setShowSymptoms((v) => !v)}
+                      className={cn(
+                        "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                        showSymptoms
+                          ? "border-transparent bg-destructive text-white"
+                          : "text-muted-foreground hover:bg-muted",
+                      )}
+                    >
+                      {t("biomarkerSymptoms.toggle")}
+                    </button>
+                  )}
                   {meds.map((m) => {
                     const active = activeOverlays.has(m.id);
                     const idx = overlays.findIndex((o) => o.id === m.id);

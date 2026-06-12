@@ -10,6 +10,8 @@ export const en = {
     diagnoses: "Diagnoses",
     allergies: "Allergies",
     vaccines: "Vaccines",
+    imaging: "Imaging",
+    journal: "Journal",
     settings: "Settings",
     records: "Records",
     labsVitals: "Labs & Vitals",
@@ -791,6 +793,179 @@ export const en = {
       save: "Save contact",
       saved: "Saved",
     },
+  },
+
+  // Journal page (weight / blood pressure / symptoms)
+  journal: {
+    title: "Journal",
+    description: "Track weight, blood pressure and symptoms over time.",
+    tabs: {
+      weight: "Weight",
+      bp: "Blood pressure",
+      symptoms: "Symptoms",
+    },
+  },
+
+  weight: {
+    chartTitle: "Weight trend",
+    targetLabel: "Target",
+    logWeight: "Log weight",
+    emptyTitle: "No weight entries yet",
+    emptyDescription: "Log your weight to see how it trends over time.",
+    addFirst: "Log first weight",
+    table: {
+      date: "Date",
+      weight: "Weight",
+      notes: "Notes",
+    },
+    dialog: {
+      titleAdd: "Log weight",
+      titleEdit: "Edit weight entry",
+    },
+    fields: {
+      weight: "Weight",
+      notesOptional: "Notes (optional)",
+    },
+  },
+
+  bp: {
+    chartTitle: "Blood pressure trend",
+    systolic: "Systolic",
+    diastolic: "Diastolic",
+    logReading: "Log reading",
+    emptyTitle: "No blood-pressure readings yet",
+    emptyDescription: "Log a reading to track systolic and diastolic over time.",
+    addFirst: "Log first reading",
+    crisisBanner:
+      "A reading in the last 7 days is in the hypertensive-crisis range (systolic > 180 or diastolic > 120). If you have symptoms such as chest pain, shortness of breath or vision changes, seek emergency medical attention.",
+    status: {
+      stage2: "Stage 2",
+      crisis: "Crisis",
+    },
+    crisisHint: "This value is in the hypertensive-crisis range.",
+    table: {
+      date: "Date",
+      time: "Time",
+      reading: "Reading",
+      pulse: "Pulse",
+      status: "Status",
+      notes: "Notes",
+    },
+    dialog: {
+      titleAdd: "Log blood pressure",
+      titleEdit: "Edit reading",
+    },
+    fields: {
+      timeOptional: "Time (optional)",
+      systolic: "Systolic",
+      diastolic: "Diastolic",
+      heartRate: "Heart rate",
+      position: "Position",
+      arm: "Arm",
+      notesOptional: "Notes (optional)",
+    },
+    position: {
+      sitting: "Sitting",
+      standing: "Standing",
+      supine: "Supine",
+    },
+    arm: {
+      left: "Left",
+      right: "Right",
+    },
+  },
+
+  symptoms: {
+    thresholdLabel: "Showing severity ≥ {{n}}",
+    showAll: "Show all",
+    logSymptom: "Log symptom",
+    emptyTitle: "No symptoms logged yet",
+    emptyDescription: "Log symptoms with a severity to spot patterns over time.",
+    addFirst: "Log first symptom",
+    previouslyLogged: "Previously logged",
+    table: {
+      date: "Date",
+      time: "Time",
+      symptom: "Symptom",
+      severity: "Severity",
+      notes: "Notes",
+    },
+    dialog: {
+      titleAdd: "Log symptom",
+      titleEdit: "Edit symptom",
+    },
+    fields: {
+      symptomName: "Symptom",
+      timeOptional: "Time (optional)",
+      severity: "Severity",
+      notesOptional: "Notes (optional)",
+    },
+    namePlaceholder: "e.g. Headache, Fatigue",
+  },
+
+  symptomSeverity: {
+    "1": "1 — Minimal",
+    "2": "2 — Very mild",
+    "3": "3 — Mild",
+    "4": "4 — Mild-moderate",
+    "5": "5 — Moderate",
+    "6": "6 — Moderate-severe",
+    "7": "7 — Severe",
+    "8": "8 — Very severe",
+    "9": "9 — Intense",
+    "10": "10 — Incapacitating",
+  },
+
+  // Imaging records
+  imaging: {
+    title: "Imaging",
+    description: "X-ray, CT, MRI, ultrasound and other imaging studies.",
+    newRecord: "New record",
+    emptyTitle: "No imaging records yet",
+    emptyDescription: "Add an imaging study to keep your radiology history in one place.",
+    addFirst: "Add first record",
+    back: "Imaging",
+    table: {
+      date: "Date",
+      modality: "Modality",
+      bodyArea: "Body area",
+      facility: "Facility",
+      visit: "Visit",
+    },
+    newTitle: "New imaging record",
+    editTitle: "Edit imaging record",
+    newDescription: "Record an imaging study and its findings.",
+    studyDetailsTitle: "Study details",
+    findingsTitle: "Findings",
+    delete: "Delete record",
+    fields: {
+      date: "Date",
+      modality: "Modality",
+      bodyArea: "Body area",
+      facility: "Facility",
+      city: "City",
+      country: "Country",
+      visit: "Visit",
+      findings: "Findings",
+      radiologist: "Radiologist",
+    },
+    bodyAreaPlaceholder: "e.g. Lumbar spine, Chest",
+    noVisit: "No linked visit",
+    visitLabel: "{{date}} — {{doctor}}",
+    visitLabelNoDoctor: "{{date}} — visit",
+  },
+
+  imagingModality: {
+    xray: "X-ray",
+    ct: "CT",
+    mri: "MRI",
+    ultrasound: "Ultrasound",
+    pet: "PET",
+    other: "Other",
+  },
+
+  biomarkerSymptoms: {
+    toggle: "Symptoms",
   },
 } as const;
 

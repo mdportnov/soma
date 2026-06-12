@@ -17,6 +17,9 @@ import { Diagnoses } from "@/pages/Diagnoses";
 import { Allergies } from "@/pages/Allergies";
 import { Vaccines } from "@/pages/Vaccines";
 import { EmergencyCard } from "@/pages/EmergencyCard";
+import { Journal } from "@/pages/Journal";
+import { Imaging } from "@/pages/Imaging";
+import { ImagingNew } from "@/pages/ImagingNew";
 import { Settings } from "@/pages/Settings";
 
 export default function App() {
@@ -41,6 +44,10 @@ export default function App() {
               <Route path="allergies" element={<Allergies />} />
               <Route path="vaccines" element={<Vaccines />} />
               <Route path="emergency" element={<EmergencyCard />} />
+              <Route path="journal" element={<Journal />} />
+              <Route path="imaging" element={<Imaging />} />
+              <Route path="imaging/new" element={<ImagingNew />} />
+              <Route path="imaging/:id" element={<ImagingNew />} />
               <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>

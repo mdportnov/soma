@@ -59,14 +59,18 @@ function DatePopover({
   const computePos = React.useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    // Use the rendered panel size when available; fall back to estimates on
+    // the first paint (corrected by the post-mount layout effect below).
+    const panelW = panelRef.current?.offsetWidth ?? 330;
+    const panelH = panelRef.current?.offsetHeight ?? PANEL_HEIGHT;
     const spaceBelow = window.innerHeight - rect.bottom - 8;
-    const openUp = spaceBelow < PANEL_HEIGHT && rect.top > spaceBelow;
+    const openUp = spaceBelow < panelH && rect.top > spaceBelow;
     setPos({
       top: openUp ? rect.top - PANEL_GAP : rect.bottom + PANEL_GAP,
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - 320)),
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - panelW - 8)),
       transformOrigin: openUp ? "bottom left" : "top left",
     });
-  }, [triggerRef]);
+  }, [triggerRef, panelRef]);
 
   React.useEffect(() => {
     if (open) {
@@ -78,6 +82,12 @@ function DatePopover({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Re-clamp once the panel has real dimensions (first estimate may be off).
+  React.useLayoutEffect(() => {
+    if (rendered && open) computePos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rendered]);
 
   // Track scroll/resize while open so the panel sticks to its trigger.
   React.useEffect(() => {

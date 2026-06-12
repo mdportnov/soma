@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Download,
   Globe,
+  MonitorSmartphone,
   Moon,
   Sun,
   HeartPulse,
@@ -27,7 +28,7 @@ import {
 } from "@/ai";
 import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
 import { appLogDir, join } from "@tauri-apps/api/path";
-import { applyTheme, loadTheme, type Theme } from "@/lib/theme";
+import { applyThemePreference, loadThemePreference, type ThemePreference } from "@/lib/theme";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
@@ -71,11 +72,11 @@ export function Settings() {
 
 function AppearanceCard() {
   const { lang, setLang, t } = useI18n();
-  const [theme, setTheme] = React.useState<Theme>(() => loadTheme());
+  const [theme, setTheme] = React.useState<ThemePreference>(() => loadThemePreference());
 
-  const changeTheme = (next: Theme) => {
+  const changeTheme = (next: ThemePreference) => {
     setTheme(next);
-    applyTheme(next);
+    applyThemePreference(next);
   };
 
   const segment = (active: boolean): "secondary" | "ghost" => (active ? "secondary" : "ghost");
@@ -122,6 +123,14 @@ function AppearanceCard() {
               onClick={() => changeTheme("dark")}
             >
               <Moon className="size-3.5" /> {t("settings.appearance.dark")}
+            </Button>
+            <Button
+              variant={segment(theme === "system")}
+              size="sm"
+              className="h-7 gap-1.5 px-3"
+              onClick={() => changeTheme("system")}
+            >
+              <MonitorSmartphone className="size-3.5" /> {t("settings.appearance.system")}
             </Button>
           </div>
         </Field>

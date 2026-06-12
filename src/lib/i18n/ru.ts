@@ -100,6 +100,7 @@ export const ru = {
       theme: "Тема",
       light: "Светлая",
       dark: "Тёмная",
+      system: "Системная",
     },
     logs: {
       title: "Логи",

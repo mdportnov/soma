@@ -100,6 +100,7 @@ export const en = {
       theme: "Theme",
       light: "Light",
       dark: "Dark",
+      system: "System",
     },
     logs: {
       title: "Logs",

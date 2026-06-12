@@ -1,18 +1,28 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { and, asc, eq, gte, isNull, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { biomarker, labPanel, labResult, medication, profile } from "../../src/db/schema";
+import {
+  biomarker,
+  diagnosis,
+  labPanel,
+  labResult,
+  medication,
+  profile,
+} from "../../src/db/schema";
 import { computeFlag, convertToDefaultUnit } from "../../src/lib/units";
 import { openDb, resolveDbPath } from "./db";
 import { describeCandidates, matchBiomarker } from "./mapping";
+import { allergy, bpLog, symptomLog, vaccine, weightLog } from "./schema-extra";
 
-const INSTRUCTIONS = `Soma is a local-first personal health database (labs, medications, visits, diagnoses).
+const INSTRUCTIONS = `Soma is a local-first personal health database (labs, medications, visits, diagnoses, allergies, vaccines, symptoms, weight and blood pressure).
 Domain rules you must follow:
+- ALWAYS call get_medical_summary FIRST before interpreting any health data — it returns safety-critical context (active allergies, diagnoses, medications, blood type). Never reason about symptoms, labs or new medications without it.
 - Biomarkers come from a fixed dictionary with canonical names, EN/RU aliases, a default unit, reference ranges (refLow/refHigh) and optimal ranges. Never invent biomarkers: resolve names with search_biomarkers first.
 - Values are stored in the biomarker's default unit; out-of-range flags are computed against the reference range in that unit.
-- All dates are ISO 8601 (YYYY-MM-DD). Medications have intake periods (startDate, endDate; endDate=null means currently taking) — when interpreting a biomarker trend, correlate changes with overlapping medication periods returned by get_biomarker_trend.
-- Writes are validated strictly: add_lab_panel refuses unmapped biomarkers and unknown unit conversions instead of guessing. Use dryRun=true first when unsure.
+- All dates are ISO 8601 (YYYY-MM-DD). Medications have intake periods (startDate, endDate; endDate=null means currently taking) — when interpreting a biomarker, symptom or BP trend, correlate changes with overlapping medication periods returned by get_biomarker_trend / get_symptom_trend.
+- Trends: get_symptom_trend (severity over time + overlapping meds), get_weight_trend (kg vs target), get_bp_trend (systolic/diastolic with normal/stage2/crisis flags).
+- Writes are validated strictly: add_lab_panel, add_allergy, add_vaccine and log_symptom validate dates (no future dates) and enums, refuse instead of guessing, and support dryRun=true to preview the exact row. log_symptom reuses the existing spelling of a known symptom when it matches case-insensitively.
 - This is personal medical data. Be precise, never fabricate values, and do not write anything the user did not explicitly provide.`;
 
 const dbPath = resolveDbPath();
@@ -204,6 +214,277 @@ server.registerTool(
   },
 );
 
+function overlappingMedications(profileId: number, minDate: string, maxDate: string) {
+  return db.orm
+    .select({
+      id: medication.id,
+      name: medication.name,
+      type: medication.type,
+      doseAmount: medication.doseAmount,
+      doseUnit: medication.doseUnit,
+      startDate: medication.startDate,
+      endDate: medication.endDate,
+      purpose: medication.purpose,
+    })
+    .from(medication)
+    .where(
+      and(
+        eq(medication.profileId, profileId),
+        lte(medication.startDate, maxDate),
+        or(isNull(medication.endDate), gte(medication.endDate, minDate)),
+      ),
+    )
+    .all();
+}
+
+const SEVERITY_RANK: Record<string, number> = {
+  anaphylactic: 0,
+  severe: 1,
+  moderate: 2,
+  mild: 3,
+};
+
+server.registerTool(
+  "get_medical_summary",
+  {
+    title: "Get medical summary",
+    description:
+      "Call this FIRST before interpreting any health data — safety-critical context (allergies!). Returns profile basics (name, birthDate, sex, blood type+Rh, conditions), active allergies (anaphylactic first), active diagnoses, active medications, and the 5 most recent vaccines with an `expired` flag.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+    },
+  },
+  async ({ profileId }) => {
+    const pid = resolveProfileId(profileId);
+    if ("error" in pid) return fail(pid.error);
+
+    const p = db.orm.select().from(profile).where(eq(profile.id, pid.id)).get();
+    if (!p) return fail(`Profile ${pid.id} not found.`);
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const allergies = db.orm
+      .select({
+        allergen: allergy.allergen,
+        category: allergy.category,
+        severity: allergy.severity,
+        reaction: allergy.reaction,
+      })
+      .from(allergy)
+      .where(and(eq(allergy.profileId, pid.id), eq(allergy.status, "active")))
+      .all()
+      .sort((a, b) => (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9));
+
+    const diagnoses = db.orm
+      .select({
+        name: diagnosis.name,
+        icd: diagnosis.icdCode,
+        date: diagnosis.date,
+      })
+      .from(diagnosis)
+      .where(and(eq(diagnosis.profileId, pid.id), eq(diagnosis.status, "active")))
+      .orderBy(desc(diagnosis.date))
+      .all();
+
+    const medications = db.orm
+      .select({
+        name: medication.name,
+        doseAmount: medication.doseAmount,
+        doseUnit: medication.doseUnit,
+        schedule: medication.schedule,
+        startDate: medication.startDate,
+      })
+      .from(medication)
+      .where(and(eq(medication.profileId, pid.id), isNull(medication.endDate)))
+      .all()
+      .map((m) => ({
+        name: m.name,
+        dose: m.doseAmount != null ? `${m.doseAmount}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : null,
+        frequency: m.schedule?.frequency ?? null,
+        startDate: m.startDate,
+      }));
+
+    const vaccines = db.orm
+      .select({
+        name: vaccine.vaccineName,
+        date: vaccine.date,
+        dose: vaccine.doseNumber,
+        expiresAt: vaccine.expiresAt,
+      })
+      .from(vaccine)
+      .where(eq(vaccine.profileId, pid.id))
+      .orderBy(desc(vaccine.date))
+      .limit(5)
+      .all()
+      .map((v) => ({
+        ...v,
+        expired: v.expiresAt != null && v.expiresAt < today,
+      }));
+
+    return ok({
+      profile: {
+        id: p.id,
+        name: p.name,
+        birthDate: p.birthDate,
+        sex: p.sex,
+        bloodType:
+          p.bloodType != null
+            ? `${p.bloodType}${p.rhFactor === "positive" ? "+" : p.rhFactor === "negative" ? "-" : ""}`
+            : null,
+        conditions: p.conditions,
+      },
+      activeAllergies: allergies,
+      activeDiagnoses: diagnoses,
+      activeMedications: medications,
+      recentVaccines: vaccines,
+    });
+  },
+);
+
+server.registerTool(
+  "get_symptom_trend",
+  {
+    title: "Get symptom trend",
+    description:
+      "Returns the severity time series for one symptom (case-insensitive name match) plus medications whose intake period overlaps the series. If the name doesn't match, returns the list of distinct known symptom names so you can pick the right one.",
+    inputSchema: {
+      symptomName: z.string().min(1).describe("Symptom name, case-insensitive, e.g. 'headache'"),
+      profileId: z.number().int().optional(),
+      from: z.string().regex(ISO_DATE).optional().describe("Inclusive lower bound, YYYY-MM-DD"),
+      to: z.string().regex(ISO_DATE).optional().describe("Inclusive upper bound, YYYY-MM-DD"),
+    },
+  },
+  async ({ symptomName, profileId, from, to }) => {
+    const pid = resolveProfileId(profileId);
+    if ("error" in pid) return fail(pid.error);
+
+    const conditions = [
+      eq(symptomLog.profileId, pid.id),
+      sql`lower(${symptomLog.symptomName}) = lower(${symptomName})`,
+    ];
+    if (from) conditions.push(gte(symptomLog.date, from));
+    if (to) conditions.push(lte(symptomLog.date, to));
+
+    const series = db.orm
+      .select({
+        date: symptomLog.date,
+        time: symptomLog.time,
+        severity: symptomLog.severity,
+        notes: symptomLog.notes,
+      })
+      .from(symptomLog)
+      .where(and(...conditions))
+      .orderBy(asc(symptomLog.date), asc(symptomLog.time))
+      .all();
+
+    if (series.length === 0) {
+      const known = db.orm
+        .selectDistinct({ name: symptomLog.symptomName })
+        .from(symptomLog)
+        .where(eq(symptomLog.profileId, pid.id))
+        .all()
+        .map((r) => r.name);
+      return ok({
+        symptomName,
+        points: [],
+        knownSymptoms: known,
+        note:
+          known.length > 0
+            ? "No entries for that symptom name. Pick one of knownSymptoms."
+            : "No symptoms have been logged yet.",
+      });
+    }
+
+    const meds = overlappingMedications(pid.id, series[0].date, series[series.length - 1].date);
+
+    return ok({ symptomName, points: series, overlappingMedications: meds });
+  },
+);
+
+server.registerTool(
+  "get_weight_trend",
+  {
+    title: "Get weight trend",
+    description:
+      "Returns the body-weight time series (kg) for the profile plus the target weight, if set.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      from: z.string().regex(ISO_DATE).optional().describe("Inclusive lower bound, YYYY-MM-DD"),
+      to: z.string().regex(ISO_DATE).optional().describe("Inclusive upper bound, YYYY-MM-DD"),
+    },
+  },
+  async ({ profileId, from, to }) => {
+    const pid = resolveProfileId(profileId);
+    if ("error" in pid) return fail(pid.error);
+
+    const p = db.orm
+      .select({ target: profile.targetWeightKg })
+      .from(profile)
+      .where(eq(profile.id, pid.id))
+      .get();
+
+    const conditions = [eq(weightLog.profileId, pid.id)];
+    if (from) conditions.push(gte(weightLog.date, from));
+    if (to) conditions.push(lte(weightLog.date, to));
+
+    const points = db.orm
+      .select({ date: weightLog.date, weightKg: weightLog.weightKg })
+      .from(weightLog)
+      .where(and(...conditions))
+      .orderBy(asc(weightLog.date))
+      .all();
+
+    return ok({ points, targetWeightKg: p?.target ?? null });
+  },
+);
+
+function bpFlag(systolic: number, diastolic: number): "normal" | "stage2" | "crisis" {
+  if (systolic > 180 || diastolic > 120) return "crisis";
+  if (systolic >= 140 || diastolic >= 90) return "stage2";
+  return "normal";
+}
+
+server.registerTool(
+  "get_bp_trend",
+  {
+    title: "Get blood-pressure trend",
+    description:
+      "Returns the blood-pressure time series with a per-reading flag (stage2: systolic≥140 or diastolic≥90; crisis: systolic>180 or diastolic>120) and summary counts per flag.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      from: z.string().regex(ISO_DATE).optional().describe("Inclusive lower bound, YYYY-MM-DD"),
+      to: z.string().regex(ISO_DATE).optional().describe("Inclusive upper bound, YYYY-MM-DD"),
+    },
+  },
+  async ({ profileId, from, to }) => {
+    const pid = resolveProfileId(profileId);
+    if ("error" in pid) return fail(pid.error);
+
+    const conditions = [eq(bpLog.profileId, pid.id)];
+    if (from) conditions.push(gte(bpLog.date, from));
+    if (to) conditions.push(lte(bpLog.date, to));
+
+    const rows = db.orm
+      .select({
+        date: bpLog.date,
+        time: bpLog.time,
+        systolic: bpLog.systolic,
+        diastolic: bpLog.diastolic,
+        heartRateBpm: bpLog.heartRateBpm,
+      })
+      .from(bpLog)
+      .where(and(...conditions))
+      .orderBy(asc(bpLog.date), asc(bpLog.time))
+      .all();
+
+    const points = rows.map((r) => ({ ...r, flag: bpFlag(r.systolic, r.diastolic) }));
+    const summary = { normal: 0, stage2: 0, crisis: 0 };
+    for (const pt of points) summary[pt.flag] += 1;
+
+    return ok({ points, summary });
+  },
+);
+
 const labResultInput = z.object({
   label: z.string().min(1).describe("Biomarker name exactly as written in the source"),
   value: z.number().finite(),
@@ -320,9 +601,7 @@ server.registerTool(
     }));
 
     if (errors.length > 0) {
-      return fail(
-        JSON.stringify({ saved: false, errors, validRows: review }, null, 2),
-      );
+      return fail(JSON.stringify({ saved: false, errors, validRows: review }, null, 2));
     }
     if (dryRun) return ok({ saved: false, dryRun: true, rows: review });
 
@@ -359,6 +638,180 @@ server.registerTool(
     });
 
     return ok({ saved: true, panelId, date, rows: review });
+  },
+);
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+server.registerTool(
+  "add_allergy",
+  {
+    title: "Add allergy",
+    description:
+      "Records an allergy (safety-critical). Validates the optional onset date (ISO, not future) and the severity/category enums. Set dryRun=true to preview the row without writing. Only record what the user explicitly stated.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      allergen: z.string().min(1).describe("What the person is allergic to, e.g. 'penicillin'"),
+      category: z
+        .enum(["drug", "food", "environmental", "other"])
+        .default("other")
+        .describe("Allergen class"),
+      severity: z
+        .enum(["mild", "moderate", "severe", "anaphylactic"])
+        .describe("Worst observed reaction severity"),
+      reaction: z.string().optional().describe("Observed reaction, e.g. 'hives, swelling'"),
+      onsetDate: z
+        .string()
+        .regex(ISO_DATE)
+        .optional()
+        .describe("When it first appeared, YYYY-MM-DD"),
+      notes: z.string().optional(),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async ({ profileId, allergen, category, severity, reaction, onsetDate, notes, dryRun }) => {
+    if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
+    const pid = resolveProfileId(profileId);
+    if ("error" in pid) return fail(pid.error);
+    if (onsetDate && onsetDate > todayIso())
+      return fail(`onsetDate ${onsetDate} is in the future.`);
+
+    const row = {
+      profileId: pid.id,
+      allergen,
+      category,
+      severity,
+      reaction: reaction ?? null,
+      onsetDate: onsetDate ?? null,
+      status: "active" as const,
+      notes: notes ?? null,
+    };
+    if (dryRun) return ok({ saved: false, dryRun: true, row });
+
+    const inserted = db.orm.insert(allergy).values(row).returning({ id: allergy.id }).get();
+    return ok({ saved: true, id: inserted.id, row });
+  },
+);
+
+server.registerTool(
+  "add_vaccine",
+  {
+    title: "Add vaccine",
+    description:
+      "Records a vaccination. Validates the administration date (ISO, not future) and the optional expiresAt date. Set dryRun=true to preview the row. Only record what the user explicitly provided.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      vaccineName: z.string().min(1).describe("e.g. 'Tdap', 'Influenza 2025'"),
+      date: z.string().regex(ISO_DATE).describe("Administration date, YYYY-MM-DD"),
+      doseNumber: z.number().int().min(1).optional().describe("Dose in the series, e.g. 2"),
+      manufacturer: z.string().optional(),
+      batchNumber: z.string().optional(),
+      expiresAt: z.string().regex(ISO_DATE).optional().describe("Booster / immunity expiry date"),
+      administeredBy: z.string().optional(),
+      country: z.string().optional(),
+      notes: z.string().optional(),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async ({
+    profileId,
+    vaccineName,
+    date,
+    doseNumber,
+    manufacturer,
+    batchNumber,
+    expiresAt,
+    administeredBy,
+    country,
+    notes,
+    dryRun,
+  }) => {
+    if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
+    const pid = resolveProfileId(profileId);
+    if ("error" in pid) return fail(pid.error);
+    if (date > todayIso()) return fail(`date ${date} is in the future.`);
+
+    const row = {
+      profileId: pid.id,
+      vaccineName,
+      date,
+      doseNumber: doseNumber ?? null,
+      manufacturer: manufacturer ?? null,
+      batchNumber: batchNumber ?? null,
+      expiresAt: expiresAt ?? null,
+      administeredBy: administeredBy ?? null,
+      country: country ?? null,
+      notes: notes ?? null,
+    };
+    if (dryRun) return ok({ saved: false, dryRun: true, row });
+
+    const inserted = db.orm.insert(vaccine).values(row).returning({ id: vaccine.id }).get();
+    return ok({ saved: true, id: inserted.id, row });
+  },
+);
+
+server.registerTool(
+  "log_symptom",
+  {
+    title: "Log symptom",
+    description:
+      "Logs a symptom occurrence with a 1–10 severity. Validates the date (default today, not future) and optional HH:MM time. If the symptom name matches an existing one case-insensitively, the existing spelling is reused for trend consistency (the response reports which spelling was used). Set dryRun=true to preview.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      symptomName: z.string().min(1).describe("e.g. 'headache', 'nausea'"),
+      severity: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .describe("Subjective severity 1 (mild) – 10 (worst)"),
+      date: z.string().regex(ISO_DATE).optional().describe("YYYY-MM-DD, defaults to today"),
+      time: z
+        .string()
+        .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+        .optional()
+        .describe("Time of day, HH:MM (24h)"),
+      notes: z.string().optional(),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async ({ profileId, symptomName, severity, date, time, notes, dryRun }) => {
+    if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
+    const pid = resolveProfileId(profileId);
+    if ("error" in pid) return fail(pid.error);
+
+    const effectiveDate = date ?? todayIso();
+    if (effectiveDate > todayIso()) return fail(`date ${effectiveDate} is in the future.`);
+
+    const existing = db.orm
+      .selectDistinct({ name: symptomLog.symptomName })
+      .from(symptomLog)
+      .where(
+        and(
+          eq(symptomLog.profileId, pid.id),
+          sql`lower(${symptomLog.symptomName}) = lower(${symptomName})`,
+        ),
+      )
+      .get();
+    const canonicalName = existing?.name ?? symptomName;
+    const reusedSpelling = existing != null && existing.name !== symptomName;
+
+    const row = {
+      profileId: pid.id,
+      symptomName: canonicalName,
+      severity,
+      date: effectiveDate,
+      time: time ?? null,
+      notes: notes ?? null,
+    };
+    if (dryRun) {
+      return ok({ saved: false, dryRun: true, row, reusedSpelling, requestedName: symptomName });
+    }
+
+    const inserted = db.orm.insert(symptomLog).values(row).returning({ id: symptomLog.id }).get();
+    return ok({ saved: true, id: inserted.id, row, reusedSpelling, requestedName: symptomName });
   },
 );
 

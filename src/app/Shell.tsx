@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Moon,
   Pill,
+  Search,
   Settings,
   ShieldAlert,
   Stethoscope,
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { applyTheme, loadTheme, type Theme } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { CommandPalette } from "@/components/app/CommandPalette";
 import logo from "@/assets/logo.svg";
 
 type NavItem =
@@ -42,9 +44,21 @@ const NAV: NavItem[] = [
 export function Shell() {
   const { t } = useI18n();
   const [theme, setTheme] = React.useState<Theme>(() => loadTheme());
+  const [searchOpen, setSearchOpen] = React.useState(false);
   const location = useLocation();
 
   React.useEffect(() => applyTheme(theme), [theme]);
+
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -106,6 +120,15 @@ export function Shell() {
           <Button
             variant="ghost"
             className="justify-start gap-2.5 px-2.5 text-muted-foreground"
+            onClick={() => setSearchOpen(true)}
+            title={t("search.open")}
+          >
+            <Search className="size-4 shrink-0" />
+            <span className="hidden md:block">{t("search.open")}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            className="justify-start gap-2.5 px-2.5 text-muted-foreground"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             title={t("theme.toggleTheme")}
           >
@@ -122,6 +145,7 @@ export function Shell() {
           <Outlet />
         </div>
       </main>
+      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

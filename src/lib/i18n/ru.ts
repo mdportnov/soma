@@ -702,4 +702,27 @@ export const ru = {
       prescription: "Назначение",
     },
   },
+
+  // Полнотекстовый поиск + командная палитра
+  search: {
+    title: "Поиск",
+    open: "Поиск",
+    placeholder: "Поиск по записям…",
+    timelineFilter: "Фильтр событий…",
+    esc: "Esc",
+    hint: "Введите запрос для поиска по медицинским записям",
+    noResults: "Ничего не найдено по запросу «{{query}}»",
+    footer: "↑↓ навигация · Enter открыть · Esc закрыть",
+    types: {
+      biomarker: "Биомаркер",
+      lab_panel: "Анализы",
+      visit: "Визит",
+      diagnosis: "Диагноз",
+      medication: "Лекарство",
+      allergy: "Аллергия",
+      vaccine: "Вакцина",
+      symptom: "Симптом",
+      imaging: "Снимок",
+    },
+  },
 } as const;

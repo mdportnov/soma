@@ -10,6 +10,8 @@ export const ru = {
     diagnoses: "Диагнозы",
     allergies: "Аллергии",
     vaccines: "Прививки",
+    imaging: "Снимки",
+    journal: "Дневник",
     settings: "Настройки",
     records: "Записи",
     labsVitals: "Анализы и показатели",
@@ -701,5 +703,178 @@ export const ru = {
     fields: {
       prescription: "Назначение",
     },
+  },
+
+  // Journal page (weight / blood pressure / symptoms)
+  journal: {
+    title: "Дневник",
+    description: "Отслеживайте вес, давление и симптомы во времени.",
+    tabs: {
+      weight: "Вес",
+      bp: "Давление",
+      symptoms: "Симптомы",
+    },
+  },
+
+  weight: {
+    chartTitle: "Динамика веса",
+    targetLabel: "Цель",
+    logWeight: "Записать вес",
+    emptyTitle: "Записей о весе пока нет",
+    emptyDescription: "Запишите вес, чтобы видеть его динамику во времени.",
+    addFirst: "Записать первый вес",
+    table: {
+      date: "Дата",
+      weight: "Вес",
+      notes: "Заметки",
+    },
+    dialog: {
+      titleAdd: "Записать вес",
+      titleEdit: "Изменить запись веса",
+    },
+    fields: {
+      weight: "Вес",
+      notesOptional: "Заметки (необязательно)",
+    },
+  },
+
+  bp: {
+    chartTitle: "Динамика давления",
+    systolic: "Систолическое",
+    diastolic: "Диастолическое",
+    logReading: "Записать измерение",
+    emptyTitle: "Измерений давления пока нет",
+    emptyDescription: "Запишите измерение, чтобы отслеживать давление во времени.",
+    addFirst: "Записать первое измерение",
+    crisisBanner:
+      "Измерение за последние 7 дней находится в диапазоне гипертонического криза (систолическое > 180 или диастолическое > 120). При таких симптомах, как боль в груди, одышка или нарушение зрения, немедленно обратитесь за неотложной медицинской помощью.",
+    status: {
+      stage2: "2 стадия",
+      crisis: "Криз",
+    },
+    crisisHint: "Это значение в диапазоне гипертонического криза.",
+    table: {
+      date: "Дата",
+      time: "Время",
+      reading: "Измерение",
+      pulse: "Пульс",
+      status: "Статус",
+      notes: "Заметки",
+    },
+    dialog: {
+      titleAdd: "Записать давление",
+      titleEdit: "Изменить измерение",
+    },
+    fields: {
+      timeOptional: "Время (необязательно)",
+      systolic: "Систолическое",
+      diastolic: "Диастолическое",
+      heartRate: "Пульс",
+      position: "Положение",
+      arm: "Рука",
+      notesOptional: "Заметки (необязательно)",
+    },
+    position: {
+      sitting: "Сидя",
+      standing: "Стоя",
+      supine: "Лёжа",
+    },
+    arm: {
+      left: "Левая",
+      right: "Правая",
+    },
+  },
+
+  symptoms: {
+    thresholdLabel: "Показаны с тяжестью ≥ {{n}}",
+    showAll: "Показать все",
+    logSymptom: "Записать симптом",
+    emptyTitle: "Симптомы пока не записаны",
+    emptyDescription: "Записывайте симптомы с тяжестью, чтобы замечать закономерности.",
+    addFirst: "Записать первый симптом",
+    previouslyLogged: "Ранее записанные",
+    table: {
+      date: "Дата",
+      time: "Время",
+      symptom: "Симптом",
+      severity: "Тяжесть",
+      notes: "Заметки",
+    },
+    dialog: {
+      titleAdd: "Записать симптом",
+      titleEdit: "Изменить симптом",
+    },
+    fields: {
+      symptomName: "Симптом",
+      timeOptional: "Время (необязательно)",
+      severity: "Тяжесть",
+      notesOptional: "Заметки (необязательно)",
+    },
+    namePlaceholder: "напр. Головная боль, Усталость",
+  },
+
+  symptomSeverity: {
+    "1": "1 — Минимальная",
+    "2": "2 — Очень лёгкая",
+    "3": "3 — Лёгкая",
+    "4": "4 — Лёгкая-умеренная",
+    "5": "5 — Умеренная",
+    "6": "6 — Умеренно-сильная",
+    "7": "7 — Сильная",
+    "8": "8 — Очень сильная",
+    "9": "9 — Интенсивная",
+    "10": "10 — Невыносимая",
+  },
+
+  // Imaging records
+  imaging: {
+    title: "Снимки",
+    description: "Рентген, КТ, МРТ, УЗИ и другие исследования.",
+    newRecord: "Новая запись",
+    emptyTitle: "Записей о снимках пока нет",
+    emptyDescription: "Добавьте исследование, чтобы хранить историю снимков в одном месте.",
+    addFirst: "Добавить первую запись",
+    back: "Снимки",
+    table: {
+      date: "Дата",
+      modality: "Тип",
+      bodyArea: "Область тела",
+      facility: "Учреждение",
+      visit: "Визит",
+    },
+    newTitle: "Новая запись о снимке",
+    editTitle: "Изменить запись о снимке",
+    newDescription: "Запишите исследование и его заключение.",
+    studyDetailsTitle: "Сведения об исследовании",
+    findingsTitle: "Заключение",
+    delete: "Удалить запись",
+    fields: {
+      date: "Дата",
+      modality: "Тип",
+      bodyArea: "Область тела",
+      facility: "Учреждение",
+      city: "Город",
+      country: "Страна",
+      visit: "Визит",
+      findings: "Заключение",
+      radiologist: "Рентгенолог",
+    },
+    bodyAreaPlaceholder: "напр. Поясничный отдел, Грудная клетка",
+    noVisit: "Без привязки к визиту",
+    visitLabel: "{{date}} — {{doctor}}",
+    visitLabelNoDoctor: "{{date}} — визит",
+  },
+
+  imagingModality: {
+    xray: "Рентген",
+    ct: "КТ",
+    mri: "МРТ",
+    ultrasound: "УЗИ",
+    pet: "ПЭТ",
+    other: "Другое",
+  },
+
+  biomarkerSymptoms: {
+    toggle: "Симптомы",
   },
 } as const;

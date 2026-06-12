@@ -44,10 +44,10 @@ function routeFor(r: SearchResult): string {
       return "/allergies";
     case "vaccine":
       return "/vaccines";
-    // No dedicated symptom/imaging pages yet — land on the timeline.
     case "symptom":
+      return "/journal?tab=symptoms";
     case "imaging":
-      return "/timeline";
+      return `/imaging/${r.entityId}`;
     default:
       return "/";
   }

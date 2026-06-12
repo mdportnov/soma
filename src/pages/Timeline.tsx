@@ -32,16 +32,24 @@ export function Timeline() {
   const ranges = useRanges(t);
   const [range, setRange] = React.useState<number | null>(12);
   const [filter, setFilter] = React.useState("");
+  const [allSymptoms, setAllSymptoms] = React.useState(false);
   const { data: events, loading } = useQuery(() => getTimeline(profileId), [profileId]);
 
+  // Daily symptom entries flood the timeline; show only severity ≥ 6 unless toggled.
   const filtered = React.useMemo(() => {
     if (!events) return [];
     const q = filter.trim().toLowerCase();
-    if (!q) return events;
-    return events.filter(
-      (e) => e.title.toLowerCase().includes(q) || (e.subtitle ?? "").toLowerCase().includes(q),
-    );
-  }, [events, filter]);
+    return events.filter((e) => {
+      if (!allSymptoms && e.kind === "symptom" && e.severity < 6) return false;
+      if (!q) return true;
+      return e.title.toLowerCase().includes(q) || (e.subtitle ?? "").toLowerCase().includes(q);
+    });
+  }, [events, filter, allSymptoms]);
+
+  const hiddenSymptoms = React.useMemo(
+    () => (events ?? []).filter((e) => e.kind === "symptom" && e.severity < 6).length,
+    [events],
+  );
 
   if (loading || !events) return <Loading />;
 
@@ -86,6 +94,24 @@ export function Timeline() {
         />
       ) : (
         <>
+          {hiddenSymptoms > 0 && !allSymptoms && (
+            <p className="mb-2 text-xs text-muted-foreground">
+              {t("timeline.symptomThreshold", { count: String(hiddenSymptoms) })}{" "}
+              <button className="text-primary hover:underline" onClick={() => setAllSymptoms(true)}>
+                {t("timeline.showAllSymptoms")}
+              </button>
+            </p>
+          )}
+          {allSymptoms && hiddenSymptoms > 0 && (
+            <p className="mb-2 text-xs text-muted-foreground">
+              <button
+                className="text-primary hover:underline"
+                onClick={() => setAllSymptoms(false)}
+              >
+                {t("timeline.hideMinorSymptoms")}
+              </button>
+            </p>
+          )}
           <HorizontalTimeline events={filtered} rangeMonths={range} />
 
           <h2 className="mb-2 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

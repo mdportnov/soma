@@ -323,6 +323,9 @@ export const ru = {
     },
     outOfRange: "вне диапазона",
     now: "сейчас",
+    symptomThreshold: "Скрыто записей о лёгких симптомах (тяжесть < 6): {{count}}.",
+    showAllSymptoms: "Показать все",
+    hideMinorSymptoms: "Скрыть лёгкие симптомы",
   },
 
   // Lab panel detail page
@@ -750,6 +753,9 @@ export const ru = {
     prescriptionsTitle: "Назначения",
     fields: {
       prescription: "Назначение",
+      drugName: "Препарат / добавка",
+      durationDays: "Длительность (дни)",
+      days: "дн.",
     },
   },
 

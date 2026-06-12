@@ -320,6 +320,9 @@ export const en = {
     },
     outOfRange: "out of range",
     now: "now",
+    symptomThreshold: "{{count}} minor symptom entries (severity < 6) hidden.",
+    showAllSymptoms: "Show all",
+    hideMinorSymptoms: "Hide minor symptoms",
   },
 
   // Lab panel detail page
@@ -744,6 +747,9 @@ export const en = {
     prescriptionsTitle: "Prescriptions",
     fields: {
       prescription: "Prescription",
+      drugName: "Drug / supplement",
+      durationDays: "Duration (days)",
+      days: "days",
     },
   },
 

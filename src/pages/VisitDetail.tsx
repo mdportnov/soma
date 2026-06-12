@@ -15,6 +15,7 @@ import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -150,7 +151,23 @@ export function VisitDetail() {
               <ul className="divide-y">
                 {prescriptions.map((p) => (
                   <li key={p.id} className="py-2.5">
-                    <p className="whitespace-pre-wrap text-sm">{p.notes ?? "—"}</p>
+                    {p.drugName && (
+                      <p className="text-sm font-medium">
+                        {p.drugName}
+                        {p.doseAmount != null && ` — ${p.doseAmount} ${p.doseUnit ?? ""}`.trimEnd()}
+                        {p.frequency && `, ${p.frequency}`}
+                        {p.durationDays != null &&
+                          `, ${p.durationDays} ${t("visitDetail.fields.days")}`}
+                      </p>
+                    )}
+                    {p.notes && (
+                      <p
+                        className={`whitespace-pre-wrap text-sm ${p.drugName ? "mt-0.5 text-xs text-muted-foreground" : ""}`}
+                      >
+                        {p.notes}
+                      </p>
+                    )}
+                    {!p.drugName && !p.notes && <p className="text-sm">—</p>}
                   </li>
                 ))}
               </ul>
@@ -230,17 +247,39 @@ function PrescriptionDialog({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const [drugName, setDrugName] = React.useState("");
+  const [doseAmount, setDoseAmount] = React.useState("");
+  const [doseUnit, setDoseUnit] = React.useState("");
+  const [frequency, setFrequency] = React.useState("");
+  const [durationDays, setDurationDays] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
-    if (open) setNotes("");
+    if (!open) return;
+    setDrugName("");
+    setDoseAmount("");
+    setDoseUnit("");
+    setFrequency("");
+    setDurationDays("");
+    setNotes("");
   }, [open]);
 
+  const valid = drugName.trim() !== "" || notes.trim() !== "";
+
   const addPrescription = async () => {
+    if (!valid) return;
     setSaving(true);
     try {
-      await createPrescription({ visitId, notes: notes.trim() });
+      await createPrescription({
+        visitId,
+        drugName: drugName.trim() || null,
+        doseAmount: doseAmount ? Number(doseAmount) : null,
+        doseUnit: doseUnit.trim() || null,
+        frequency: frequency.trim() || null,
+        durationDays: durationDays ? Number(durationDays) : null,
+        notes: notes.trim() || null,
+      });
       onSaved();
     } finally {
       setSaving(false);
@@ -253,25 +292,60 @@ function PrescriptionDialog({
       onClose={onClose}
       title={t("visitDetail.addPrescription")}
       onSubmit={addPrescription}
-      submitDisabled={saving || !notes.trim()}
+      submitDisabled={saving || !valid}
     >
       <div className="grid gap-3">
+        <Field label={t("visitDetail.fields.drugName")}>
+          <Input
+            value={drugName}
+            onChange={(e) => setDrugName(e.target.value)}
+            placeholder="e.g. Vitamin D3"
+          />
+        </Field>
+        <div className="grid grid-cols-4 gap-3">
+          <Field label={t("medications.fields.dose")}>
+            <Input
+              type="number"
+              step="any"
+              value={doseAmount}
+              onChange={(e) => setDoseAmount(e.target.value)}
+            />
+          </Field>
+          <Field label={t("fields.unit")}>
+            <Input
+              value={doseUnit}
+              onChange={(e) => setDoseUnit(e.target.value)}
+              placeholder="IU"
+            />
+          </Field>
+          <Field label={t("medications.fields.frequency")}>
+            <Input
+              value={frequency}
+              onChange={(e) => setFrequency(e.target.value)}
+              placeholder="daily"
+            />
+          </Field>
+          <Field label={t("visitDetail.fields.durationDays")}>
+            <Input
+              type="number"
+              value={durationDays}
+              onChange={(e) => setDurationDays(e.target.value)}
+            />
+          </Field>
+        </div>
         <Field label={t("visitDetail.fields.prescription")}>
           <Textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g. Vitamin D3 5000 IU daily for 3 months, retest 25-OH after"
+            placeholder="e.g. for 3 months, retest 25-OH after"
           />
         </Field>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             {t("common.cancel")}
           </Button>
-          <Button
-            disabled={saving || !notes.trim()}
-            onClick={addPrescription}
-          >
-            Add
+          <Button disabled={saving || !valid} onClick={addPrescription}>
+            {t("common.add")}
           </Button>
         </div>
       </div>

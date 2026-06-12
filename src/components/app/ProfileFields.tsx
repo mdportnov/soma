@@ -294,7 +294,7 @@ export function OptionalFields({ draft, patch }: { draft: ProfileDraft; patch: P
           ]}
         />
       </Field>
-      <Field label={t("profile.fields.ethnicity")}>
+      <Field label={t("profile.fields.ethnicity")} hint={t("profile.hints.ethnicity")}>
         <Combobox
           value={draft.ethnicity || null}
           onChange={(v) => patch({ ethnicity: v })}
@@ -303,7 +303,7 @@ export function OptionalFields({ draft, patch }: { draft: ProfileDraft; patch: P
           allowCustom
         />
       </Field>
-      <Field label={t("profile.fields.targetWeight")}>
+      <Field label={t("profile.fields.targetWeight")} hint={t("profile.hints.targetWeight")}>
         <WeightInput
           kg={draft.targetWeightKg}
           system={draft.unitSystem}

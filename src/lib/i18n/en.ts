@@ -93,6 +93,12 @@ export const en = {
 
   // Settings
   settings: {
+    logs: {
+      title: "Logs",
+      description: "Application log with errors and diagnostics. Rotates at 10 MB.",
+      open: "Open logs",
+      error: "Could not open the log file.",
+    },
     title: "Settings",
     description:
       "AI providers, profile and data export. Everything stays on this device unless you say otherwise.",
@@ -165,7 +171,7 @@ export const en = {
       weight: "Weight",
       bloodGroup: "Blood group",
       rhFactor: "Rh factor",
-      ethnicity: "Ethnicity (affects some reference ranges)",
+      ethnicity: "Ethnicity",
       targetWeight: "Target weight",
       activityLevel: "Activity level",
       smoking: "Smoking",
@@ -206,6 +212,10 @@ export const en = {
       smokingFormer: "Quit — affects some ranges for years",
       alcoholOccasional: "A few drinks a month",
       alcoholModerate: "Up to ~7 drinks a week",
+    },
+    hints: {
+      ethnicity: "Affects some reference ranges (e.g. eGFR, blood counts).",
+      targetWeight: "Optional goal — shown as a target line on the weight chart in Journal.",
     },
     ethnicity: {
       white: "White / European",

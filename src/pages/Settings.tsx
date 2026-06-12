@@ -24,6 +24,8 @@ import {
   type AiSettings,
 } from "@/ai";
 import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
+import { appLogDir, join } from "@tauri-apps/api/path";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
 import { Loading } from "@/components/app/Loading";
@@ -56,6 +58,7 @@ export function Settings() {
         <AiSettingsCard />
         <BackupCard />
         <ExportCard />
+        <LogsCard />
       </div>
     </>
   );
@@ -368,6 +371,41 @@ function EmergencyContactCard() {
 }
 
 // ── export ─────────────────────────────────────────────────────────────────
+
+function LogsCard() {
+  const { t } = useI18n();
+  const [error, setError] = React.useState(false);
+
+  const openLogs = async () => {
+    setError(false);
+    const dir = await appLogDir();
+    try {
+      await openPath(await join(dir, "soma.log"));
+    } catch {
+      // File may not exist yet or no default app for .log — fall back to the folder.
+      try {
+        await openPath(dir);
+      } catch {
+        setError(true);
+      }
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("settings.logs.title")}</CardTitle>
+        <CardDescription>{t("settings.logs.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" onClick={() => void openLogs()}>
+          {t("settings.logs.open")}
+        </Button>
+        {error && <p className="text-xs text-destructive">{t("settings.logs.error")}</p>}
+      </CardContent>
+    </Card>
+  );
+}
 
 function ExportCard() {
   const { t } = useI18n();

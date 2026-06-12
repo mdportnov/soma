@@ -291,7 +291,9 @@ function toMatchQuery(query: string): string {
   const tokens = query
     .trim()
     .split(/\s+/)
-    .filter(Boolean)
+    // Tokens that are empty once quotes are stripped would yield `""*` — an
+    // FTS5 syntax error (empty quoted phrase) — so drop them entirely.
+    .filter((tok) => tok.replace(/"/g, "") !== "")
     // Wrap each token in double quotes (escaping inner quotes) so punctuation
     // can't break the FTS5 grammar.
     .map((tok) => `"${tok.replace(/"/g, '""')}"`);

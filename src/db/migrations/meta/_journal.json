@@ -43,6 +43,13 @@
       "when": 1781222230527,
       "tag": "0005_odd_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1781223687480,
+      "tag": "0006_fts_search",
+      "breakpoints": true
     }
   ]
 }

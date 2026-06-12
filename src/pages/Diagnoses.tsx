@@ -14,6 +14,7 @@ import { DateInput } from "@/components/ui/date-input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -98,6 +99,11 @@ export function Diagnoses() {
                       <p className="mt-2 text-xs text-muted-foreground">
                         {t("diagnoses.fields.diagnosis")}: {formatDate(d.date)}
                       </p>
+                      {d.notes && (
+                        <p className="mt-1 truncate text-xs text-muted-foreground" title={d.notes}>
+                          {d.notes}
+                        </p>
+                      )}
                       <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
                         <Button
                           variant="outline"
@@ -125,7 +131,10 @@ export function Diagnoses() {
                             <Button
                               size="sm"
                               onClick={async () => {
-                                await updateDiagnosis(d.id, { status: "resolved" });
+                                await updateDiagnosis(d.id, {
+                                  status: "resolved",
+                                  resolvedDate: resolveDate,
+                                });
                                 setResolvingId(null);
                                 void reload();
                               }}
@@ -306,6 +315,8 @@ export function DiagnosisForm({
   const [icdCode, setIcdCode] = React.useState("");
   const [date, setDate] = React.useState(todayISO());
   const [status, setStatus] = React.useState<"active" | "remission" | "resolved">("active");
+  const [notes, setNotes] = React.useState("");
+  const [resolvedDate, setResolvedDate] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
@@ -314,7 +325,14 @@ export function DiagnosisForm({
     setIcdCode(editing?.icdCode ?? "");
     setDate(editing?.date ?? defaultDate ?? todayISO());
     setStatus(editing?.status ?? "active");
+    setNotes(editing?.notes ?? "");
+    setResolvedDate(editing?.resolvedDate ?? "");
   }, [open, editing, defaultDate]);
+
+  const changeStatus = (next: typeof status) => {
+    setStatus(next);
+    if (next === "resolved" && !resolvedDate) setResolvedDate(todayISO());
+  };
 
   const save = async () => {
     if (!name.trim() || !date) return;
@@ -326,6 +344,8 @@ export function DiagnosisForm({
         icdCode: icdCode.trim() || null,
         date,
         status,
+        notes: notes.trim() || null,
+        resolvedDate: status === "active" ? null : resolvedDate || null,
         visitId: editing ? editing.visitId : (defaultVisitId ?? null),
       };
       if (editing) await updateDiagnosis(editing.id, data);
@@ -364,13 +384,21 @@ export function DiagnosisForm({
             <DateInput value={date} onChange={setDate} />
           </Field>
           <Field label={t("diagnoses.fields.status")}>
-            <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+            <Select value={status} onChange={(e) => changeStatus(e.target.value as typeof status)}>
               <option value="active">{t("status.active")}</option>
               <option value="remission">{t("status.remission")}</option>
               <option value="resolved">{t("status.resolved")}</option>
             </Select>
           </Field>
         </div>
+        {status !== "active" && (
+          <Field label={t("diagnoses.fields.resolvedDate")}>
+            <DateInput value={resolvedDate} onChange={setResolvedDate} />
+          </Field>
+        )}
+        <Field label={t("diagnoses.fields.notesOptional")}>
+          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
       </div>
     </Dialog>
   );

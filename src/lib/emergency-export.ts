@@ -95,6 +95,12 @@ export function generateEmergencyHtml(
     ]),
     row([escapeHtml(t("emergency.identity.sex")), escapeHtml(sexLabel)]),
     row([escapeHtml(t("emergency.identity.bloodType")), escapeHtml(bloodTypeLabel(data))]),
+    ...(p.citizenship
+      ? [row([escapeHtml(t("emergency.identity.citizenship")), escapeHtml(p.citizenship)])]
+      : []),
+    ...(p.languages
+      ? [row([escapeHtml(t("emergency.identity.languages")), escapeHtml(p.languages)])]
+      : []),
   ].join("");
 
   // ── Emergency contact ─────────────────────────────────────────────────────
@@ -109,6 +115,32 @@ export function generateEmergencyHtml(
         ]),
       ].join("")
     : emptyRow(2, t("emergency.contact.empty"));
+
+  // ── Insurance & assistance ────────────────────────────────────────────────
+  const hasInsurance = !!(p.insurer || p.insurancePolicyNumber || p.insurancePhone);
+  const insuranceBody = hasInsurance
+    ? [
+        ...(p.insurer
+          ? [row([escapeHtml(t("emergency.insurance.insurer")), escapeHtml(p.insurer)])]
+          : []),
+        ...(p.insurancePolicyNumber
+          ? [
+              row([
+                escapeHtml(t("emergency.insurance.policyNumber")),
+                escapeHtml(p.insurancePolicyNumber),
+              ]),
+            ]
+          : []),
+        ...(p.insurancePhone
+          ? [row([escapeHtml(t("emergency.insurance.phone")), escapeHtml(p.insurancePhone)])]
+          : []),
+      ].join("")
+    : emptyRow(2, t("emergency.emptyInsurance"));
+
+  // ── Important notes ───────────────────────────────────────────────────────
+  const notesBody = p.emergencyNotes?.trim()
+    ? `<tr><td colspan="2" style="white-space:pre-wrap">${escapeHtml(p.emergencyNotes.trim())}</td></tr>`
+    : "";
 
   // ── Allergies ─────────────────────────────────────────────────────────────
   const allergyHeader = `<tr><th>${escapeHtml(t("emergency.allergies.allergen"))}</th><th>${escapeHtml(t("emergency.allergies.severity"))}</th><th>${escapeHtml(t("emergency.allergies.reaction"))}</th></tr>`;
@@ -225,7 +257,9 @@ export function generateEmergencyHtml(
 </header>
 ${section(t("emergency.sections.identity"), "", identityRows)}
 ${section(t("emergency.sections.contact"), "", contactBody)}
+${section(t("emergency.sections.insurance"), "", insuranceBody)}
 ${section(t("emergency.sections.allergies"), allergyHeader, allergyBody)}
+${notesBody ? section(t("emergency.sections.notes"), "", notesBody) : ""}
 ${section(t("emergency.sections.medications"), medHeader, medBody)}
 ${section(t("emergency.sections.diagnoses"), dxHeader, dxBody)}
 ${section(t("emergency.sections.vaccines"), vaxHeader, vaxBody)}

@@ -43,6 +43,15 @@ export const profile = sqliteTable("profile", {
   emergencyContactName: text("emergency_contact_name"),
   emergencyContactPhone: text("emergency_contact_phone"),
   emergencyContactRelation: text("emergency_contact_relation"),
+  /** Secondary emergency-card identity: citizenship + languages the user speaks. */
+  citizenship: text("citizenship"),
+  languages: text("languages"),
+  /** Travel/health insurance — insurer, policy number, 24/7 assistance phone. */
+  insurer: text("insurer"),
+  insurancePolicyNumber: text("insurance_policy_number"),
+  insurancePhone: text("insurance_phone"),
+  /** Free-form critical notes: pacemaker, implants, transfusion refusal, … */
+  emergencyNotes: text("emergency_notes"),
   /** Set when onboarding is completed; null = onboarding not done. */
   onboardedAt: text("onboarded_at"),
   createdAt: text("created_at")

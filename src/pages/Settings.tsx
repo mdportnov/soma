@@ -32,6 +32,7 @@ import { applyThemePreference, loadThemePreference, type ThemePreference } from 
 import { openPath } from "@tauri-apps/plugin-opener";
 import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
+import { McpCard } from "@/components/app/McpCard";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import {
@@ -43,6 +44,7 @@ import {
 } from "@/components/app/ProfileFields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +62,7 @@ export function Settings() {
         <ProfileCard />
         <EmergencyContactCard />
         <AiSettingsCard />
+        <McpCard />
         <BackupCard />
         <ExportCard />
         <LogsCard />
@@ -361,6 +364,12 @@ function EmergencyContactCard() {
   const [name, setName] = React.useState("");
   const [phone, setPhone] = React.useState("");
   const [relation, setRelation] = React.useState("");
+  const [citizenship, setCitizenship] = React.useState("");
+  const [languages, setLanguages] = React.useState("");
+  const [insurer, setInsurer] = React.useState("");
+  const [policyNumber, setPolicyNumber] = React.useState("");
+  const [insurancePhone, setInsurancePhone] = React.useState("");
+  const [notes, setNotes] = React.useState("");
   const [saved, setSaved] = React.useState(false);
 
   React.useEffect(() => {
@@ -368,6 +377,12 @@ function EmergencyContactCard() {
     setName(prof.emergencyContactName ?? "");
     setPhone(prof.emergencyContactPhone ?? "");
     setRelation(prof.emergencyContactRelation ?? "");
+    setCitizenship(prof.citizenship ?? "");
+    setLanguages(prof.languages ?? "");
+    setInsurer(prof.insurer ?? "");
+    setPolicyNumber(prof.insurancePolicyNumber ?? "");
+    setInsurancePhone(prof.insurancePhone ?? "");
+    setNotes(prof.emergencyNotes ?? "");
   }, [prof]);
 
   if (loading) return <Loading />;
@@ -395,6 +410,40 @@ function EmergencyContactCard() {
             <Input value={relation} onChange={(e) => setRelation(e.target.value)} />
           </Field>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("emergency.settings.citizenship")}>
+            <Input
+              value={citizenship}
+              onChange={(e) => setCitizenship(e.target.value)}
+              placeholder={t("emergency.settings.citizenshipPlaceholder")}
+            />
+          </Field>
+          <Field label={t("emergency.settings.languages")}>
+            <Input
+              value={languages}
+              onChange={(e) => setLanguages(e.target.value)}
+              placeholder={t("emergency.settings.languagesPlaceholder")}
+            />
+          </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label={t("emergency.settings.insurer")}>
+            <Input value={insurer} onChange={(e) => setInsurer(e.target.value)} />
+          </Field>
+          <Field label={t("emergency.settings.policyNumber")}>
+            <Input value={policyNumber} onChange={(e) => setPolicyNumber(e.target.value)} />
+          </Field>
+          <Field label={t("emergency.settings.assistancePhone")}>
+            <Input
+              type="tel"
+              value={insurancePhone}
+              onChange={(e) => setInsurancePhone(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label={t("emergency.settings.notes")} hint={t("emergency.settings.notesHint")}>
+          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
         <div>
           <Button
             onClick={async () => {
@@ -402,6 +451,12 @@ function EmergencyContactCard() {
                 emergencyContactName: trimToNull(name),
                 emergencyContactPhone: trimToNull(phone),
                 emergencyContactRelation: trimToNull(relation),
+                citizenship: trimToNull(citizenship),
+                languages: trimToNull(languages),
+                insurer: trimToNull(insurer),
+                insurancePolicyNumber: trimToNull(policyNumber),
+                insurancePhone: trimToNull(insurancePhone),
+                emergencyNotes: trimToNull(notes),
               });
               setSaved(true);
               setTimeout(() => setSaved(false), 2000);

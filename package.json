@@ -27,6 +27,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.44.2",
+    "jspdf": "4.2.1",
     "lucide-react": "^0.525.0",
     "react": "^19.1.0",
     "react-day-picker": "10.0.1",

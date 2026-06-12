@@ -1,12 +1,13 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Download } from "lucide-react";
+import { AlertTriangle, Download, FileDown } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { useI18n } from "@/lib/i18n";
 import { getEmergencyCard, type EmergencyCardData } from "@/db/repos";
 import type { Allergy } from "@/db/schema";
 import { exportEmergencyCardHtml, severityClass } from "@/lib/emergency-export";
+import { exportEmergencyCardPdf } from "@/lib/emergency-pdf";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { Button } from "@/components/ui/button";
@@ -60,23 +61,23 @@ export function EmergencyCard() {
   const { t, lang } = useI18n();
   const { profileId } = useApp();
   const { data, loading } = useQuery(() => getEmergencyCard(profileId), [profileId]);
-  const [exporting, setExporting] = React.useState(false);
+  const [exporting, setExporting] = React.useState<"html" | "pdf" | null>(null);
   const [error, setError] = React.useState(false);
 
   if (loading || !data) return <Loading />;
 
   const locale = lang === "ru" ? "ru-RU" : "en-GB";
 
-  const onExport = async () => {
-    setExporting(true);
+  const runExport = async (kind: "html" | "pdf", fn: () => Promise<boolean>) => {
+    setExporting(kind);
     setError(false);
     try {
-      await exportEmergencyCardHtml(data, { t, locale });
+      await fn();
     } catch (e) {
       console.error(e);
       setError(true);
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -86,9 +87,21 @@ export function EmergencyCard() {
         title={t("emergency.title")}
         description={t("emergency.description")}
         actions={
-          <Button variant="outline" disabled={exporting} onClick={onExport}>
-            <Download /> {t("emergency.exportHtml")}
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              disabled={exporting !== null}
+              onClick={() => void runExport("html", () => exportEmergencyCardHtml(data, { t, locale }))}
+            >
+              <Download /> {t("emergency.exportHtml")}
+            </Button>
+            <Button
+              disabled={exporting !== null}
+              onClick={() => void runExport("pdf", () => exportEmergencyCardPdf(data, { t, locale }))}
+            >
+              <FileDown /> {t("emergency.exportPdf")}
+            </Button>
+          </>
         }
       />
 
@@ -154,6 +167,10 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
         />
         <FieldRow label={t("emergency.identity.sex")} value={sexLabel} />
         <FieldRow label={t("emergency.identity.bloodType")} value={blood} />
+        {p.citizenship && (
+          <FieldRow label={t("emergency.identity.citizenship")} value={p.citizenship} />
+        )}
+        {p.languages && <FieldRow label={t("emergency.identity.languages")} value={p.languages} />}
       </Section>
 
       <Section title={t("emergency.sections.contact")}>
@@ -171,6 +188,25 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
         )}
       </Section>
 
+      <Section title={t("emergency.sections.insurance")}>
+        {p.insurer || p.insurancePolicyNumber || p.insurancePhone ? (
+          <>
+            {p.insurer && <FieldRow label={t("emergency.insurance.insurer")} value={p.insurer} />}
+            {p.insurancePolicyNumber && (
+              <FieldRow
+                label={t("emergency.insurance.policyNumber")}
+                value={p.insurancePolicyNumber}
+              />
+            )}
+            {p.insurancePhone && (
+              <FieldRow label={t("emergency.insurance.phone")} value={p.insurancePhone} />
+            )}
+          </>
+        ) : (
+          <EmptyText>{t("emergency.emptyInsurance")}</EmptyText>
+        )}
+      </Section>
+
       <Section title={t("emergency.sections.allergies")}>
         {data.activeAllergies.length === 0 && data.resolvedAllergies.length === 0 ? (
           <EmptyText>{t("emergency.allergies.none")}</EmptyText>
@@ -185,6 +221,19 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
           </ul>
         )}
       </Section>
+
+      {p.emergencyNotes && p.emergencyNotes.trim() && (
+        <Card className="border-l-4 border-l-warning">
+          <CardHeader>
+            <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
+              {t("emergency.sections.notes")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="whitespace-pre-wrap text-sm">{p.emergencyNotes.trim()}</p>
+          </CardContent>
+        </Card>
+      )}
 
       <Section title={t("emergency.sections.medications")}>
         {data.activeMedications.length === 0 ? (

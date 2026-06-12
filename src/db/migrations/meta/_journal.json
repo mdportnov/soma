@@ -50,6 +50,13 @@
       "when": 1781223687480,
       "tag": "0006_fts_search",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1781227528304,
+      "tag": "0007_glorious_morph",
+      "breakpoints": true
     }
   ]
 }

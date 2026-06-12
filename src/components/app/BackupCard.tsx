@@ -289,18 +289,22 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
                   disabled={unavailable}
                   onClick={() => p.path && chooseDetected(p.id, p.path)}
                   className={cn(
-                    "rounded-lg border p-3 text-left transition-colors",
+                    "w-full rounded-lg border p-3 text-left transition-colors",
                     unavailable && "cursor-not-allowed opacity-50",
                     !unavailable && "hover:bg-muted",
                     provider === p.id && destDir === p.path && "border-primary bg-secondary",
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{p.label}</span>
+                    <span className="min-w-0 truncate text-sm font-medium">{p.label}</span>
                     {unavailable ? (
-                      <Badge variant="secondary">{reason}</Badge>
+                      <Badge variant="secondary" className="shrink-0">
+                        {reason}
+                      </Badge>
                     ) : (
-                      <Badge variant="success">{t("backup.detected")}</Badge>
+                      <Badge variant="success" className="shrink-0">
+                        {t("backup.detected")}
+                      </Badge>
                     )}
                   </div>
                   {p.path && (

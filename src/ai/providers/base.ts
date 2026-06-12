@@ -5,9 +5,18 @@ import {
   type ChatMessage,
   type DocumentInput,
   type MappingCandidatePayload,
+  type RawDischargeExtraction,
   type RawExtraction,
+  type RawVaccineExtraction,
 } from "../types";
-import { buildMappingPrompt, EXTRACTION_PROMPT, extractJson, TEST_PROMPT } from "../prompts";
+import {
+  buildMappingPrompt,
+  DISCHARGE_EXTRACTION_PROMPT,
+  EXTRACTION_PROMPT,
+  extractJson,
+  TEST_PROMPT,
+  VACCINE_EXTRACTION_PROMPT,
+} from "../prompts";
 
 export type UserPart = { type: "text"; text: string } | { type: "document"; doc: DocumentInput };
 
@@ -42,6 +51,28 @@ export abstract class BaseProvider implements AIProvider {
     });
     const parsed = extractJson<unknown>(text);
     return validateExtractions(parsed);
+  }
+
+  async extractVaccinesFromDocument(doc: DocumentInput): Promise<RawVaccineExtraction[]> {
+    const text = await this.complete({
+      parts: [
+        { type: "document", doc },
+        { type: "text", text: VACCINE_EXTRACTION_PROMPT },
+      ],
+      maxTokens: 8192,
+    });
+    return validateVaccines(extractJson<unknown>(text));
+  }
+
+  async extractDischargeFromDocument(doc: DocumentInput): Promise<RawDischargeExtraction> {
+    const text = await this.complete({
+      parts: [
+        { type: "document", doc },
+        { type: "text", text: DISCHARGE_EXTRACTION_PROMPT },
+      ],
+      maxTokens: 8192,
+    });
+    return validateDischarge(extractJson<unknown>(text));
   }
 
   async mapBiomarker(
@@ -133,4 +164,77 @@ function validateExtractions(parsed: unknown): RawExtraction[] {
     });
   }
   return rows;
+}
+
+/** Trimmed string or null. */
+function nullableStr(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t ? t : null;
+}
+
+/** Accept only well-formed ISO `YYYY-MM-DD`; anything else (incl. guesses) → null. */
+function isoDateOrNull(v: unknown): string | null {
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null;
+}
+
+function validateVaccines(parsed: unknown): RawVaccineExtraction[] {
+  if (!Array.isArray(parsed)) {
+    throw new AIProviderError("Vaccine extraction did not return a JSON array");
+  }
+  const rows: RawVaccineExtraction[] = [];
+  for (const item of parsed) {
+    if (typeof item !== "object" || item === null) continue;
+    const o = item as Record<string, unknown>;
+    const name = nullableStr(o.vaccineName);
+    if (!name) continue;
+    const dose =
+      typeof o.doseNumber === "number" && Number.isFinite(o.doseNumber)
+        ? Math.trunc(o.doseNumber)
+        : null;
+    rows.push({
+      vaccineName: name,
+      date: isoDateOrNull(o.date),
+      doseNumber: dose,
+      manufacturer: nullableStr(o.manufacturer),
+      batchNumber: nullableStr(o.batchNumber),
+      expiresAt: isoDateOrNull(o.expiresAt),
+    });
+  }
+  return rows;
+}
+
+function validateDischarge(parsed: unknown): RawDischargeExtraction {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new AIProviderError("Discharge extraction did not return a JSON object");
+  }
+  const o = parsed as Record<string, unknown>;
+  const diagnoses = Array.isArray(o.diagnoses)
+    ? o.diagnoses
+        .map((d) => {
+          if (typeof d !== "object" || d === null) return null;
+          const r = d as Record<string, unknown>;
+          const name = nullableStr(r.name);
+          return name ? { name, icdCode: nullableStr(r.icdCode) } : null;
+        })
+        .filter((d): d is { name: string; icdCode: string | null } => d !== null)
+    : [];
+  const medications = Array.isArray(o.medications)
+    ? o.medications
+        .map((m) => {
+          if (typeof m !== "object" || m === null) return null;
+          const r = m as Record<string, unknown>;
+          const name = nullableStr(r.name);
+          return name ? { name, dose: nullableStr(r.dose) } : null;
+        })
+        .filter((m): m is { name: string; dose: string | null } => m !== null)
+    : [];
+  return {
+    visitDate: isoDateOrNull(o.visitDate),
+    clinic: nullableStr(o.clinic),
+    doctorName: nullableStr(o.doctorName),
+    diagnoses,
+    medications,
+    notes: typeof o.notes === "string" ? o.notes.trim() : "",
+  };
 }

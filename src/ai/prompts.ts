@@ -21,6 +21,45 @@ Strict rules:
 - Output ONLY the JSON array. No preamble, no Markdown fences, no commentary.`;
 
 /**
+ * Vaccination-certificate extraction prompt. Output is reviewed 100% manually,
+ * so the model must never guess: unreadable fields become null.
+ */
+export const VACCINE_EXTRACTION_PROMPT = `You are a data-extraction engine for vaccination certificates. The attached document is a vaccination record or certificate; it may be in any language, from any country, photographed or scanned.
+
+Extract EVERY administered vaccine dose and return ONLY a JSON array, with one object per dose:
+
+[{"vaccineName": string, "date": string | null, "doseNumber": number | null, "manufacturer": string | null, "batchNumber": string | null, "expiresAt": string | null}]
+
+Strict rules:
+- "vaccineName" is the vaccine or disease name as printed (e.g. "COVID-19", "Hepatitis B", "Yellow fever"). Keep it readable; do not invent a name.
+- "date" is the administration date as ISO "YYYY-MM-DD". If the day/month/year is not fully legible, use null. Never guess.
+- "doseNumber" is the dose's position in its series as an integer (1, 2, 3…), or null if not stated.
+- "manufacturer" is the vaccine manufacturer or product brand, or null.
+- "batchNumber" is the lot / batch / series number exactly as printed, or null.
+- "expiresAt" is the certificate or protection validity end date as ISO "YYYY-MM-DD", or null.
+- Do not add doses that are not in the document. Do not deduplicate rows.
+- Output ONLY the JSON array. No preamble, no Markdown fences, no commentary.`;
+
+/**
+ * Discharge-summary extraction prompt. Output is reviewed 100% manually, so the
+ * model must never guess: unreadable fields become null, missing lists become [].
+ */
+export const DISCHARGE_EXTRACTION_PROMPT = `You are a data-extraction engine for hospital discharge summaries. The attached document is a discharge summary or epicrisis; it may be in any language, from any country, photographed or scanned.
+
+Extract its structured content and return ONLY a single JSON object:
+
+{"visitDate": string | null, "clinic": string | null, "doctorName": string | null, "diagnoses": [{"name": string, "icdCode": string | null}], "medications": [{"name": string, "dose": string | null}], "notes": string}
+
+Strict rules:
+- "visitDate" is the discharge (or admission, if discharge is absent) date as ISO "YYYY-MM-DD". If not fully legible, use null. Never guess.
+- "clinic" is the hospital or clinic name as printed, or null.
+- "doctorName" is the discharging/attending physician's name as printed, or null.
+- "diagnoses" lists each diagnosis with "name" as printed and "icdCode" (ICD-10/ICD-11) exactly as printed, or null when no code is given. Use [] if none.
+- "medications" lists each prescribed medication with "name" as printed and "dose" (the dose/strength text as printed, e.g. "500 mg"), or null. Use [] if none.
+- "notes" is a concise plain-text summary of recommendations and clinical course, in the document's original language. Use "" if nothing relevant.
+- Do not invent diagnoses, medications, codes, or dates. Output ONLY the JSON object. No preamble, no Markdown fences, no commentary.`;
+
+/**
  * Phase-2 disambiguation prompt (§4). The model may ONLY choose from the
  * provided candidate list or return null — it never creates biomarkers.
  */

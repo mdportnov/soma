@@ -154,6 +154,14 @@ export const labPanel = sqliteTable(
     panelType: text("panel_type", { enum: ["blood", "urine", "other"] })
       .notNull()
       .default("blood"),
+    /** Optional HH:MM draw time — diurnal markers (cortisol, testosterone, iron). */
+    collectionTime: text("collection_time"),
+    /** Fasting state at draw; null = unknown. Drives glucose/lipid interpretation. */
+    fasting: integer("fasting", { mode: "boolean" }),
+    /** Menstrual cycle day at draw (1 = first day of period); null = n/a. */
+    menstrualCycleDay: integer("menstrual_cycle_day"),
+    /** Free-text panel context: assay/method, "2h post-meal", lab certification… */
+    notes: text("notes"),
     sourceFileId: integer("source_file_id").references(() => attachment.id),
     importMethod: text("import_method", { enum: ["manual", "ai"] })
       .notNull()

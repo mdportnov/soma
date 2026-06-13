@@ -752,7 +752,13 @@ export const ru = {
     fields: {
       labName: "Название лаборатории",
       biomarker: "Биомаркер",
+      collectionTime: "Время забора",
+      fasting: "Натощак",
+      cycleDay: "День цикла",
+      notes: "Контекст / метод",
     },
+    fasting: { yes: "Натощак", no: "Не натощак", unknown: "Неизвестно" },
+    notesPlaceholder: "напр. через 2ч после еды, метод анализа, аккредитация лаб.",
     removeRow: "Удалить строку",
     unitGroups: {
       compatible: "Конвертируемые единицы",

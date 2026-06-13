@@ -77,6 +77,31 @@ export function LabPanelDetail() {
         }
       />
 
+      {(panel.collectionTime ||
+        panel.fasting != null ||
+        panel.menstrualCycleDay != null ||
+        panel.notes) && (
+        <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          {panel.collectionTime && (
+            <span>
+              {t("labPanelNew.fields.collectionTime")}: {panel.collectionTime}
+            </span>
+          )}
+          {panel.fasting != null && (
+            <span>
+              {t("labPanelNew.fields.fasting")}:{" "}
+              {t(panel.fasting ? "labPanelNew.fasting.yes" : "labPanelNew.fasting.no")}
+            </span>
+          )}
+          {panel.menstrualCycleDay != null && (
+            <span>
+              {t("labPanelNew.fields.cycleDay")}: {panel.menstrualCycleDay}
+            </span>
+          )}
+          {panel.notes && <span className="basis-full text-foreground/80">{panel.notes}</span>}
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>

@@ -746,7 +746,13 @@ export const en = {
     fields: {
       labName: "Lab name",
       biomarker: "Biomarker",
+      collectionTime: "Draw time",
+      fasting: "Fasting",
+      cycleDay: "Cycle day",
+      notes: "Context / method",
     },
+    fasting: { yes: "Fasting", no: "Non-fasting", unknown: "Unknown" },
+    notesPlaceholder: "e.g. 2h post-meal, assay method, lab certification",
     removeRow: "Remove row",
     unitGroups: {
       compatible: "Convertible units",

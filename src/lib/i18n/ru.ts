@@ -40,6 +40,7 @@ export const ru = {
     remove: "Удалить",
     close: "Закрыть",
     select: "Выбрать",
+    undo: "Отменить",
     selectModel: "Выберите модель…",
     noMatches: "Нет совпадений",
     useCustomValue: "Использовать «{{value}}»",
@@ -413,7 +414,8 @@ export const ru = {
     outOfRange: "вне диапазона",
     deletePanel: "Удалить панель",
     deletePanelTitle: "Удалить эту панель?",
-    deletePanelDescription: "Панель и все её результаты будут удалены. Это нельзя отменить.",
+    deletePanelDescription: "Панель и все её результаты будут удалены. Сразу после можно отменить.",
+    deletedToast: "Панель удалена.",
     panelNotFound: "Панель не найдена",
     tableColumns: {
       biomarker: "Биомаркер",

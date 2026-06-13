@@ -2,7 +2,8 @@ import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Sparkles, TestTubes, Trash2 } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
-import { deletePanel, getPanel, getPanelResults } from "@/db/repos";
+import { createPanelWithResults, deletePanel, getPanel, getPanelResults } from "@/db/repos";
+import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -27,6 +28,7 @@ export function LabPanelDetail() {
   const panelId = Number(id);
   const navigate = useNavigate();
   const { t } = useI18n();
+  const toast = useToast();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { data, loading } = useQuery(async () => {
@@ -169,8 +171,21 @@ export function LabPanelDetail() {
           <Button
             variant="destructive"
             onClick={async () => {
+              // Capture before delete so Undo can re-create the panel + results.
+              const { id: _id, createdAt: _c, ...panelData } = panel;
+              const resultInputs = results.map((r) => ({
+                biomarkerId: r.biomarkerId,
+                value: r.value,
+                unit: r.unit,
+                rawLabel: r.rawLabel,
+              }));
+              const biosById = new Map(results.map((r) => [r.biomarkerId, r.biomarker]));
               await deletePanel(panelId);
+              setConfirmDelete(false);
               navigate("/labs");
+              toast.showAction(t("labPanelDetail.deletedToast"), t("common.undo"), () => {
+                void createPanelWithResults(panelData, resultInputs, biosById);
+              });
             }}
           >
             {t("labPanelDetail.deletePanel")}

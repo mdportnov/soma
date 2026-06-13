@@ -40,6 +40,7 @@ export const en = {
     remove: "Remove",
     close: "Close",
     select: "Select",
+    undo: "Undo",
     selectModel: "Select model…",
     noMatches: "No matches",
     useCustomValue: 'Use "{{value}}"',
@@ -410,7 +411,8 @@ export const en = {
     outOfRange: "out of range",
     deletePanel: "Delete panel",
     deletePanelTitle: "Delete this panel?",
-    deletePanelDescription: "The panel and all its results will be removed. This cannot be undone.",
+    deletePanelDescription: "The panel and all its results will be removed. You can undo right after.",
+    deletedToast: "Panel deleted.",
     panelNotFound: "Panel not found",
     tableColumns: {
       biomarker: "Biomarker",

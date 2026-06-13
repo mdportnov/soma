@@ -303,9 +303,20 @@ export async function createPanelWithResults(
   return panelRow.id;
 }
 
+/** Removes attachment rows polymorphically linked to a now-deleted entity. */
+async function deleteLinkedAttachments(entityType: string, entityId: number) {
+  await db
+    .delete(attachment)
+    .where(
+      and(eq(attachment.linkedEntityType, entityType), eq(attachment.linkedEntityId, entityId)),
+    );
+}
+
 export async function deletePanel(panelId: number) {
   await db.delete(labResult).where(eq(labResult.panelId, panelId));
   await db.delete(labPanel).where(eq(labPanel.id, panelId));
+  // Panel (and its FK to source_file_id) is gone — clear the orphaned attachment.
+  await deleteLinkedAttachments("lab_panel", panelId);
 }
 
 export type SeriesPoint = {
@@ -418,6 +429,7 @@ export async function deleteVisit(id: number) {
   await db.update(symptomLog).set({ visitId: null }).where(eq(symptomLog.visitId, id));
   await db.update(imagingRecord).set({ visitId: null }).where(eq(imagingRecord.visitId, id));
   await db.delete(visit).where(eq(visit.id, id));
+  await deleteLinkedAttachments("visit", id);
 }
 
 export async function listDiagnoses(profileId: number): Promise<Diagnosis[]> {

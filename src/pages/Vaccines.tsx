@@ -10,6 +10,7 @@ import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
+import { suggestVaccineExpiry } from "@/lib/vaccine-schedule";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
@@ -237,6 +238,7 @@ function VaccineForm({
   };
 
   const nameOptions = vaccineNames.map((n) => ({ value: n, label: n }));
+  const expirySuggestion = suggestVaccineExpiry(vaccineName, manufacturer, date);
 
   return (
     <Dialog
@@ -290,6 +292,20 @@ function VaccineForm({
         <div className="grid grid-cols-3 gap-3">
           <Field label={t("vaccines.fields.expiresOptional")}>
             <DateInput value={expiresAt} onChange={setExpiresAt} clearable />
+            {expirySuggestion?.lifetime && !expiresAt && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {t("vaccines.expiry.lifetime")}
+              </p>
+            )}
+            {expirySuggestion && !expirySuggestion.lifetime && expirySuggestion.expiresAt && (
+              <button
+                type="button"
+                className="mt-1 text-[11px] text-primary hover:underline"
+                onClick={() => setExpiresAt(expirySuggestion.expiresAt!)}
+              >
+                {t("vaccines.expiry.suggest", { date: formatDate(expirySuggestion.expiresAt) })}
+              </button>
+            )}
           </Field>
           <Field label={t("vaccines.fields.country")}>
             <Input

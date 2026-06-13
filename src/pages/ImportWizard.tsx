@@ -419,14 +419,14 @@ export function ImportWizard() {
                     {filePath.split(/[/\\]/).pop()}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Any language, any lab, any country — scans and photos included.
+                    {t("importWizard.anyLangHint")}
                   </p>
                   <div className="mt-4 flex gap-2">
                     <Button variant="outline" onClick={pickFile}>
-                      Choose another
+                      {t("importWizard.chooseAnother")}
                     </Button>
                     <Button onClick={() => runExtraction(boot.provider!)}>
-                      <Sparkles /> Extract results
+                      <Sparkles /> {t("importWizard.extractResults")}
                     </Button>
                   </div>
                 </>
@@ -439,9 +439,11 @@ export function ImportWizard() {
                         ? t("importWizard.dischargeReview.choose")
                         : t("importWizard.chooseLabReport")}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">PDF, JPG, PNG or WebP</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("importWizard.fileFormats")}
+                  </p>
                   <Button className="mt-4" onClick={pickFile}>
-                    <Upload /> Choose file
+                    <Upload /> {t("importWizard.chooseFile")}
                   </Button>
                 </>
               )}
@@ -458,12 +460,11 @@ export function ImportWizard() {
                   ? t("importWizard.vaccineReview.extracting")
                   : docType === "discharge"
                     ? t("importWizard.dischargeReview.extracting")
-                    : "Extracting and mapping…"}
+                    : t("importWizard.extractingMapping")}
               </p>
               {docType === "lab" && (
                 <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                  Phase 1: structured extraction. Phase 2: matching against your biomarker
-                  dictionary (exact → alias → fuzzy → AI disambiguation).
+                  {t("importWizard.extractingMappingDetail")}
                 </p>
               )}
             </CardContent>

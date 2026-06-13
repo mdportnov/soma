@@ -3,16 +3,22 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
+  allergy,
   attachment,
   biomarker,
+  bpLog,
   diagnosis,
+  imagingRecord,
   labPanel,
   labResult,
   medication,
   medicationLog,
   prescription,
   profile,
+  symptomLog,
+  vaccine,
   visit,
+  weightLog,
 } from "@/db/schema";
 
 /** Full data export to JSON — no lock-in (§8). */
@@ -31,6 +37,12 @@ export async function exportAllJson(): Promise<boolean> {
       visits: await db.select().from(visit),
       diagnoses: await db.select().from(diagnosis),
       prescriptions: await db.select().from(prescription),
+      allergies: await db.select().from(allergy),
+      vaccines: await db.select().from(vaccine),
+      symptomLogs: await db.select().from(symptomLog),
+      imagingRecords: await db.select().from(imagingRecord),
+      weightLogs: await db.select().from(weightLog),
+      bpLogs: await db.select().from(bpLog),
       attachments: await db.select().from(attachment),
     },
   };
@@ -57,6 +69,9 @@ export async function exportLabsCsv(profileId: number): Promise<boolean> {
       lab: labPanel.labName,
       city: labPanel.city,
       country: labPanel.country,
+      collectionTime: labPanel.collectionTime,
+      fasting: labPanel.fasting,
+      cycleDay: labPanel.menstrualCycleDay,
       biomarker: biomarker.canonicalName,
       category: biomarker.category,
       value: labResult.value,

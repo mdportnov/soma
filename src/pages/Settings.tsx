@@ -370,6 +370,9 @@ function EmergencyContactCard() {
   const [policyNumber, setPolicyNumber] = React.useState("");
   const [insurancePhone, setInsurancePhone] = React.useState("");
   const [notes, setNotes] = React.useState("");
+  const [pregnancyStatus, setPregnancyStatus] = React.useState("");
+  const [codeStatus, setCodeStatus] = React.useState("");
+  const [organDonor, setOrganDonor] = React.useState("");
   const [saved, setSaved] = React.useState(false);
 
   React.useEffect(() => {
@@ -383,6 +386,9 @@ function EmergencyContactCard() {
     setPolicyNumber(prof.insurancePolicyNumber ?? "");
     setInsurancePhone(prof.insurancePhone ?? "");
     setNotes(prof.emergencyNotes ?? "");
+    setPregnancyStatus(prof.pregnancyStatus ?? "");
+    setCodeStatus(prof.codeStatus ?? "");
+    setOrganDonor(prof.organDonor == null ? "" : prof.organDonor ? "yes" : "no");
   }, [prof]);
 
   if (loading) return <Loading />;
@@ -441,6 +447,62 @@ function EmergencyContactCard() {
             />
           </Field>
         </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label={t("emergency.settings.pregnancy")}>
+            <SelectMenu
+              value={pregnancyStatus}
+              onChange={setPregnancyStatus}
+              placeholder={t("emergency.settings.notSet")}
+              options={[
+                { value: "", label: t("emergency.settings.notSet") },
+                {
+                  value: "not_pregnant",
+                  label: t("emergency.criticalStatus.pregnancyValues.not_pregnant"),
+                },
+                {
+                  value: "pregnant",
+                  label: t("emergency.criticalStatus.pregnancyValues.pregnant"),
+                },
+                {
+                  value: "postpartum",
+                  label: t("emergency.criticalStatus.pregnancyValues.postpartum"),
+                },
+                {
+                  value: "unknown",
+                  label: t("emergency.criticalStatus.pregnancyValues.unknown"),
+                },
+              ]}
+            />
+          </Field>
+          <Field label={t("emergency.settings.codeStatus")}>
+            <SelectMenu
+              value={codeStatus}
+              onChange={setCodeStatus}
+              placeholder={t("emergency.settings.notSet")}
+              options={[
+                { value: "", label: t("emergency.settings.notSet") },
+                {
+                  value: "full_code",
+                  label: t("emergency.criticalStatus.codeStatusValues.full_code"),
+                },
+                { value: "dnr", label: t("emergency.criticalStatus.codeStatusValues.dnr") },
+                { value: "dni", label: t("emergency.criticalStatus.codeStatusValues.dni") },
+              ]}
+            />
+          </Field>
+          <Field label={t("emergency.settings.organDonor")}>
+            <SelectMenu
+              value={organDonor}
+              onChange={setOrganDonor}
+              placeholder={t("emergency.settings.notSet")}
+              options={[
+                { value: "", label: t("emergency.settings.notSet") },
+                { value: "yes", label: t("emergency.criticalStatus.yes") },
+                { value: "no", label: t("emergency.criticalStatus.no") },
+              ]}
+            />
+          </Field>
+        </div>
         <Field label={t("emergency.settings.notes")} hint={t("emergency.settings.notesHint")}>
           <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
@@ -457,6 +519,14 @@ function EmergencyContactCard() {
                 insurancePolicyNumber: trimToNull(policyNumber),
                 insurancePhone: trimToNull(insurancePhone),
                 emergencyNotes: trimToNull(notes),
+                pregnancyStatus: (pregnancyStatus || null) as
+                  | "not_pregnant"
+                  | "pregnant"
+                  | "postpartum"
+                  | "unknown"
+                  | null,
+                codeStatus: (codeStatus || null) as "full_code" | "dnr" | "dni" | null,
+                organDonor: organDonor === "" ? null : organDonor === "yes",
               });
               setSaved(true);
               setTimeout(() => setSaved(false), 2000);

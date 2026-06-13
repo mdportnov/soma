@@ -173,6 +173,36 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
         {p.languages && <FieldRow label={t("emergency.identity.languages")} value={p.languages} />}
       </Section>
 
+      {(p.pregnancyStatus || p.codeStatus || p.organDonor != null) && (
+        <Card className="border-l-4 border-l-destructive">
+          <CardHeader>
+            <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
+              {t("emergency.sections.criticalStatus")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {p.pregnancyStatus && p.pregnancyStatus !== "not_pregnant" && (
+              <FieldRow
+                label={t("emergency.criticalStatus.pregnancy")}
+                value={t(`emergency.criticalStatus.pregnancyValues.${p.pregnancyStatus}`)}
+              />
+            )}
+            {p.codeStatus && (
+              <FieldRow
+                label={t("emergency.criticalStatus.codeStatus")}
+                value={t(`emergency.criticalStatus.codeStatusValues.${p.codeStatus}`)}
+              />
+            )}
+            {p.organDonor != null && (
+              <FieldRow
+                label={t("emergency.criticalStatus.organDonor")}
+                value={t(p.organDonor ? "emergency.criticalStatus.yes" : "emergency.criticalStatus.no")}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Section title={t("emergency.sections.contact")}>
         {hasContact ? (
           <>
@@ -236,33 +266,30 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
       )}
 
       <Section title={t("emergency.sections.medications")}>
-        {data.activeMedications.length === 0 ? (
+        {data.activeMedications.length === 0 && data.asNeededMedications.length === 0 ? (
           <EmptyText>{t("emergency.medications.none")}</EmptyText>
         ) : (
-          <ul className="divide-y">
-            {data.activeMedications.map((m) => (
-              <li
-                key={m.id}
-                className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm"
-              >
-                <span className="font-medium">{m.name}</span>
-                {m.doseAmount != null && (
-                  <span className="text-muted-foreground">
-                    {m.doseAmount}
-                    {m.doseUnit ? ` ${m.doseUnit}` : ""}
-                  </span>
-                )}
-                {m.schedule?.frequency && (
-                  <span className="text-muted-foreground">
-                    {m.schedule.frequency.replaceAll("_", " ")}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {t("emergency.medications.since")} {fd(m.startDate)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <>
+            {data.activeMedications.length > 0 && (
+              <ul className="divide-y">
+                {data.activeMedications.map((m) => (
+                  <MedRow key={m.id} med={m} fd={fd} t={t} />
+                ))}
+              </ul>
+            )}
+            {data.asNeededMedications.length > 0 && (
+              <>
+                <p className="mt-3 mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("emergency.medications.asNeededTitle")}
+                </p>
+                <ul className="divide-y">
+                  {data.asNeededMedications.map((m) => (
+                    <MedRow key={m.id} med={m} fd={fd} t={t} />
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
         )}
       </Section>
 
@@ -329,6 +356,34 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
         {t("emergency.footer", { date: formatDate(today) })}
       </p>
     </div>
+  );
+}
+
+function MedRow({
+  med: m,
+  fd,
+  t,
+}: {
+  med: EmergencyCardData["activeMedications"][number];
+  fd: (iso: string | null | undefined) => string;
+  t: (key: string) => string;
+}) {
+  return (
+    <li className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm">
+      <span className="font-medium">{m.name}</span>
+      {m.doseAmount != null && (
+        <span className="text-muted-foreground">
+          {m.doseAmount}
+          {m.doseUnit ? ` ${m.doseUnit}` : ""}
+        </span>
+      )}
+      {m.schedule?.frequency && (
+        <span className="text-muted-foreground">{m.schedule.frequency.replaceAll("_", " ")}</span>
+      )}
+      <span className="text-xs text-muted-foreground">
+        {t("emergency.medications.since")} {fd(m.startDate)}
+      </span>
+    </li>
   );
 }
 

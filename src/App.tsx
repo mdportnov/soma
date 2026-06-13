@@ -1,6 +1,7 @@
 import { HashRouter, Route, Routes } from "react-router-dom";
 import { AppProvider } from "@/app/AppContext";
 import { I18nProvider } from "@/lib/i18n";
+import { ToastProvider } from "@/components/app/Toast";
 import { Shell } from "@/app/Shell";
 import { Dashboard } from "@/pages/Dashboard";
 import { Timeline } from "@/pages/Timeline";
@@ -26,6 +27,7 @@ export default function App() {
   return (
     <I18nProvider>
       <AppProvider>
+        <ToastProvider>
         <HashRouter>
           <Routes>
             <Route element={<Shell />}>
@@ -52,6 +54,7 @@ export default function App() {
             </Route>
           </Routes>
         </HashRouter>
+        </ToastProvider>
       </AppProvider>
     </I18nProvider>
   );

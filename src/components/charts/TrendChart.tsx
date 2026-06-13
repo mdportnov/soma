@@ -62,7 +62,16 @@ export function TrendChart({
   overlays?: MedOverlay[];
   symptomOverlays?: SymptomOverlay[];
 }) {
-  const data = series.map((p) => ({ ...p, t: ts(p.date) }));
+  const allData = series.map((p) => ({ ...p, t: ts(p.date) }));
+  // Only normalized points share the biomarker's default unit; raw (unconverted)
+  // points are on a different scale and must not be plotted on the same axis —
+  // doing so fabricates a trend (e.g. mg/dL and mmol/L on one line). We drop them
+  // from the line and surface a count instead. Fall back to raw only if nothing
+  // normalized exists, so a custom-unit marker still renders something.
+  const evaluatedData = allData.filter((d) => d.evaluated);
+  const data = evaluatedData.length ? evaluatedData : allData;
+  const hiddenCount = allData.length - evaluatedData.length;
+  const usingRawFallback = evaluatedData.length === 0 && allData.length > 0;
   // Captured once per mount: keeps render pure and the domain stable.
   const [now] = useState(() => Date.now());
 
@@ -82,7 +91,15 @@ export function TrendChart({
   const yDomain: [number, number] = [Math.max(0, yMin - ySpan * 0.15), yMax + ySpan * 0.15];
 
   return (
-    <div className="h-72 w-full">
+    <div className="w-full">
+      {(hiddenCount > 0 || usingRawFallback) && (
+        <p className="mb-1 text-[11px] text-warning">
+          {usingRawFallback
+            ? "Units not recognized — values shown in their raw units and not range-checked."
+            : `${hiddenCount} point${hiddenCount > 1 ? "s" : ""} hidden: unit not recognized, can't be plotted on this scale.`}
+        </p>
+      )}
+      <div className="h-72 w-full">
       <ResponsiveContainer>
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -219,6 +236,7 @@ export function TrendChart({
           />
         </LineChart>
       </ResponsiveContainer>
+      </div>
     </div>
   );
 }

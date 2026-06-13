@@ -2,7 +2,8 @@ import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Sparkles, TestTubes, Trash2 } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
-import { deletePanel, getPanel, getPanelResults } from "@/db/repos";
+import { createPanelWithResults, deletePanel, getPanel, getPanelResults } from "@/db/repos";
+import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -27,6 +28,7 @@ export function LabPanelDetail() {
   const panelId = Number(id);
   const navigate = useNavigate();
   const { t } = useI18n();
+  const toast = useToast();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { data, loading } = useQuery(async () => {
@@ -77,6 +79,31 @@ export function LabPanelDetail() {
         }
       />
 
+      {(panel.collectionTime ||
+        panel.fasting != null ||
+        panel.menstrualCycleDay != null ||
+        panel.notes) && (
+        <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          {panel.collectionTime && (
+            <span>
+              {t("labPanelNew.fields.collectionTime")}: {panel.collectionTime}
+            </span>
+          )}
+          {panel.fasting != null && (
+            <span>
+              {t("labPanelNew.fields.fasting")}:{" "}
+              {t(panel.fasting ? "labPanelNew.fasting.yes" : "labPanelNew.fasting.no")}
+            </span>
+          )}
+          {panel.menstrualCycleDay != null && (
+            <span>
+              {t("labPanelNew.fields.cycleDay")}: {panel.menstrualCycleDay}
+            </span>
+          )}
+          {panel.notes && <span className="basis-full text-foreground/80">{panel.notes}</span>}
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -116,7 +143,7 @@ export function LabPanelDetail() {
                       : "—"}
                   </TableCell>
                   <TableCell>
-                    <FlagBadge flag={r.outOfRange ? r.flag : null} />
+                    <FlagBadge flag={r.outOfRange ? r.flag : null} evaluated={r.valueNormalized != null} />
                   </TableCell>
                   <TableCell
                     className="max-w-44 truncate text-xs text-muted-foreground"
@@ -144,8 +171,21 @@ export function LabPanelDetail() {
           <Button
             variant="destructive"
             onClick={async () => {
+              // Capture before delete so Undo can re-create the panel + results.
+              const { id: _id, createdAt: _c, ...panelData } = panel;
+              const resultInputs = results.map((r) => ({
+                biomarkerId: r.biomarkerId,
+                value: r.value,
+                unit: r.unit,
+                rawLabel: r.rawLabel,
+              }));
+              const biosById = new Map(results.map((r) => [r.biomarkerId, r.biomarker]));
               await deletePanel(panelId);
+              setConfirmDelete(false);
               navigate("/labs");
+              toast.showAction(t("labPanelDetail.deletedToast"), t("common.undo"), () => {
+                void createPanelWithResults(panelData, resultInputs, biosById);
+              });
             }}
           >
             {t("labPanelDetail.deletePanel")}

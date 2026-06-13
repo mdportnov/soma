@@ -52,6 +52,14 @@ export const profile = sqliteTable("profile", {
   insurancePhone: text("insurance_phone"),
   /** Free-form critical notes: pacemaker, implants, transfusion refusal, … */
   emergencyNotes: text("emergency_notes"),
+  /** Pregnancy status — safety-critical for ER drug/imaging decisions. */
+  pregnancyStatus: text("pregnancy_status", {
+    enum: ["not_pregnant", "pregnant", "postpartum", "unknown"],
+  }),
+  /** Resuscitation preference surfaced on the emergency card. */
+  codeStatus: text("code_status", { enum: ["full_code", "dnr", "dni"] }),
+  /** Organ donor registration. */
+  organDonor: integer("organ_donor", { mode: "boolean" }),
   /** Set when onboarding is completed; null = onboarding not done. */
   onboardedAt: text("onboarded_at"),
   createdAt: text("created_at")
@@ -83,6 +91,33 @@ export const biomarker = sqliteTable(
     isCustom: integer("is_custom", { mode: "boolean" }).notNull().default(false),
   },
   (t) => [index("biomarker_name_idx").on(t.canonicalName)],
+);
+
+// ── biomarker_reference_range (demographic overrides) ──────────────────────
+// Optional sex-/age-specific ranges that override the biomarker's generic
+// refLow/refHigh when a matching profile context exists. A null sex/age bound
+// means "any". computeFlag picks the most specific matching row, else falls
+// back to the biomarker's own range.
+export const biomarkerReferenceRange = sqliteTable(
+  "biomarker_reference_range",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    biomarkerId: integer("biomarker_id")
+      .notNull()
+      .references(() => biomarker.id, { onDelete: "cascade" }),
+    /** null = applies to any sex. */
+    sex: text("sex", { enum: ["male", "female"] }),
+    /** Inclusive age bounds in years; null = unbounded. */
+    ageMinYears: integer("age_min_years"),
+    ageMaxYears: integer("age_max_years"),
+    /** Special physiological state, e.g. "pregnancy"; null = none. */
+    condition: text("condition"),
+    refLow: real("ref_low"),
+    refHigh: real("ref_high"),
+    optimalLow: real("optimal_low"),
+    optimalHigh: real("optimal_high"),
+  },
+  (t) => [index("biomarker_ref_range_idx").on(t.biomarkerId)],
 );
 
 // ── attachment ─────────────────────────────────────────────────────────────
@@ -119,6 +154,14 @@ export const labPanel = sqliteTable(
     panelType: text("panel_type", { enum: ["blood", "urine", "other"] })
       .notNull()
       .default("blood"),
+    /** Optional HH:MM draw time — diurnal markers (cortisol, testosterone, iron). */
+    collectionTime: text("collection_time"),
+    /** Fasting state at draw; null = unknown. Drives glucose/lipid interpretation. */
+    fasting: integer("fasting", { mode: "boolean" }),
+    /** Menstrual cycle day at draw (1 = first day of period); null = n/a. */
+    menstrualCycleDay: integer("menstrual_cycle_day"),
+    /** Free-text panel context: assay/method, "2h post-meal", lab certification… */
+    notes: text("notes"),
     sourceFileId: integer("source_file_id").references(() => attachment.id),
     importMethod: text("import_method", { enum: ["manual", "ai"] })
       .notNull()
@@ -218,6 +261,8 @@ export const medication = sqliteTable(
     doseAmount: real("dose_amount"),
     doseUnit: text("dose_unit"),
     schedule: text("schedule", { mode: "json" }).$type<MedicationSchedule>(),
+    /** PRN ("as needed") — not a standing daily med; surfaced separately. */
+    asNeeded: integer("as_needed", { mode: "boolean" }).notNull().default(false),
     startDate: text("start_date").notNull(),
     /** null = currently taking. */
     endDate: text("end_date"),
@@ -411,6 +456,8 @@ export type Profile = typeof profile.$inferSelect;
 export type NewProfile = typeof profile.$inferInsert;
 export type Biomarker = typeof biomarker.$inferSelect;
 export type NewBiomarker = typeof biomarker.$inferInsert;
+export type BiomarkerReferenceRange = typeof biomarkerReferenceRange.$inferSelect;
+export type NewBiomarkerReferenceRange = typeof biomarkerReferenceRange.$inferInsert;
 export type LabPanel = typeof labPanel.$inferSelect;
 export type NewLabPanel = typeof labPanel.$inferInsert;
 export type LabResult = typeof labResult.$inferSelect;

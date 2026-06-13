@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createPanelWithResults, listBiomarkers } from "@/db/repos";
+import { createPanelWithResults, getProfile, listBiomarkers } from "@/db/repos";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
@@ -26,12 +26,18 @@ export function LabPanelNew() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { data: biomarkers, loading } = useQuery(() => listBiomarkers(), []);
+  const { data: profile } = useQuery(() => getProfile(profileId), [profileId]);
+  const profileSex = profile?.sex;
 
   const [date, setDate] = React.useState(todayISO());
   const [labName, setLabName] = React.useState("");
   const [city, setCity] = React.useState("");
   const [country, setCountry] = React.useState("");
   const [panelType, setPanelType] = React.useState<"blood" | "urine" | "other">("blood");
+  const [collectionTime, setCollectionTime] = React.useState("");
+  const [fasting, setFasting] = React.useState("");
+  const [cycleDay, setCycleDay] = React.useState("");
+  const [notes, setNotes] = React.useState("");
   const nextKey = React.useRef(1);
   const [rows, setRows] = React.useState<Row[]>([{ key: 0, biomarkerId: "", value: "", unit: "" }]);
   const [saving, setSaving] = React.useState(false);
@@ -89,6 +95,10 @@ export function LabPanelNew() {
           city: city.trim() || null,
           country: country.trim() || null,
           panelType,
+          collectionTime: collectionTime.trim() || null,
+          fasting: fasting === "" ? null : fasting === "yes",
+          menstrualCycleDay: cycleDay.trim() ? Number(cycleDay) : null,
+          notes: notes.trim() || null,
           importMethod: "manual",
         },
         validRows.map((r) => ({
@@ -144,6 +154,42 @@ export function LabPanelNew() {
                 { value: "urine", label: t("types.urine") },
                 { value: "other", label: t("types.other") },
               ]}
+            />
+          </Field>
+          <Field label={t("labPanelNew.fields.collectionTime")}>
+            <Input
+              type="time"
+              value={collectionTime}
+              onChange={(e) => setCollectionTime(e.target.value)}
+            />
+          </Field>
+          <Field label={t("labPanelNew.fields.fasting")}>
+            <SelectMenu
+              value={fasting}
+              onChange={setFasting}
+              options={[
+                { value: "", label: t("labPanelNew.fasting.unknown") },
+                { value: "yes", label: t("labPanelNew.fasting.yes") },
+                { value: "no", label: t("labPanelNew.fasting.no") },
+              ]}
+            />
+          </Field>
+          {profileSex === "female" && (
+            <Field label={t("labPanelNew.fields.cycleDay")}>
+              <Input
+                type="number"
+                min={1}
+                max={45}
+                value={cycleDay}
+                onChange={(e) => setCycleDay(e.target.value)}
+              />
+            </Field>
+          )}
+          <Field label={t("labPanelNew.fields.notes")} className="sm:col-span-2 lg:col-span-3">
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={t("labPanelNew.notesPlaceholder")}
             />
           </Field>
         </CardContent>

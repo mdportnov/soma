@@ -260,6 +260,83 @@ export function ftInToCm(ft: number, inches: number): number {
   return (ft * 12 + inches) * CM_PER_IN;
 }
 
+// ── demographic reference-range resolution ──────────────────────────────────
+
+export type DemographicRange = {
+  sex: "male" | "female" | null;
+  ageMinYears: number | null;
+  ageMaxYears: number | null;
+  condition: string | null;
+  refLow: number | null;
+  refHigh: number | null;
+  optimalLow: number | null;
+  optimalHigh: number | null;
+};
+
+export type ProfileContext = { sex?: string | null; ageYears?: number | null };
+
+type EffectiveRange = {
+  refLow: number | null;
+  refHigh: number | null;
+  optimalLow: number | null;
+  optimalHigh: number | null;
+};
+
+/** Higher = more specific; ties broken by first match. */
+function rangeSpecificity(r: DemographicRange): number {
+  let s = 0;
+  if (r.sex != null) s += 2;
+  if (r.ageMinYears != null || r.ageMaxYears != null) s += 1;
+  return s;
+}
+
+function rangeMatches(r: DemographicRange, ctx: ProfileContext): boolean {
+  if (r.sex != null && r.sex !== ctx.sex) return false;
+  if (r.ageMinYears != null && (ctx.ageYears == null || ctx.ageYears < r.ageMinYears)) return false;
+  if (r.ageMaxYears != null && (ctx.ageYears == null || ctx.ageYears > r.ageMaxYears)) return false;
+  return true;
+}
+
+/**
+ * Picks the most specific demographic range matching the profile context,
+ * falling back to the biomarker's own generic range. Sex-/age-specific ranges
+ * exist precisely because a single range mis-flags large populations.
+ */
+export function resolveRange(
+  bio: Pick<Biomarker, "refLow" | "refHigh" | "optimalLow" | "optimalHigh">,
+  ranges: DemographicRange[] | undefined,
+  ctx: ProfileContext,
+): EffectiveRange {
+  const generic: EffectiveRange = {
+    refLow: bio.refLow,
+    refHigh: bio.refHigh,
+    optimalLow: bio.optimalLow,
+    optimalHigh: bio.optimalHigh,
+  };
+  if (!ranges?.length) return generic;
+  const matches = ranges.filter((r) => rangeMatches(r, ctx));
+  if (!matches.length) return generic;
+  matches.sort((a, b) => rangeSpecificity(b) - rangeSpecificity(a));
+  const best = matches[0];
+  return {
+    refLow: best.refLow ?? generic.refLow,
+    refHigh: best.refHigh ?? generic.refHigh,
+    optimalLow: best.optimalLow ?? generic.optimalLow,
+    optimalHigh: best.optimalHigh ?? generic.optimalHigh,
+  };
+}
+
+/** Years between an ISO birth date and a reference date (today by default). */
+export function ageYearsFrom(birthDate: string | null | undefined, on = new Date()): number | null {
+  if (!birthDate) return null;
+  const b = new Date(`${birthDate.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(b.getTime())) return null;
+  let age = on.getUTCFullYear() - b.getUTCFullYear();
+  const m = on.getUTCMonth() - b.getUTCMonth();
+  if (m < 0 || (m === 0 && on.getUTCDate() < b.getUTCDate())) age--;
+  return age >= 0 ? age : null;
+}
+
 /** Out-of-range flag computation against the biomarker's reference range. */
 export function computeFlag(
   value: number,

@@ -65,7 +65,7 @@ jobs:
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseName: "Soma v__VERSION__"
-          releaseBody: "See [CHANGELOG.md](https://github.com/mdportnov/soma/blob/main/CHANGELOG.md) for details."
+          releaseBody: "See [CHANGELOG.md](https://github.com/mdportnov/soma/blob/master/CHANGELOG.md) for details."
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

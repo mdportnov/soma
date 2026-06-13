@@ -103,6 +103,36 @@ export function generateEmergencyHtml(
       : []),
   ].join("");
 
+  // ── Critical status (pregnancy / resuscitation / organ donor) ─────────────
+  const criticalRows = [
+    ...(p.pregnancyStatus && p.pregnancyStatus !== "not_pregnant"
+      ? [
+          row([
+            escapeHtml(t("emergency.criticalStatus.pregnancy")),
+            escapeHtml(t(`emergency.criticalStatus.pregnancyValues.${p.pregnancyStatus}`)),
+          ]),
+        ]
+      : []),
+    ...(p.codeStatus
+      ? [
+          row([
+            escapeHtml(t("emergency.criticalStatus.codeStatus")),
+            escapeHtml(t(`emergency.criticalStatus.codeStatusValues.${p.codeStatus}`)),
+          ]),
+        ]
+      : []),
+    ...(p.organDonor != null
+      ? [
+          row([
+            escapeHtml(t("emergency.criticalStatus.organDonor")),
+            escapeHtml(
+              t(p.organDonor ? "emergency.criticalStatus.yes" : "emergency.criticalStatus.no"),
+            ),
+          ]),
+        ]
+      : []),
+  ].join("");
+
   // ── Emergency contact ─────────────────────────────────────────────────────
   const hasContact = !!(p.emergencyContactName || p.emergencyContactPhone);
   const contactBody = hasContact
@@ -161,17 +191,19 @@ export function generateEmergencyHtml(
 
   // ── Medications ───────────────────────────────────────────────────────────
   const medHeader = `<tr><th>${escapeHtml(t("emergency.medications.name"))}</th><th>${escapeHtml(t("emergency.medications.dose"))}</th><th>${escapeHtml(t("emergency.medications.schedule"))}</th><th>${escapeHtml(t("emergency.medications.since"))}</th></tr>`;
+  const medRow = (m: EmergencyCardData["activeMedications"][number], prn: boolean): string => {
+    const dose = m.doseAmount != null ? `${m.doseAmount}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : "—";
+    const baseFreq = m.schedule?.frequency ? m.schedule.frequency.replaceAll("_", " ") : "—";
+    const freq = prn ? t("emergency.medications.asNeededTitle") : baseFreq;
+    return row([escapeHtml(m.name), escapeHtml(dose), escapeHtml(freq), fd(m.startDate)]);
+  };
   const medBody =
-    data.activeMedications.length === 0
+    data.activeMedications.length === 0 && data.asNeededMedications.length === 0
       ? emptyRow(4, t("emergency.medications.none"))
-      : data.activeMedications
-          .map((m) => {
-            const dose =
-              m.doseAmount != null ? `${m.doseAmount}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : "—";
-            const freq = m.schedule?.frequency ? m.schedule.frequency.replaceAll("_", " ") : "—";
-            return row([escapeHtml(m.name), escapeHtml(dose), escapeHtml(freq), fd(m.startDate)]);
-          })
-          .join("");
+      : [
+          ...data.activeMedications.map((m) => medRow(m, false)),
+          ...data.asNeededMedications.map((m) => medRow(m, true)),
+        ].join("");
 
   // ── Diagnoses ─────────────────────────────────────────────────────────────
   const dxHeader = `<tr><th>${escapeHtml(t("emergency.diagnoses.name"))}</th><th>${escapeHtml(t("emergency.diagnoses.icd"))}</th><th>${escapeHtml(t("emergency.diagnoses.date"))}</th></tr>`;
@@ -256,6 +288,7 @@ export function generateEmergencyHtml(
   <div class="subtitle">${escapeHtml(p.name || "—")}</div>
 </header>
 ${section(t("emergency.sections.identity"), "", identityRows)}
+${criticalRows ? section(t("emergency.sections.criticalStatus"), "", criticalRows) : ""}
 ${section(t("emergency.sections.contact"), "", contactBody)}
 ${section(t("emergency.sections.insurance"), "", insuranceBody)}
 ${section(t("emergency.sections.allergies"), allergyHeader, allergyBody)}

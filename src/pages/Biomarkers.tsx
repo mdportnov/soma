@@ -112,7 +112,10 @@ export function Biomarkers() {
                             <span className="text-xs text-muted-foreground">{latest.unit}</span>
                           </p>
                           <div className="flex items-center gap-1.5">
-                            <FlagBadge flag={latest.outOfRange ? latest.flag : null} />
+                            <FlagBadge
+                              flag={latest.outOfRange ? latest.flag : null}
+                              evaluated={!!latest.evaluated}
+                            />
                             <span className="text-[10px] text-muted-foreground">
                               {formatDate(latest.date)}
                             </span>

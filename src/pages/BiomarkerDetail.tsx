@@ -204,7 +204,7 @@ export function BiomarkerDetail() {
                         {formatValue(p.value)} {p.unit}
                       </TableCell>
                       <TableCell>
-                        <FlagBadge flag={p.outOfRange ? p.flag : null} />
+                        <FlagBadge flag={p.outOfRange ? p.flag : null} evaluated={p.evaluated} />
                       </TableCell>
                       <TableCell className="text-muted-foreground">{p.labName ?? "—"}</TableCell>
                     </TableRow>

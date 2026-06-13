@@ -16,10 +16,22 @@
     "sql:allow-select",
     {
       "identifier": "fs:allow-read-file",
+      "comment": "Users import lab files from anywhere, so reads are broad — but secret stores are denied so a webview compromise can't exfiltrate credentials.",
       "allow": [
         {
           "path": "**"
         }
+      ],
+      "deny": [
+        { "path": "$HOME/.ssh/**" },
+        { "path": "$HOME/.aws/**" },
+        { "path": "$HOME/.gnupg/**" },
+        { "path": "$HOME/.config/**" },
+        { "path": "$HOME/.kube/**" },
+        { "path": "$HOME/.docker/**" },
+        { "path": "$HOME/Library/Keychains/**" },
+        { "path": "$HOME/.netrc" },
+        { "path": "$HOME/.npmrc" }
       ]
     },
     {
@@ -46,10 +58,22 @@
     },
     {
       "identifier": "fs:allow-copy-file",
+      "comment": "Copies a user-picked attachment into the app data dir; source can be anywhere except secret stores.",
       "allow": [
         {
           "path": "**"
         }
+      ],
+      "deny": [
+        { "path": "$HOME/.ssh/**" },
+        { "path": "$HOME/.aws/**" },
+        { "path": "$HOME/.gnupg/**" },
+        { "path": "$HOME/.config/**" },
+        { "path": "$HOME/.kube/**" },
+        { "path": "$HOME/.docker/**" },
+        { "path": "$HOME/Library/Keychains/**" },
+        { "path": "$HOME/.netrc" },
+        { "path": "$HOME/.npmrc" }
       ]
     },
     {

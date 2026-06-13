@@ -116,7 +116,7 @@ export function LabPanelDetail() {
                       : "—"}
                   </TableCell>
                   <TableCell>
-                    <FlagBadge flag={r.outOfRange ? r.flag : null} />
+                    <FlagBadge flag={r.outOfRange ? r.flag : null} evaluated={r.valueNormalized != null} />
                   </TableCell>
                   <TableCell
                     className="max-w-44 truncate text-xs text-muted-foreground"

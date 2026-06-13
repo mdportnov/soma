@@ -1165,6 +1165,58 @@ const SEED: SeedBiomarker[] = [
   },
 ];
 
+/**
+ * Sex-specific adult reference ranges, in each biomarker's default unit.
+ * Only well-established, clinically uncontroversial sex differences are seeded;
+ * cycle-/assay-dependent markers (e.g. estradiol) are deliberately omitted so we
+ * never assert a misleading range. `computeFlag` falls back to the biomarker's
+ * generic range when no demographic row matches.
+ */
+const SEX_RANGES: { code: string; sex: "male" | "female"; ref: [number, number] }[] = [
+  { code: "718-7", sex: "male", ref: [130, 170] }, // Hemoglobin g/L
+  { code: "718-7", sex: "female", ref: [120, 150] },
+  { code: "4544-3", sex: "male", ref: [40, 50] }, // Hematocrit %
+  { code: "4544-3", sex: "female", ref: [36, 46] },
+  { code: "789-8", sex: "male", ref: [4.3, 5.7] }, // RBC 10^12/L
+  { code: "789-8", sex: "female", ref: [3.8, 5.1] },
+  { code: "14933-6", sex: "male", ref: [200, 420] }, // Uric acid µmol/L
+  { code: "14933-6", sex: "female", ref: [140, 360] },
+  { code: "2160-0", sex: "male", ref: [62, 106] }, // Creatinine µmol/L
+  { code: "2160-0", sex: "female", ref: [44, 80] },
+  { code: "2276-4", sex: "male", ref: [30, 400] }, // Ferritin µg/L
+  { code: "2276-4", sex: "female", ref: [15, 150] },
+  { code: "2986-8", sex: "male", ref: [8.6, 29] }, // Testosterone total nmol/L
+  { code: "2986-8", sex: "female", ref: [0.3, 1.7] },
+];
+
+export async function seedReferenceRangesIfEmpty(conn: Database): Promise<void> {
+  const [{ n }] = await conn.select<{ n: number }[]>(
+    "SELECT COUNT(*) AS n FROM biomarker_reference_range",
+  );
+  if (n > 0) return;
+  await conn.execute("BEGIN");
+  try {
+    for (const r of SEX_RANGES) {
+      const rows = await conn.select<{ id: number }[]>(
+        "SELECT id FROM biomarker WHERE code = $1 LIMIT 1",
+        [r.code],
+      );
+      const biomarkerId = rows[0]?.id;
+      if (!biomarkerId) continue;
+      await conn.execute(
+        `INSERT INTO biomarker_reference_range
+           (biomarker_id, sex, age_min_years, age_max_years, condition, ref_low, ref_high, optimal_low, optimal_high)
+         VALUES ($1, $2, NULL, NULL, NULL, $3, $4, NULL, NULL)`,
+        [biomarkerId, r.sex, r.ref[0], r.ref[1]],
+      );
+    }
+    await conn.execute("COMMIT");
+  } catch (e) {
+    await conn.execute("ROLLBACK");
+    throw e;
+  }
+}
+
 export async function seedBiomarkersIfEmpty(conn: Database): Promise<void> {
   const [{ n }] = await conn.select<{ n: number }[]>("SELECT COUNT(*) AS n FROM biomarker");
   if (n > 0) return;

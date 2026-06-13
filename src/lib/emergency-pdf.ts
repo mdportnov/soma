@@ -198,6 +198,26 @@ export async function generateEmergencyPdf(
   if (p.citizenship) fieldRow(t("emergency.identity.citizenship"), p.citizenship);
   if (p.languages) fieldRow(t("emergency.identity.languages"), p.languages);
 
+  // ── Critical status ─────────────────────────────────────────────────────────
+  if (p.pregnancyStatus || p.codeStatus || p.organDonor != null) {
+    sectionHeading(t("emergency.sections.criticalStatus"));
+    if (p.pregnancyStatus && p.pregnancyStatus !== "not_pregnant")
+      fieldRow(
+        t("emergency.criticalStatus.pregnancy"),
+        t(`emergency.criticalStatus.pregnancyValues.${p.pregnancyStatus}`),
+      );
+    if (p.codeStatus)
+      fieldRow(
+        t("emergency.criticalStatus.codeStatus"),
+        t(`emergency.criticalStatus.codeStatusValues.${p.codeStatus}`),
+      );
+    if (p.organDonor != null)
+      fieldRow(
+        t("emergency.criticalStatus.organDonor"),
+        t(p.organDonor ? "emergency.criticalStatus.yes" : "emergency.criticalStatus.no"),
+      );
+  }
+
   // ── Emergency contact ──────────────────────────────────────────────────────
   sectionHeading(t("emergency.sections.contact"));
   if (p.emergencyContactName || p.emergencyContactPhone) {
@@ -255,17 +275,23 @@ export async function generateEmergencyPdf(
 
   // ── Active medications ─────────────────────────────────────────────────────
   sectionHeading(t("emergency.sections.medications"));
-  if (data.activeMedications.length === 0) {
+  if (data.activeMedications.length === 0 && data.asNeededMedications.length === 0) {
     writeText(t("emergency.medications.none"), { color: MUTED });
   } else {
-    for (const m of data.activeMedications) {
+    const writeMed = (m: EmergencyCardData["activeMedications"][number], prn: boolean) => {
       const dose = m.doseAmount != null ? `${m.doseAmount}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : "";
-      const freq = m.schedule?.frequency ? m.schedule.frequency.replaceAll("_", " ") : "";
+      const freq = prn
+        ? t("emergency.medications.asNeededTitle")
+        : m.schedule?.frequency
+          ? m.schedule.frequency.replaceAll("_", " ")
+          : "";
       const parts = [m.name, dose, freq, `${t("emergency.medications.since")} ${fd(m.startDate)}`]
         .filter(Boolean)
         .join(" · ");
       writeText(parts);
-    }
+    };
+    for (const m of data.activeMedications) writeMed(m, false);
+    for (const m of data.asNeededMedications) writeMed(m, true);
   }
 
   // ── Active diagnoses ───────────────────────────────────────────────────────

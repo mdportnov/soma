@@ -2,7 +2,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as schema from "./schema";
 import { runMigrations } from "./migrate";
-import { seedBiomarkersIfEmpty } from "./seed-biomarkers";
+import { seedBiomarkersIfEmpty, seedReferenceRangesIfEmpty } from "./seed-biomarkers";
 
 const DB_URL = "sqlite:soma.db";
 
@@ -68,6 +68,7 @@ export function initDatabase(): Promise<void> {
       await conn.execute("PRAGMA foreign_keys = ON");
       await runMigrations(conn);
       await seedBiomarkersIfEmpty(conn);
+      await seedReferenceRangesIfEmpty(conn);
     })();
   }
   return initPromise;

@@ -4,6 +4,7 @@ import {
   allergy,
   attachment,
   biomarker,
+  biomarkerReferenceRange,
   bpLog,
   diagnosis,
   imagingRecord,
@@ -45,7 +46,14 @@ import {
   type Visit,
   type WeightLog,
 } from "./schema";
-import { computeFlag, convertToDefaultUnit } from "@/lib/units";
+import {
+  ageYearsFrom,
+  computeFlag,
+  convertToDefaultUnit,
+  resolveRange,
+  type DemographicRange,
+  type ProfileContext,
+} from "@/lib/units";
 
 // ── profiles ───────────────────────────────────────────────────────────────
 
@@ -82,6 +90,61 @@ export type ProfileUpdate = Partial<Omit<NewProfile, "id" | "createdAt">>;
 
 export async function updateProfile(id: number, data: ProfileUpdate) {
   await db.update(profile).set(data).where(eq(profile.id, id));
+  // Sex/age drive demographic reference ranges → recompute stored flags so an
+  // existing panel reflects the corrected range, not the one used at import.
+  if ("sex" in data || "birthDate" in data) {
+    await recomputeFlagsForProfile(id);
+  }
+}
+
+/**
+ * Re-derives normalization + out-of-range flags for every lab result of a
+ * profile, using the profile's current sex/age-specific ranges. Called when the
+ * demographic context changes (onboarding, profile edit).
+ */
+export async function recomputeFlagsForProfile(profileId: number): Promise<void> {
+  const prof = await getProfile(profileId);
+  if (!prof) return;
+  const [biomarkers, ranges] = await Promise.all([
+    listBiomarkers(),
+    getReferenceRangesByBiomarker(),
+  ]);
+  const bioById = new Map(biomarkers.map((b) => [b.id, b]));
+  const rows = await db
+    .select({
+      id: labResult.id,
+      biomarkerId: labResult.biomarkerId,
+      value: labResult.value,
+      unit: labResult.unit,
+      date: labPanel.date,
+    })
+    .from(labResult)
+    .innerJoin(labPanel, eq(labResult.panelId, labPanel.id))
+    .where(eq(labPanel.profileId, profileId));
+  for (const r of rows) {
+    const bio = bioById.get(r.biomarkerId);
+    let unitNormalized: string | null = null;
+    let valueNormalized: number | null = null;
+    let outOfRange = false;
+    let flag: "low" | "high" | "critical" | null = null;
+    if (bio) {
+      const conv = convertToDefaultUnit(r.value, r.unit, bio);
+      if (conv.ok) {
+        unitNormalized = conv.unit;
+        valueNormalized = conv.value;
+        const ctx: ProfileContext = {
+          sex: prof.sex ?? null,
+          ageYears: ageYearsFrom(prof.birthDate, new Date(`${r.date.slice(0, 10)}T00:00:00Z`)),
+        };
+        const effective = resolveRange(bio, ranges.get(r.biomarkerId), ctx);
+        ({ outOfRange, flag } = computeFlag(conv.value, effective));
+      }
+    }
+    await db
+      .update(labResult)
+      .set({ unitNormalized, valueNormalized, outOfRange, flag })
+      .where(eq(labResult.id, r.id));
+  }
 }
 
 /** True when the active profile has finished onboarding. */
@@ -99,6 +162,9 @@ export async function completeOnboarding(id: number, data: ProfileUpdate) {
     .update(profile)
     .set({ ...data, onboardedAt: new Date().toISOString() })
     .where(eq(profile.id, id));
+  if ("sex" in data || "birthDate" in data) {
+    await recomputeFlagsForProfile(id);
+  }
 }
 
 // ── biomarkers ─────────────────────────────────────────────────────────────
@@ -119,6 +185,27 @@ export async function createBiomarker(data: NewBiomarker): Promise<number> {
 
 export async function updateBiomarker(id: number, data: Partial<NewBiomarker>) {
   await db.update(biomarker).set(data).where(eq(biomarker.id, id));
+}
+
+/** All demographic reference ranges, grouped by biomarker id. */
+export async function getReferenceRangesByBiomarker(): Promise<Map<number, DemographicRange[]>> {
+  const rows = await db.select().from(biomarkerReferenceRange);
+  const map = new Map<number, DemographicRange[]>();
+  for (const r of rows) {
+    const list = map.get(r.biomarkerId) ?? [];
+    list.push({
+      sex: r.sex,
+      ageMinYears: r.ageMinYears,
+      ageMaxYears: r.ageMaxYears,
+      condition: r.condition,
+      refLow: r.refLow,
+      refHigh: r.refHigh,
+      optimalLow: r.optimalLow,
+      optimalHigh: r.optimalHigh,
+    });
+    map.set(r.biomarkerId, list);
+  }
+  return map;
 }
 
 // ── lab panels & results ───────────────────────────────────────────────────
@@ -176,6 +263,14 @@ export async function createPanelWithResults(
 ): Promise<number> {
   const [panelRow] = await db.insert(labPanel).values(panelData).returning({ id: labPanel.id });
   if (results.length) {
+    // Flags are computed against the profile's sex/age-specific range when one
+    // exists — a single generic range mis-flags large populations.
+    const prof = await getProfile(panelData.profileId);
+    const ctx: ProfileContext = {
+      sex: prof?.sex ?? null,
+      ageYears: ageYearsFrom(prof?.birthDate, new Date(`${panelData.date.slice(0, 10)}T00:00:00Z`)),
+    };
+    const rangesByBiomarker = await getReferenceRangesByBiomarker();
     const values: NewLabResult[] = results.map((r) => {
       const bio = biomarkersById.get(r.biomarkerId);
       let unitNormalized: string | null = null;
@@ -187,7 +282,8 @@ export async function createPanelWithResults(
         if (conv.ok) {
           unitNormalized = conv.unit;
           valueNormalized = conv.value;
-          ({ outOfRange, flag } = computeFlag(conv.value, bio));
+          const effective = resolveRange(bio, rangesByBiomarker.get(r.biomarkerId), ctx);
+          ({ outOfRange, flag } = computeFlag(conv.value, effective));
         }
       }
       return {
@@ -218,6 +314,8 @@ export type SeriesPoint = {
   unit: string;
   outOfRange: boolean;
   flag: string | null;
+  /** False when unit conversion failed: value is in its raw unit, range not evaluated. */
+  evaluated: boolean;
   panelId: number;
   labName: string | null;
 };
@@ -234,14 +332,19 @@ export async function getBiomarkerSeries(
       unit: sql<string>`coalesce(${labResult.unitNormalized}, ${labResult.unit})`,
       outOfRange: labResult.outOfRange,
       flag: labResult.flag,
+      evaluated: sql<number>`(${labResult.valueNormalized} is not null)`,
       panelId: labPanel.id,
       labName: labPanel.labName,
     })
     .from(labResult)
     .innerJoin(labPanel, eq(labResult.panelId, labPanel.id))
     .where(and(eq(labPanel.profileId, profileId), eq(labResult.biomarkerId, biomarkerId)))
-    .orderBy(asc(labPanel.date));
-  return rows.map((r) => ({ ...r, outOfRange: Boolean(r.outOfRange) }));
+    .orderBy(asc(labPanel.date), asc(labPanel.id));
+  return rows.map((r) => ({
+    ...r,
+    outOfRange: Boolean(r.outOfRange),
+    evaluated: Boolean(r.evaluated),
+  }));
 }
 
 /** Latest normalized value per biomarker — biomarker list page / dashboard. */
@@ -254,13 +357,14 @@ export async function getLatestResults(profileId: number) {
       unit: sql<string>`coalesce(${labResult.unitNormalized}, ${labResult.unit})`,
       outOfRange: labResult.outOfRange,
       flag: labResult.flag,
+      evaluated: sql<number>`(${labResult.valueNormalized} is not null)`,
     })
     .from(labResult)
     .innerJoin(labPanel, eq(labResult.panelId, labPanel.id))
     .where(eq(labPanel.profileId, profileId))
-    .orderBy(asc(labPanel.date));
+    .orderBy(asc(labPanel.date), asc(labPanel.id));
   const latest = new Map<number, (typeof rows)[number]>();
-  for (const r of rows) latest.set(r.biomarkerId, r); // ordered asc → last write wins
+  for (const r of rows) latest.set(r.biomarkerId, r); // ordered asc, id tiebreak → last write wins
   return latest;
 }
 
@@ -542,7 +646,10 @@ export type EmergencyCardData = {
   profile: Profile;
   activeAllergies: Allergy[];
   resolvedAllergies: Allergy[];
+  /** Standing (daily/scheduled) medications currently taken. */
   activeMedications: Medication[];
+  /** Currently-held PRN ("as needed") medications, listed separately. */
+  asNeededMedications: Medication[];
   activeDiagnoses: Diagnosis[];
   recentVaccines: Vaccine[];
 };
@@ -564,7 +671,8 @@ export async function getEmergencyCard(profileId: number): Promise<EmergencyCard
     profile: p,
     activeAllergies: allergies.filter((a) => a.status === "active").sort(bySeverity),
     resolvedAllergies: allergies.filter((a) => a.status === "resolved").sort(bySeverity),
-    activeMedications: meds.filter((m) => m.endDate == null),
+    activeMedications: meds.filter((m) => m.endDate == null && !m.asNeeded),
+    asNeededMedications: meds.filter((m) => m.endDate == null && m.asNeeded),
     activeDiagnoses: diagnoses.filter((d) => d.status === "active"),
     recentVaccines: [...vaccines].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5),
   };

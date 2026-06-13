@@ -205,6 +205,7 @@ function MedicationForm({
         doseAmount: doseAmount ? Number(doseAmount) : null,
         doseUnit: doseUnit.trim() || null,
         schedule: { frequency, ...(scheduleNotes.trim() ? { notes: scheduleNotes.trim() } : {}) },
+        asNeeded: frequency === "as_needed",
         startDate,
         endDate: endDate || null,
         purpose: purpose.trim() || null,

@@ -690,3 +690,31 @@ export function computeAntigen(
 }
 
 export const TIER_ORDER: VaccineTier[] = ["universal", "special", "regional", "risk"];
+
+/** Schedule entries with a known fixed certificate validity (years). */
+const LIFETIME_IDS = new Set(["yellow-fever"]); // WHO 2016: single dose, lifelong validity
+
+export type ExpirySuggestion = { lifetime: boolean; expiresAt: string | null };
+
+/**
+ * Suggests a certificate-validity expiry for a recorded shot, derived from the
+ * WHO schedule — never guessed. Returns null when the vaccine has no
+ * well-established fixed validity (the user enters expiry manually).
+ *  - Yellow fever → lifetime (no expiry).
+ *  - Antigens with a recurring booster (e.g. Td every 10y) → dose date + interval.
+ */
+export function suggestVaccineExpiry(
+  vaccineName: string,
+  manufacturer: string | null | undefined,
+  doseDateISO: string,
+): ExpirySuggestion | null {
+  if (!vaccineName.trim() || !doseDateISO) return null;
+  const rec: VaccineRecordLike = { vaccineName, manufacturer, date: doseDateISO };
+  const entry = VACCINE_SCHEDULE.find((e) => matchRecords(e, [rec]).length > 0);
+  if (!entry) return null;
+  if (LIFETIME_IDS.has(entry.id)) return { lifetime: true, expiresAt: null };
+  if (entry.recurring) {
+    return { lifetime: false, expiresAt: addMonthsISO(doseDateISO, entry.recurring.everyYears * 12) };
+  }
+  return null;
+}

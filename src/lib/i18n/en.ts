@@ -624,6 +624,10 @@ export const en = {
       expires: "Expires",
     },
     expired: "Expired",
+    expiry: {
+      lifetime: "Lifetime validity — no expiry (WHO).",
+      suggest: "Suggested validity: {{date}} — tap to use",
+    },
     recordsTitle: "Recorded vaccines",
     calendar: {
       title: "Vaccine calendar",

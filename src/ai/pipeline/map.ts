@@ -11,7 +11,11 @@ import { convertToDefaultUnit, type ConversionResult } from "@/lib/units";
  * to the database until the user confirms on the review screen (phase 3).
  */
 
-export type Confidence = "exact" | "fuzzy" | "ai" | "none";
+// "exact" = the printed label is literally in the dictionary (highest trust).
+// "translated" = matched via the model's English rendering, not the verbatim
+// label — same dictionary hit, but a translation step could have lost nuance
+// (e.g. "Colesterol LDL" → "Cholesterol"), so it is surfaced for review.
+export type Confidence = "exact" | "translated" | "fuzzy" | "ai" | "none";
 
 export type MappedRow = {
   raw: RawExtraction;
@@ -45,21 +49,29 @@ export function buildBiomarkerIndex(biomarkers: Biomarker[]): BiomarkerIndex {
   const exact = new Map<string, number>();
   const entries: IndexEntry[] = [];
   const byId = new Map<number, Biomarker>();
+  // Keys that two DIFFERENT biomarkers share (e.g. "tg" = triglycerides AND
+  // thyroglobulin). Silently picking the first would mis-route; instead we drop
+  // them from the exact map so they fall through to fuzzy/AI/manual review.
+  const ambiguous = new Set<string>();
   for (const b of biomarkers) {
     byId.set(b.id, b);
     for (const name of [b.canonicalName, ...(b.aliases ?? [])]) {
       const normalized = normalizeLabel(name);
       if (!normalized) continue;
-      // First registration wins on exact collisions — canonical names are
-      // registered before aliases, and the dictionary owner resolves clashes.
-      if (!exact.has(normalized)) exact.set(normalized, b.id);
+      const existing = exact.get(normalized);
+      if (existing == null) exact.set(normalized, b.id);
+      else if (existing !== b.id) ambiguous.add(normalized);
       entries.push({ normalized, biomarkerId: b.id });
     }
   }
+  for (const key of ambiguous) exact.delete(key);
   return { exact, entries, byId };
 }
 
-function fuzzyCandidates(normalized: string, index: BiomarkerIndex) {
+type Candidate = { biomarkerId: number; score: number };
+
+/** Best fuzzy candidates for one normalized label. */
+function fuzzyCandidates(normalized: string, index: BiomarkerIndex): Candidate[] {
   const best = new Map<number, number>();
   for (const entry of index.entries) {
     const score = similarity(normalized, entry.normalized);
@@ -71,6 +83,32 @@ function fuzzyCandidates(normalized: string, index: BiomarkerIndex) {
     .map(([biomarkerId, score]) => ({ biomarkerId, score }))
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_CANDIDATES);
+}
+
+/** Merge per-label candidate lists, keeping the best score per biomarker. */
+function mergeCandidates(perLabel: Candidate[][]): Candidate[] {
+  const best = new Map<number, number>();
+  for (const list of perLabel) {
+    for (const c of list) best.set(c.biomarkerId, Math.max(best.get(c.biomarkerId) ?? 0, c.score));
+  }
+  return [...best.entries()]
+    .map(([biomarkerId, score]) => ({ biomarkerId, score }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_CANDIDATES);
+}
+
+/** A clean fuzzy auto-accept needs ONE label to clear the bar against its own
+ * runner-up — the gap must signal two dictionary entries close to the SAME
+ * label, not an artefact of merging scores from two different labels. */
+function autoAcceptCandidate(perLabel: Candidate[][]): Candidate | null {
+  for (const cands of perLabel) {
+    const top = cands[0];
+    const second = cands[1];
+    if (top && top.score >= FUZZY_ACCEPT && (!second || top.score - second.score >= FUZZY_AMBIGUITY_GAP)) {
+      return top;
+    }
+  }
+  return null;
 }
 
 function conversionFor(
@@ -97,33 +135,52 @@ export async function mapExtractions(
   const index = buildBiomarkerIndex(biomarkers);
 
   const rows: MappedRow[] = raws.map((raw) => {
-    const normalized = normalizeLabel(raw.raw_label);
-
-    // 1–2. Exact / alias match — the priority path, no AI involved.
-    const exactId = index.exact.get(normalized);
-    if (exactId != null) {
-      return {
-        raw,
-        biomarkerId: exactId,
-        confidence: "exact" as const,
-        candidates: [{ biomarkerId: exactId, score: 1 }],
-        conversion: conversionFor(raw, exactId, index),
-        duplicate: false,
-      };
+    // Match on the printed label AND its English translation, so a Spanish/
+    // German/etc. report resolves against the English-centric dictionary. The
+    // printed label is checked first (verbatim is authoritative); identical
+    // normalized forms (English reports repeat the label) are de-duplicated.
+    const seen = new Set<string>();
+    const forms: { normalized: string; verbatim: boolean }[] = [];
+    for (const f of [
+      { label: raw.raw_label, verbatim: true },
+      { label: raw.analyte_en, verbatim: false },
+    ]) {
+      if (!f.label) continue;
+      const normalized = normalizeLabel(f.label);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      forms.push({ normalized, verbatim: f.verbatim });
     }
 
-    // 3. Fuzzy match for OCR typos and word-order variations.
-    const candidates = fuzzyCandidates(normalized, index);
-    const top = candidates[0];
-    const second = candidates[1];
-    const unambiguous = !second || top.score - second.score >= FUZZY_AMBIGUITY_GAP;
-    if (top && top.score >= FUZZY_ACCEPT && unambiguous) {
+    // 1–2. Exact / alias match — the priority path, no AI involved. A hit on the
+    // verbatim label is "exact"; a hit only via the translation is "translated".
+    for (const f of forms) {
+      const exactId = index.exact.get(f.normalized);
+      if (exactId != null) {
+        return {
+          raw,
+          biomarkerId: exactId,
+          confidence: f.verbatim ? ("exact" as const) : ("translated" as const),
+          candidates: [{ biomarkerId: exactId, score: 1 }],
+          conversion: conversionFor(raw, exactId, index),
+          duplicate: false,
+        };
+      }
+    }
+
+    // 3. Fuzzy match for OCR typos, word-order and cross-language variations.
+    // Auto-accept is decided per label (so the ambiguity gap means what it
+    // should); candidates are merged only for the dropdown and AI fallback.
+    const perLabel = forms.map((f) => fuzzyCandidates(f.normalized, index));
+    const candidates = mergeCandidates(perLabel);
+    const accepted = autoAcceptCandidate(perLabel);
+    if (accepted) {
       return {
         raw,
-        biomarkerId: top.biomarkerId,
+        biomarkerId: accepted.biomarkerId,
         confidence: "fuzzy" as const,
         candidates,
-        conversion: conversionFor(raw, top.biomarkerId, index),
+        conversion: conversionFor(raw, accepted.biomarkerId, index),
         duplicate: false,
       };
     }
@@ -151,7 +208,12 @@ export async function mapExtractions(
         };
       });
       try {
-        const picked = await provider.mapBiomarker(row.raw.raw_label, row.raw.unit, payload);
+        const label =
+          row.raw.analyte_en &&
+          row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase()
+            ? `${row.raw.raw_label} (${row.raw.analyte_en})`
+            : row.raw.raw_label;
+        const picked = await provider.mapBiomarker(label, row.raw.unit, payload);
         if (picked != null) {
           row.biomarkerId = picked;
           row.confidence = "ai";

@@ -10,6 +10,12 @@ export type DocumentInput = {
 /** Phase-1 output: structure only, no interpretation, no dictionary mapping. */
 export type RawExtraction = {
   raw_label: string;
+  /**
+   * The analyte's standard English name as translated by the model — used to
+   * match foreign-language reports against the English biomarker dictionary.
+   * `raw_label` stays verbatim for the audit trail; this is the matching key.
+   */
+  analyte_en: string | null;
   value: number;
   /** Unit string exactly as printed in the document ("" if absent). */
   unit: string;

@@ -17,6 +17,8 @@ export type ProviderEntry = {
   id: string;
   label: string;
   keyPlaceholder: string;
+  /** Deep link to the provider's API-key creation page. */
+  keyUrl?: string;
   models: ModelEntry[];
 };
 

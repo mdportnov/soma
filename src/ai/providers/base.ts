@@ -178,6 +178,7 @@ function validateExtractions(parsed: unknown): RawExtraction[] {
     if (!rawLabel || !Number.isFinite(value)) continue;
     rows.push({
       raw_label: rawLabel,
+      analyte_en: typeof o.analyte_en === "string" ? o.analyte_en.trim().slice(0, 120) || null : null,
       value,
       unit: typeof o.unit === "string" ? o.unit.trim().slice(0, 40) : "",
       ref_range_text:

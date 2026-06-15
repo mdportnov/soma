@@ -8,9 +8,11 @@ import {
   Sun,
   HeartPulse,
   KeyRound,
+  Lightbulb,
   Loader2,
   ShieldCheck,
   Sparkles,
+  SquareArrowOutUpRight,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -29,7 +31,7 @@ import {
 import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
 import { appLogDir, join } from "@tauri-apps/api/path";
 import { applyThemePreference, loadThemePreference, type ThemePreference } from "@/lib/theme";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
 import { McpCard } from "@/components/app/McpCard";
@@ -215,6 +217,15 @@ function AiSettingsCard() {
       icon={<Sparkles className="size-4" />}
     >
       <div className="grid gap-4 p-5 pt-0">
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <p className="flex items-center gap-1.5 text-xs font-medium">
+            <Lightbulb className="size-3.5 text-primary" /> {t("settings.ai.recommendTitle")}
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            {t("settings.ai.recommendBody")}
+          </p>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("settings.ai.provider")}>
             <SelectMenu
@@ -279,6 +290,11 @@ function AiSettingsCard() {
                 <Button onClick={saveKey} disabled={!keyInput.trim()}>
                   {t("settings.ai.saveKey")}
                 </Button>
+                {provider.keyUrl && (
+                  <Button variant="outline" onClick={() => void openUrl(provider.keyUrl!)}>
+                    <SquareArrowOutUpRight /> {t("settings.ai.getApiKey")}
+                  </Button>
+                )}
                 {hasStoredKey && (
                   <>
                     <Button

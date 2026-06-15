@@ -5,6 +5,7 @@
       "id": "anthropic",
       "label": "Anthropic",
       "keyPlaceholder": "sk-ant-…",
+      "keyUrl": "https://platform.claude.com/settings/keys",
       "models": [
         {
           "id": "claude-opus-4-8",
@@ -30,6 +31,7 @@
       "id": "openai",
       "label": "OpenAI",
       "keyPlaceholder": "sk-…",
+      "keyUrl": "https://platform.openai.com/api-keys",
       "models": [
         { "id": "gpt-5.1", "label": "GPT-5.1", "supports_vision": true, "supports_pdf": true },
         { "id": "gpt-5", "label": "GPT-5", "supports_vision": true, "supports_pdf": true },
@@ -40,6 +42,7 @@
       "id": "gemini",
       "label": "Google Gemini",
       "keyPlaceholder": "AIza…",
+      "keyUrl": "https://aistudio.google.com/app/apikey",
       "models": [
         {
           "id": "gemini-3-pro-preview",
@@ -59,6 +62,7 @@
       "id": "openrouter",
       "label": "OpenRouter",
       "keyPlaceholder": "sk-or-…",
+      "keyUrl": "https://openrouter.ai/settings/keys",
       "models": [
         {
           "id": "anthropic/claude-sonnet-4.6",

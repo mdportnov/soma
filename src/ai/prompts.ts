@@ -9,7 +9,7 @@ export const EXTRACTION_PROMPT = `You are a data-extraction engine for laborator
 
 Extract the panel metadata and EVERY quantitative analyte row, and return ONLY a single JSON object:
 
-{"collection_date": string | null, "lab_name": string | null, "fasting": boolean | null, "results": [{"raw_label": string, "value": number, "unit": string, "ref_range_text": string | null, "page": number | null}]}
+{"collection_date": string | null, "lab_name": string | null, "fasting": boolean | null, "results": [{"raw_label": string, "analyte_en": string | null, "value": number, "unit": string, "ref_range_text": string | null, "page": number | null}]}
 
 Strict rules:
 - "collection_date" is the date the sample was COLLECTED/DRAWN as ISO "YYYY-MM-DD" (prefer the collection/sampling date over the print/report date if both are shown). If the day/month/year is not fully legible, use null. Never guess.
@@ -17,6 +17,7 @@ Strict rules:
 - "fasting" is true if the report states the sample was taken fasting, false if it states non-fasting, otherwise null. Never guess.
 - "results" contains one object per analyte row.
 - "raw_label" must be the analyte name EXACTLY as printed (original language, original wording). Do NOT translate, rename, normalize, or map it to any standard nomenclature.
+- "analyte_en" is the SAME analyte's standard English name, translated from "raw_label" so it can be matched against an English dictionary — e.g. "Colesterol total" → "Total cholesterol", "Глюкоза" → "Glucose", "Erythrozyten" → "Red blood cells", "Hierro" → "Iron", "Hémoglobine" → "Hemoglobin". If the label is already English, repeat it verbatim. Use the common clinical English term; never invent an analyte that is not in the document; use null only if you genuinely cannot tell what it is.
 - "value" must be the numeric result. Use "." as decimal separator. For values printed like "<0.5" use the number (0.5). Skip rows whose result is purely qualitative (e.g. "negative") — do not invent numbers.
 - "unit" is the unit string exactly as printed, or "" if no unit is printed.
 - "ref_range_text" is the reference range exactly as printed, or null.

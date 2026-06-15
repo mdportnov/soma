@@ -560,7 +560,11 @@ export function ImportWizard() {
         onClose={() => setCustomForKey(null)}
         initialName={
           step.name === "review" && customForKey != null
-            ? (step.rows.find((r) => r.key === customForKey)?.raw.raw_label ?? "")
+            ? (() => {
+                const row = step.rows.find((r) => r.key === customForKey);
+                // Prefer the English form so new custom biomarkers stay English.
+                return row?.raw.analyte_en ?? row?.raw.raw_label ?? "";
+              })()
             : ""
         }
         existingCategories={[...new Set(boot.biomarkers.map((b) => b.category))]}
@@ -597,9 +601,16 @@ function BackLink() {
 }
 
 function ConfidenceBadge({ confidence }: { confidence: MappedRow["confidence"] }) {
+  const { t } = useI18n();
   switch (confidence) {
     case "exact":
       return <Badge variant="success">exact</Badge>;
+    case "translated":
+      return (
+        <Badge variant="warning" title={t("importWizard.translatedHint")}>
+          translated
+        </Badge>
+      );
     case "fuzzy":
       return <Badge variant="warning">fuzzy</Badge>;
     case "ai":
@@ -668,8 +679,9 @@ function ReviewStep({
         <CardHeader>
           <CardTitle>{t("importWizard.reviewExtractedResults")}</CardTitle>
           <CardDescription>
-            Check each mapping before saving. Green = exact dictionary match, yellow = fuzzy match,
-            blue = AI-suggested, red = unrecognized. Original labels are kept for audit.
+            Check each mapping before saving. Green = the printed label is an exact dictionary
+            match; amber = matched via translation or fuzzy similarity (verify these); blue =
+            AI-suggested; red = unrecognized. Original labels are kept for audit.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -702,6 +714,15 @@ function ReviewStep({
                       <p className="truncate text-sm" title={row.raw.raw_label}>
                         {row.raw.raw_label}
                       </p>
+                      {row.raw.analyte_en &&
+                        row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase() && (
+                          <p
+                            className="truncate text-[10px] italic text-muted-foreground"
+                            title={row.raw.analyte_en}
+                          >
+                            ≈ {row.raw.analyte_en}
+                          </p>
+                        )}
                       {row.raw.ref_range_text && (
                         <p className="text-[10px] text-muted-foreground">
                           ref: {row.raw.ref_range_text}

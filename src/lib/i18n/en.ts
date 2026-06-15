@@ -175,6 +175,10 @@ export const en = {
       saveKey: "Save key",
       testKey: "Test key",
       keyWorks: "Key works — model responded.",
+      getApiKey: "Create API key",
+      recommendTitle: "Which model should I pick?",
+      recommendBody:
+        "Best value: Google Gemini (Flash tier — has a free tier and reads PDFs directly). Best accuracy: Anthropic Claude (Sonnet). One key for many models: OpenRouter. Tip: Gemini and Claude read PDFs natively; with OpenAI/OpenRouter, clear photos work most reliably.",
       disclaimer:
         "AI output is never medical advice. Documents you import are sent to the selected provider only when you explicitly run an AI action.",
       aiDisclaimer:
@@ -840,6 +844,8 @@ export const en = {
     description:
       "PDF or photo → extracted values → you confirm the mapping → saved. Nothing is written without your review.",
     notMapped: "— not mapped —",
+    translatedHint:
+      "Matched via the AI's English translation, not the printed label — double-check it's the right biomarker (e.g. LDL vs total cholesterol).",
     savingPanel: "Saving panel…",
     chooseLabReport: "Choose a lab report",
     anyLangHint: "Any language, any lab, any country — scans and photos included.",

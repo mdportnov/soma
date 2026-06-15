@@ -1,11 +1,14 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import type { BiomarkerChange } from "@/lib/insights";
+import { useI18n } from "@/lib/i18n";
 import { cn, formatValue } from "@/lib/utils";
 
 /**
  * Compact change indicator: an arrow for the value direction, colored by
- * trajectory (green = improved, amber/red = worsened, grey = neutral). Shows the
- * percent move when available, otherwise the absolute delta in the given unit.
+ * trajectory (green = improved, amber/red = worsened, grey = neutral). Color is
+ * not the only cue — the arrow encodes direction and an aria-label spells out
+ * the trajectory for screen readers and colorblind users. Shows the percent
+ * move when available, otherwise the absolute delta in the given unit.
  */
 export function DeltaBadge({
   change,
@@ -16,6 +19,7 @@ export function DeltaBadge({
   unit?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   const Icon =
     change.direction === "up" ? ArrowUpRight : change.direction === "down" ? ArrowDownRight : Minus;
 
@@ -36,9 +40,15 @@ export function DeltaBadge({
 
   return (
     <span
-      className={cn("inline-flex items-center gap-0.5 text-xs font-medium tabular-nums", tone, className)}
+      role="img"
+      aria-label={`${label}, ${t(`insights.trajectory.${change.trajectory}`)}`}
+      className={cn(
+        "inline-flex items-center gap-0.5 text-xs font-medium tabular-nums",
+        tone,
+        className,
+      )}
     >
-      <Icon className="size-3.5" />
+      <Icon className="size-3.5" aria-hidden />
       {label}
     </span>
   );

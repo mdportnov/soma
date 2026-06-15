@@ -167,7 +167,8 @@ function validateExtractions(parsed: unknown): RawExtraction[] {
   for (const item of parsed) {
     if (typeof item !== "object" || item === null) continue;
     const o = item as Record<string, unknown>;
-    const rawLabel = typeof o.raw_label === "string" ? o.raw_label.trim() : "";
+    // Bound every string: model output is untrusted and could be huge.
+    const rawLabel = typeof o.raw_label === "string" ? o.raw_label.trim().slice(0, 300) : "";
     const value =
       typeof o.value === "number"
         ? o.value
@@ -178,18 +179,19 @@ function validateExtractions(parsed: unknown): RawExtraction[] {
     rows.push({
       raw_label: rawLabel,
       value,
-      unit: typeof o.unit === "string" ? o.unit.trim() : "",
-      ref_range_text: typeof o.ref_range_text === "string" ? o.ref_range_text : null,
+      unit: typeof o.unit === "string" ? o.unit.trim().slice(0, 40) : "",
+      ref_range_text:
+        typeof o.ref_range_text === "string" ? o.ref_range_text.trim().slice(0, 120) : null,
       page: typeof o.page === "number" ? o.page : null,
     });
   }
   return rows;
 }
 
-/** Trimmed string or null. */
+/** Trimmed, length-bounded string or null (model output is untrusted). */
 function nullableStr(v: unknown): string | null {
   if (typeof v !== "string") return null;
-  const t = v.trim();
+  const t = v.trim().slice(0, 200);
   return t ? t : null;
 }
 
@@ -255,6 +257,6 @@ function validateDischarge(parsed: unknown): RawDischargeExtraction {
     doctorName: nullableStr(o.doctorName),
     diagnoses,
     medications,
-    notes: typeof o.notes === "string" ? o.notes.trim() : "",
+    notes: typeof o.notes === "string" ? o.notes.trim().slice(0, 4000) : "",
   };
 }

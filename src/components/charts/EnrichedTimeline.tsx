@@ -1,8 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 import type { PanelShift, TimelineEvent } from "@/db/repos";
+import { bpStageColor } from "@/lib/vitals";
+import { useI18n } from "@/lib/i18n";
+import { Tooltip } from "@/components/ui/tooltip";
 import { OVERLAY_COLORS } from "./TrendChart";
 import { cn, formatDate, formatValue } from "@/lib/utils";
+
+/** Medications shown before the lane collapses behind a "show more" toggle. */
+const MED_LIMIT = 5;
 
 const DAY = 86400000;
 
@@ -51,13 +58,6 @@ const DOT_LANES: TimelineLayer[] = [
   "allergy",
 ];
 
-function bpColor(sys: number, dia: number): string {
-  if (sys > 180 || dia > 120) return "#dc2626"; // crisis
-  if (sys >= 140 || dia >= 90) return "#d97706"; // stage 2
-  if (sys >= 130 || dia >= 80) return "#eab308"; // stage 1 / elevated
-  return "#0d9488"; // normal
-}
-
 /** Halo for a lab dot whose panel introduced a strong shift; null = no halo. */
 function shiftHalo(severity: PanelShift["severity"]): { color: string; pulse: boolean } | null {
   if (severity === "alert") return { color: "var(--destructive)", pulse: true };
@@ -93,7 +93,9 @@ export function EnrichedTimeline({
   labels: Record<TimelineLayer, string>;
 }) {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [now] = useState(() => Date.now());
+  const [medsExpanded, setMedsExpanded] = useState(false);
 
   const allTs = [
     ...events.map((e) => ts(e.date)),
@@ -150,13 +152,23 @@ export function EnrichedTimeline({
   };
 
   const nowX = visible(now) ? pos(now) : null;
+  const hasShifts =
+    enabled.has("lab_panel") &&
+    !!shiftByPanel &&
+    [...shiftByPanel.values()].some((s) => s.severity === "alert" || s.severity === "watch");
 
-  const meds = enabled.has("medication")
-    ? events.filter(
-        (e): e is Extract<TimelineEvent, { kind: "medication" }> =>
-          e.kind === "medication" && ts(e.endDate ?? new Date(now).toISOString()) >= start,
-      )
-    : [];
+  const medsInRange = (
+    enabled.has("medication")
+      ? events.filter(
+          (e): e is Extract<TimelineEvent, { kind: "medication" }> => e.kind === "medication",
+        )
+      : []
+  ).filter((m) => {
+    const mStart = ts(m.date);
+    const mEnd = m.endDate ? ts(m.endDate) : now;
+    return mEnd >= start && mStart <= end;
+  });
+  const shownMeds = medsExpanded ? medsInRange : medsInRange.slice(0, MED_LIMIT);
 
   const dotLanes = DOT_LANES.filter((kind) => enabled.has(kind)).map((kind) => ({
     kind,
@@ -174,7 +186,7 @@ export function EnrichedTimeline({
     <div className="overflow-hidden rounded-xl border bg-card">
       {/* Tick header */}
       <div className="flex items-end border-b bg-muted/30">
-        <div className="w-24 shrink-0" />
+        <div className="w-16 shrink-0 sm:w-24" />
         <div className="relative h-6 flex-1">
           {ticks.map((tick) => (
             <span
@@ -196,45 +208,62 @@ export function EnrichedTimeline({
               <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
               {items.map((e) => {
                 const x = pos(ts(e.date));
-                const shift =
-                  e.kind === "lab_panel" ? shiftByPanel?.get(e.id) : undefined;
+                const shift = e.kind === "lab_panel" ? shiftByPanel?.get(e.id) : undefined;
                 const halo = shift ? shiftHalo(shift.severity) : null;
-                const shiftNote = shift
-                  ? `\n${shift.count} notable change${shift.count > 1 ? "s" : ""}`
-                  : "";
+                const isAlert = shift?.severity === "alert";
+                const outOfRange = e.kind === "lab_panel" && e.outOfRangeCount > 0;
+                const dotColor = outOfRange ? "var(--destructive)" : LAYER_COLOR[kind];
                 return (
-                  <span key={`${e.kind}-${e.id}`}>
-                    {halo && (
+                  <Tooltip
+                    key={`${e.kind}-${e.id}`}
+                    content={
+                      <>
+                        <span className="font-medium">{e.title}</span> — {formatDate(e.date)}
+                        {e.subtitle && (
+                          <div className="text-muted-foreground">{e.subtitle}</div>
+                        )}
+                        {shift && (
+                          <div className="font-medium text-warning">
+                            {t("timeline.shiftCount", { count: String(shift.count) })}
+                          </div>
+                        )}
+                      </>
+                    }
+                  >
+                    <button
+                      aria-label={`${e.title} — ${formatDate(e.date)}`}
+                      onClick={() => navigate(eventTarget(e))}
+                      className="group absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
+                      style={{ left: `${x}%` }}
+                    >
+                      {halo && (
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
+                            isAlert ? "size-6" : "size-5",
+                            halo.pulse && "motion-safe:animate-ping",
+                          )}
+                          style={{ backgroundColor: halo.color, opacity: 0.3 }}
+                        />
+                      )}
+                      {halo && (
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
+                            isAlert ? "size-5" : "size-4",
+                          )}
+                          style={{ backgroundColor: halo.color, opacity: 0.25 }}
+                        />
+                      )}
                       <span
                         className={cn(
-                          "pointer-events-none absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full",
-                          halo.pulse && "animate-ping",
+                          "rounded-full ring-2 ring-card transition-transform group-hover:scale-150",
+                          halo ? "size-3.5" : "size-3",
                         )}
-                        style={{ left: `${x}%`, backgroundColor: halo.color, opacity: 0.3 }}
+                        style={{ backgroundColor: dotColor }}
                       />
-                    )}
-                    {halo && (
-                      <span
-                        className="pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                        style={{ left: `${x}%`, backgroundColor: halo.color, opacity: 0.25 }}
-                      />
-                    )}
-                    <button
-                      title={`${e.title} — ${formatDate(e.date)}${e.subtitle ? `\n${e.subtitle}` : ""}${shiftNote}`}
-                      onClick={() => navigate(eventTarget(e))}
-                      className={cn(
-                        "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full ring-2 ring-card transition-transform hover:scale-150",
-                        halo && "size-3.5",
-                      )}
-                      style={{
-                        left: `${x}%`,
-                        backgroundColor:
-                          e.kind === "lab_panel" && e.outOfRangeCount > 0
-                            ? "var(--destructive)"
-                            : LAYER_COLOR[kind],
-                      }}
-                    />
-                  </span>
+                    </button>
+                  </Tooltip>
                 );
               })}
             </LaneRow>
@@ -255,7 +284,12 @@ export function EnrichedTimeline({
             pos={pos}
             color={LAYER_COLOR.weight}
             target={weightTargetKg ?? null}
-            tooltip={(p) => `${formatValue(p.v, 1)} kg — ${formatDate(new Date(p.t).toISOString())}`}
+            tooltip={(p) => (
+              <>
+                <span className="font-medium">{formatValue(p.v, 1)} kg</span> ·{" "}
+                {formatDate(new Date(p.t).toISOString())}
+              </>
+            )}
           />
         </LaneRow>
       )}
@@ -273,37 +307,60 @@ export function EnrichedTimeline({
         </LaneRow>
       )}
 
-      {/* Medication duration bars */}
-      {meds.map((m, i) => {
+      {/* Medication duration bars (collapsed past MED_LIMIT) */}
+      {shownMeds.map((m, i) => {
         const mStart = ts(m.date);
         const mEnd = m.endDate ? ts(m.endDate) : now;
-        if (mEnd < start || mStart > end) return null;
         const x1 = Math.max(pos(mStart), 0);
         const x2 = Math.min(pos(mEnd), 100);
         const color = OVERLAY_COLORS[i % OVERLAY_COLORS.length];
+        const range = `${formatDate(m.date)} → ${m.endDate ? formatDate(m.endDate) : t("timeline.now")}`;
         return (
           <LaneRow key={`med-${m.id}`} label={m.title} color={color} compact height={28}>
             <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
-            <button
-              title={`${m.title}${m.subtitle ? ` · ${m.subtitle}` : ""} — ${formatDate(m.date)} → ${m.endDate ? formatDate(m.endDate) : "now"}`}
-              onClick={() => navigate("/medications")}
-              className="absolute top-1/2 h-2.5 -translate-y-1/2 cursor-pointer rounded-full ring-1 ring-card transition-opacity hover:opacity-80"
-              style={{
-                left: `${x1}%`,
-                width: `${Math.max(x2 - x1, 0.6)}%`,
-                backgroundColor: color,
-                opacity: 0.8,
-              }}
-            />
+            <Tooltip
+              content={
+                <>
+                  <span className="font-medium">{m.title}</span>
+                  {m.subtitle ? ` · ${m.subtitle}` : ""}
+                  <div className="text-muted-foreground">{range}</div>
+                </>
+              }
+            >
+              <button
+                aria-label={`${m.title} — ${range}`}
+                onClick={() => navigate("/medications")}
+                className="absolute top-1/2 h-2.5 -translate-y-1/2 cursor-pointer rounded-full ring-1 ring-card transition-opacity hover:opacity-80"
+                style={{
+                  left: `${x1}%`,
+                  width: `${Math.max(x2 - x1, 0.6)}%`,
+                  backgroundColor: color,
+                  opacity: 0.8,
+                }}
+              />
+            </Tooltip>
             {!m.endDate && (
               <span
-                className="absolute top-1/2 size-2 -translate-y-1/2 translate-x-1 rounded-full"
+                className="pointer-events-none absolute top-1/2 size-2 -translate-y-1/2 translate-x-1 rounded-full"
                 style={{ left: `${x2}%`, backgroundColor: color }}
               />
             )}
           </LaneRow>
         );
       })}
+      {medsInRange.length > MED_LIMIT && (
+        <button
+          onClick={() => setMedsExpanded((v) => !v)}
+          className="flex w-full items-center gap-1.5 border-b border-dashed py-1.5 pl-2 text-[11px] font-medium text-muted-foreground last:border-0 hover:bg-muted/20"
+        >
+          <ChevronDown className={cn("size-3.5 transition-transform", medsExpanded && "rotate-180")} />
+          {medsExpanded
+            ? t("timeline.medsLess")
+            : t("timeline.medsMore", { count: String(medsInRange.length - MED_LIMIT) })}
+        </button>
+      )}
+
+      <TimelineLegend t={t} hasShifts={hasShifts} hasBp={bpPts.length > 0} />
     </div>
   );
 }
@@ -351,11 +408,11 @@ function LaneRow({
 }) {
   return (
     <div className="flex items-center border-b border-dashed last:border-0 hover:bg-muted/20">
-      <div className="flex w-24 shrink-0 items-center justify-end gap-1.5 pr-3">
+      <div className="flex w-16 shrink-0 items-center gap-1.5 pl-2 pr-2 sm:w-24">
         <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <span
           className={cn(
-            "truncate text-right text-[11px] font-medium text-muted-foreground",
+            "min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground",
             compact && "text-[10px]",
           )}
           title={label}
@@ -389,7 +446,7 @@ function Sparkline({
   pos: (t: number) => number;
   color: string;
   target: number | null;
-  tooltip: (p: Pt) => string;
+  tooltip: (p: Pt) => ReactNode;
 }) {
   const vals = [...points.map((p) => p.v), ...(target != null ? [target] : [])];
   const lo = Math.min(...vals);
@@ -436,14 +493,84 @@ function Sparkline({
         />
       </svg>
       {coords.map((c, i) => (
-        <span
-          key={i}
-          title={tooltip(c.p)}
-          className="absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-card"
-          style={{ left: `${c.x}%`, top: `${c.y}%`, backgroundColor: color }}
-        />
+        <Tooltip key={i} content={tooltip(c.p)}>
+          <span
+            className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-card"
+            style={{ left: `${c.x}%`, top: `${c.y}%`, backgroundColor: color }}
+          />
+        </Tooltip>
       ))}
     </>
+  );
+}
+
+/** Collapsible color/shape key — the timeline relies on color, so explain it. */
+function TimelineLegend({
+  t,
+  hasShifts,
+  hasBp,
+}: {
+  t: (key: string) => string;
+  hasShifts: boolean;
+  hasBp: boolean;
+}) {
+  const dot = (color: string) => (
+    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+  );
+  return (
+    <details className="group border-t bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium">
+        <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+        {t("timeline.legend.title")}
+      </summary>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+        <span className="inline-flex items-center gap-1.5">
+          {dot("var(--destructive)")} {t("timeline.legend.outOfRange")}
+        </span>
+        {hasShifts && (
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <ShiftSwatch color="#d97706" /> {t("timeline.legend.shiftWatch")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <ShiftSwatch color="var(--destructive)" /> {t("timeline.legend.shiftAlert")}
+            </span>
+          </>
+        )}
+        {hasBp && (
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              {dot("#0d9488")} {t("timeline.legend.bpNormal")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              {dot("#eab308")} {t("timeline.legend.bpStage1")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              {dot("#d97706")} {t("timeline.legend.bpStage2")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              {dot("var(--destructive)")} {t("timeline.legend.bpCrisis")}
+            </span>
+          </>
+        )}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-3 w-px shrink-0 bg-primary/50" /> {t("timeline.legend.today")}
+        </span>
+      </div>
+    </details>
+  );
+}
+
+/** Mimics a halo'd lab dot: faint ring around a neutral center. */
+function ShiftSwatch({ color }: { color: string }) {
+  return (
+    <span className="relative flex size-3.5 shrink-0 items-center justify-center">
+      <span
+        className="absolute inset-0 rounded-full"
+        style={{ backgroundColor: color, opacity: 0.3 }}
+      />
+      <span className="size-1.5 rounded-full bg-foreground/60" />
+    </span>
   );
 }
 
@@ -459,17 +586,27 @@ function BpLane({ points, pos }: { points: BpPoint[]; pos: (t: number) => number
         const top = yPct(p.systolic);
         const bottom = yPct(p.diastolic);
         return (
-          <span
+          <Tooltip
             key={i}
-            title={`${p.systolic}/${p.diastolic} — ${formatDate(p.date)}`}
-            className="absolute w-[3px] -translate-x-1/2 rounded-full ring-1 ring-card/60"
-            style={{
-              left: `${pos(ts(p.date))}%`,
-              top: `${top}%`,
-              height: `${Math.max(bottom - top, 1.5)}%`,
-              backgroundColor: bpColor(p.systolic, p.diastolic),
-            }}
-          />
+            content={
+              <>
+                <span className="font-medium">
+                  {p.systolic}/{p.diastolic}
+                </span>{" "}
+                · {formatDate(p.date)}
+              </>
+            }
+          >
+            <span
+              className="absolute w-[3px] -translate-x-1/2 rounded-full ring-1 ring-card/60"
+              style={{
+                left: `${pos(ts(p.date))}%`,
+                top: `${top}%`,
+                height: `${Math.max(bottom - top, 1.5)}%`,
+                backgroundColor: bpStageColor(p.systolic, p.diastolic),
+              }}
+            />
+          </Tooltip>
         );
       })}
     </>

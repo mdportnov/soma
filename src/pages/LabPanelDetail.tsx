@@ -151,14 +151,22 @@ export function LabPanelDetail() {
                     {formatValue(r.value)} {r.unit}
                   </TableCell>
                   <TableCell>
-                    {changeByResult.get(r.id)?.change ? (
-                      <DeltaBadge
-                        change={changeByResult.get(r.id)!.change!}
-                        unit={r.unitNormalized ?? r.unit}
-                      />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
+                    {(() => {
+                      const pc = changeByResult.get(r.id);
+                      if (pc?.change)
+                        return <DeltaBadge change={pc.change} unit={r.unitNormalized ?? r.unit} />;
+                      // Has a prior reading but no change = units weren't comparable.
+                      if (pc?.previous)
+                        return (
+                          <span
+                            className="text-[11px] text-muted-foreground"
+                            title={t("insights.unitChanged")}
+                          >
+                            {t("insights.unitChangedShort")}
+                          </span>
+                        );
+                      return <span className="text-xs text-muted-foreground">—</span>;
+                    })()}
                   </TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">
                     {r.valueNormalized != null && r.unitNormalized !== r.unit

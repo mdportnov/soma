@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/table";
 import { cn, formatDate, formatValue, todayISO } from "@/lib/utils";
 import { kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
+import { isCrisis, isStage2 } from "@/lib/vitals";
 import { useI18n } from "@/lib/i18n";
 
 type Tab = "weight" | "bp" | "symptoms";
@@ -63,13 +64,6 @@ const DIA_C = "#2563eb";
 
 function tsOf(iso: string): number {
   return new Date(`${iso.slice(0, 10)}T00:00:00`).getTime();
-}
-
-function isCrisis(sys: number, dia: number): boolean {
-  return sys > 180 || dia > 120;
-}
-function isStage2(sys: number, dia: number): boolean {
-  return sys >= 140 || dia >= 90;
 }
 
 export function Journal() {

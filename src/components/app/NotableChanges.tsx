@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Sparkles, TrendingUp } from "lucide-react";
+import { ChevronDown, Sparkles, TrendingUp } from "lucide-react";
 import type { PanelChange } from "@/db/repos";
 import type { ChangeReason, ChangeSeverity } from "@/lib/insights";
 import { useI18n } from "@/lib/i18n";
@@ -122,6 +122,15 @@ export function NotableChanges({
               );
             })}
           </ul>
+        )}
+        {shown.length > 0 && (
+          <details className="group mt-3 border-t pt-2 text-xs text-muted-foreground">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium">
+              <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+              {t("insights.howTitle")}
+            </summary>
+            <p className="mt-1.5 leading-relaxed">{t("insights.howBody")}</p>
+          </details>
         )}
       </CardContent>
     </Card>

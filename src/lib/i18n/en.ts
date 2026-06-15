@@ -379,6 +379,20 @@ export const en = {
     description: "Your labs against medications, weight and vitals — one configurable time scale.",
     layersTitle: "Layers",
     shiftHint: "Highlighted lab dots mark panels where a biomarker shifted strongly vs the previous one.",
+    shiftCount: "{{count}} notable change(s) vs previous",
+    medsMore: "+{{count}} more medications",
+    medsLess: "Show fewer medications",
+    legend: {
+      title: "Legend",
+      outOfRange: "Lab out of range",
+      shiftWatch: "Notable shift",
+      shiftAlert: "Out of range / critical shift",
+      bpNormal: "BP normal",
+      bpStage1: "BP elevated",
+      bpStage2: "BP stage 2",
+      bpCrisis: "BP crisis",
+      today: "Today",
+    },
     layers: {
       lab_panel: "Labs",
       medication: "Medications",
@@ -448,6 +462,16 @@ export const en = {
     baseline: "First reading for these biomarkers — future imports will be compared against this baseline.",
     allStable: "No notable changes since last time — values held steady.",
     since: "since {{date}}",
+    unitChanged: "Units differ from the previous reading — change not comparable.",
+    unitChangedShort: "units ≠",
+    howTitle: "How is this decided?",
+    howBody:
+      "A change is flagged when it crosses the reference range, reaches a critical level, moves more than ~40% of the range width, or changes by ~50%+ relative to last time. Green means it moved toward the healthy direction; red means away from it.",
+    trajectory: {
+      improved: "improved",
+      worsened: "worsened",
+      neutral: "changed",
+    },
     reason: {
       became_out_of_range: "moved out of range",
       worsened_critical: "reached a critical level",

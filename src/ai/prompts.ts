@@ -7,18 +7,22 @@ import type { MappingCandidatePayload } from "./types";
  */
 export const EXTRACTION_PROMPT = `You are a data-extraction engine for laboratory reports. The attached document is a lab test report; it may be in any language, from any country, photographed or scanned.
 
-Extract EVERY quantitative analyte row and return ONLY a JSON array, with one object per row:
+Extract the panel metadata and EVERY quantitative analyte row, and return ONLY a single JSON object:
 
-[{"raw_label": string, "value": number, "unit": string, "ref_range_text": string | null, "page": number | null}]
+{"collection_date": string | null, "lab_name": string | null, "fasting": boolean | null, "results": [{"raw_label": string, "value": number, "unit": string, "ref_range_text": string | null, "page": number | null}]}
 
 Strict rules:
+- "collection_date" is the date the sample was COLLECTED/DRAWN as ISO "YYYY-MM-DD" (prefer the collection/sampling date over the print/report date if both are shown). If the day/month/year is not fully legible, use null. Never guess.
+- "lab_name" is the laboratory or clinic name as printed, or null.
+- "fasting" is true if the report states the sample was taken fasting, false if it states non-fasting, otherwise null. Never guess.
+- "results" contains one object per analyte row.
 - "raw_label" must be the analyte name EXACTLY as printed (original language, original wording). Do NOT translate, rename, normalize, or map it to any standard nomenclature.
 - "value" must be the numeric result. Use "." as decimal separator. For values printed like "<0.5" use the number (0.5). Skip rows whose result is purely qualitative (e.g. "negative") — do not invent numbers.
 - "unit" is the unit string exactly as printed, or "" if no unit is printed.
 - "ref_range_text" is the reference range exactly as printed, or null.
 - "page" is the 1-based page number the row appears on, or null for images.
 - Do not add analytes that are not in the document. Do not deduplicate rows.
-- Output ONLY the JSON array. No preamble, no Markdown fences, no commentary.`;
+- Output ONLY the JSON object. No preamble, no Markdown fences, no commentary.`;
 
 /**
  * Vaccination-certificate extraction prompt. Output is reviewed 100% manually,

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./client";
 import {
   allergy,
@@ -54,6 +54,13 @@ import {
   type DemographicRange,
   type ProfileContext,
 } from "@/lib/units";
+import {
+  changeBetween,
+  pointFromResult,
+  type BiomarkerChange,
+  type ChangeSeverity,
+  type ValuePoint,
+} from "@/lib/insights";
 
 // ── profiles ───────────────────────────────────────────────────────────────
 
@@ -377,6 +384,135 @@ export async function getLatestResults(profileId: number) {
   const latest = new Map<number, (typeof rows)[number]>();
   for (const r of rows) latest.set(r.biomarkerId, r); // ordered asc, id tiebreak → last write wins
   return latest;
+}
+
+// ── cross-panel correlation (§ "what changed since last time") ──────────────
+
+export type PanelChange = {
+  result: ResultWithBiomarker;
+  /** The same biomarker's reading just before this panel, if any. */
+  previous: (ValuePoint & { panelId: number }) | null;
+  /** Classified move from `previous` to this result; null when incomparable. */
+  change: BiomarkerChange | null;
+};
+
+/**
+ * For every result in a panel, finds the same biomarker's previous reading and
+ * classifies the change — the data behind the panel's "notable changes" view.
+ * "Previous" is the latest reading strictly before this panel in (date, id)
+ * order, so re-importing an older panel still compares against the right point.
+ */
+export async function getPanelChanges(panelId: number): Promise<PanelChange[]> {
+  const panel = await getPanel(panelId);
+  if (!panel) return [];
+  const results = await getPanelResults(panelId);
+  if (!results.length) return [];
+
+  const biomarkerIds = [...new Set(results.map((r) => r.biomarkerId))];
+  const history = await db
+    .select({
+      biomarkerId: labResult.biomarkerId,
+      panelId: labPanel.id,
+      date: labPanel.date,
+      value: labResult.value,
+      unit: labResult.unit,
+      valueNormalized: labResult.valueNormalized,
+      unitNormalized: labResult.unitNormalized,
+      outOfRange: labResult.outOfRange,
+      flag: labResult.flag,
+    })
+    .from(labResult)
+    .innerJoin(labPanel, eq(labResult.panelId, labPanel.id))
+    .where(
+      and(eq(labPanel.profileId, panel.profileId), inArray(labResult.biomarkerId, biomarkerIds)),
+    )
+    .orderBy(asc(labPanel.date), asc(labPanel.id));
+
+  const byBiomarker = new Map<number, typeof history>();
+  for (const h of history) {
+    const list = byBiomarker.get(h.biomarkerId) ?? [];
+    list.push(h);
+    byBiomarker.set(h.biomarkerId, list);
+  }
+
+  return results.map((result) => {
+    const series = byBiomarker.get(result.biomarkerId) ?? [];
+    let prevRow: (typeof history)[number] | null = null;
+    for (const h of series) {
+      if (h.date < panel.date || (h.date === panel.date && h.panelId < panel.id)) prevRow = h;
+    }
+    if (!prevRow) return { result, previous: null, change: null };
+    const previous = { ...pointFromResult(prevRow), panelId: prevRow.panelId };
+    const current = pointFromResult({ ...result, date: panel.date });
+    return { result, previous, change: changeBetween(previous, current, result.biomarker) };
+  });
+}
+
+/** The most recent panel with its per-result changes — dashboard summary. */
+export async function getLatestPanelChanges(
+  profileId: number,
+): Promise<{ panel: LabPanel; changes: PanelChange[] } | null> {
+  const rows = await db
+    .select()
+    .from(labPanel)
+    .where(eq(labPanel.profileId, profileId))
+    .orderBy(desc(labPanel.date), desc(labPanel.id))
+    .limit(1);
+  if (!rows.length) return null;
+  return { panel: rows[0], changes: await getPanelChanges(rows[0].id) };
+}
+
+export type PanelShift = { severity: ChangeSeverity; count: number };
+
+const SHIFT_RANK: Record<ChangeSeverity, number> = { info: 0, watch: 1, alert: 2 };
+
+/**
+ * For every panel, the strongest notable shift it introduced versus the prior
+ * reading of each biomarker — used to highlight "something moved here" dots on
+ * the timeline. One pass over the whole history: results are streamed in
+ * (biomarker, date) order and each transition is attributed to the later panel.
+ */
+export async function getPanelShiftSeverities(profileId: number): Promise<Map<number, PanelShift>> {
+  const rows = await db
+    .select({
+      panelId: labPanel.id,
+      date: labPanel.date,
+      biomarkerId: labResult.biomarkerId,
+      value: labResult.value,
+      unit: labResult.unit,
+      valueNormalized: labResult.valueNormalized,
+      unitNormalized: labResult.unitNormalized,
+      outOfRange: labResult.outOfRange,
+      flag: labResult.flag,
+      refLow: biomarker.refLow,
+      refHigh: biomarker.refHigh,
+      optimalLow: biomarker.optimalLow,
+      optimalHigh: biomarker.optimalHigh,
+      direction: biomarker.direction,
+    })
+    .from(labResult)
+    .innerJoin(labPanel, eq(labResult.panelId, labPanel.id))
+    .innerJoin(biomarker, eq(labResult.biomarkerId, biomarker.id))
+    .where(eq(labPanel.profileId, profileId))
+    .orderBy(asc(labResult.biomarkerId), asc(labPanel.date), asc(labPanel.id));
+
+  const byPanel = new Map<number, PanelShift>();
+  let prev: (typeof rows)[number] | null = null;
+  for (const row of rows) {
+    if (prev && prev.biomarkerId === row.biomarkerId && prev.panelId !== row.panelId) {
+      const change = changeBetween(pointFromResult(prev), pointFromResult(row), row);
+      if (change?.notable) {
+        const existing = byPanel.get(row.panelId);
+        const severity =
+          existing && SHIFT_RANK[existing.severity] >= SHIFT_RANK[change.severity]
+            ? existing.severity
+            : change.severity;
+        byPanel.set(row.panelId, { severity, count: (existing?.count ?? 0) + 1 });
+      }
+    }
+    prev = row;
+  }
+  return byPanel;
 }
 
 // ── medications ────────────────────────────────────────────────────────────

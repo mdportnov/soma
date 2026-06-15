@@ -18,6 +18,21 @@ export type RawExtraction = {
 };
 
 /**
+ * Phase-1 lab-report output: the analyte rows plus panel-level metadata read
+ * from the same document. The collection date matters for correlation — without
+ * it an old report imported today would be mis-dated and break the trend.
+ */
+export type LabExtraction = {
+  /** ISO `YYYY-MM-DD` sample-collection date, or null when not legible. */
+  collectionDate: string | null;
+  /** Laboratory / clinic name as printed, or null. */
+  labName: string | null;
+  /** Fasting state at draw if stated; null when unknown. */
+  fasting: boolean | null;
+  results: RawExtraction[];
+};
+
+/**
  * Vaccination-certificate extraction. No dictionary fallback exists, so every
  * row is reviewed manually before it reaches the database.
  */
@@ -63,7 +78,7 @@ export type ChatMessage = { role: "user" | "assistant"; content: string };
 export interface AIProvider {
   readonly id: string;
   /** Phase 1: strict structured extraction from an image/PDF. */
-  extractFromDocument(doc: DocumentInput): Promise<RawExtraction[]>;
+  extractFromDocument(doc: DocumentInput): Promise<LabExtraction>;
   /**
    * Vaccination-certificate extraction. Output is always reviewed manually —
    * there is no deterministic dictionary fallback for vaccines.

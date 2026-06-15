@@ -4,6 +4,7 @@ import {
   type AIProvider,
   type ChatMessage,
   type DocumentInput,
+  type LabExtraction,
   type MappingCandidatePayload,
   type RawDischargeExtraction,
   type RawExtraction,
@@ -41,7 +42,7 @@ export abstract class BaseProvider implements AIProvider {
 
   protected abstract complete(req: CompletionRequest): Promise<string>;
 
-  async extractFromDocument(doc: DocumentInput): Promise<RawExtraction[]> {
+  async extractFromDocument(doc: DocumentInput): Promise<LabExtraction> {
     const text = await this.complete({
       parts: [
         { type: "document", doc },
@@ -49,8 +50,7 @@ export abstract class BaseProvider implements AIProvider {
       ],
       maxTokens: 16384,
     });
-    const parsed = extractJson<unknown>(text);
-    return validateExtractions(parsed);
+    return validateLabExtraction(extractJson<unknown>(text));
   }
 
   async extractVaccinesFromDocument(doc: DocumentInput): Promise<RawVaccineExtraction[]> {
@@ -139,9 +139,29 @@ export abstract class BaseProvider implements AIProvider {
   }
 }
 
+/**
+ * Accepts the panel object `{collection_date, lab_name, fasting, results}` and,
+ * for resilience, a bare `results` array from a model that ignored the schema.
+ */
+function validateLabExtraction(parsed: unknown): LabExtraction {
+  if (Array.isArray(parsed)) {
+    return { collectionDate: null, labName: null, fasting: null, results: validateExtractions(parsed) };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new AIProviderError("Extraction did not return a JSON object");
+  }
+  const o = parsed as Record<string, unknown>;
+  return {
+    collectionDate: isoDateOrNull(o.collection_date),
+    labName: nullableStr(o.lab_name),
+    fasting: typeof o.fasting === "boolean" ? o.fasting : null,
+    results: validateExtractions(o.results),
+  };
+}
+
 function validateExtractions(parsed: unknown): RawExtraction[] {
   if (!Array.isArray(parsed)) {
-    throw new AIProviderError("Extraction did not return a JSON array");
+    throw new AIProviderError("Extraction results is not a JSON array");
   }
   const rows: RawExtraction[] = [];
   for (const item of parsed) {

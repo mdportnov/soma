@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
+import { DeltaBadge } from "@/components/app/DeltaBadge";
+import { changeBetween, type ValuePoint } from "@/lib/insights";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/lib/i18n";
@@ -50,6 +52,18 @@ export function BiomarkerDetail() {
     return <EmptyState icon={LineChart} title={t("biomarkerDetail.biomarkerNotFound")} />;
 
   const { bio, series, meds, symptoms } = data;
+
+  const toPoint = (p: (typeof series)[number]): ValuePoint => ({
+    value: p.value,
+    unit: p.unit,
+    date: p.date,
+    outOfRange: p.outOfRange,
+    flag: p.flag as ValuePoint["flag"],
+  });
+  // change[i] = move from the prior reading into series[i] (null for the first).
+  const seriesChanges = series.map((p, i) =>
+    i === 0 ? null : changeBetween(toPoint(series[i - 1]), toPoint(p), bio),
+  );
 
   const overlays: MedOverlay[] = meds
     .filter((m) => activeOverlays.has(m.id))
@@ -188,12 +202,15 @@ export function BiomarkerDetail() {
                   <TableRow>
                     <TableHead>{t("fields.date")}</TableHead>
                     <TableHead>{t("fields.value")}</TableHead>
+                    <TableHead>{t("labPanelDetail.tableColumns.change")}</TableHead>
                     <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
                     <TableHead>{t("labs.tableColumns.lab")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[...series].reverse().map((p, i) => (
+                  {[...series].reverse().map((p, i) => {
+                    const change = seriesChanges[series.length - 1 - i];
+                    return (
                     <TableRow key={i}>
                       <TableCell>
                         <Link to={`/labs/${p.panelId}`} className="text-primary hover:underline">
@@ -204,11 +221,19 @@ export function BiomarkerDetail() {
                         {formatValue(p.value)} {p.unit}
                       </TableCell>
                       <TableCell>
+                        {change ? (
+                          <DeltaBadge change={change} unit={p.unit} />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <FlagBadge flag={p.outOfRange ? p.flag : null} evaluated={p.evaluated} />
                       </TableCell>
                       <TableCell className="text-muted-foreground">{p.labName ?? "—"}</TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

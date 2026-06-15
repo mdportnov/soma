@@ -27,7 +27,7 @@ import {
   updateAttachment,
 } from "@/db/repos";
 import { getConfiguredProvider } from "@/ai";
-import type { AIProvider, RawExtraction, RawVaccineExtraction } from "@/ai/types";
+import type { AIProvider, RawVaccineExtraction } from "@/ai/types";
 import {
   buildBiomarkerIndex,
   mapExtractions,
@@ -213,10 +213,16 @@ export function ImportWizard() {
       }
 
       // Lab report (default): Phase 1 raw extraction (never written to lab_result).
-      const raws: RawExtraction[] = await provider.extractFromDocument(doc);
-      if (!raws.length) throw new Error("No quantitative results found in the document.");
+      const extraction = await provider.extractFromDocument(doc);
+      if (!extraction.results.length) {
+        throw new Error("No quantitative results found in the document.");
+      }
+      // Pre-fill panel metadata from the document so an old report imported
+      // today keeps its real collection date — essential for the trend.
+      if (extraction.collectionDate) setDate(extraction.collectionDate);
+      if (extraction.labName && !labName) setLabName(extraction.labName);
       // Phase 2: deterministic mapping + narrow AI disambiguation.
-      const mapped = await mapExtractions(raws, boot.biomarkers, provider);
+      const mapped = await mapExtractions(extraction.results, boot.biomarkers, provider);
       setStep({
         name: "review",
         rows: mapped.map((m, i) => ({ ...m, include: m.biomarkerId != null, key: i })),

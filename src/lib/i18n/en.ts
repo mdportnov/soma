@@ -376,7 +376,21 @@ export const en = {
   // Timeline page
   timeline: {
     title: "Timeline",
-    description: "Labs, visits, diagnoses and medication periods on one time scale.",
+    description: "Your labs against medications, weight and vitals — one configurable time scale.",
+    layersTitle: "Layers",
+    shiftHint: "Highlighted lab dots mark panels where a biomarker shifted strongly vs the previous one.",
+    layers: {
+      lab_panel: "Labs",
+      medication: "Medications",
+      weight: "Weight",
+      bp: "Blood pressure",
+      symptom: "Symptoms",
+      visit: "Visits",
+      diagnosis: "Diagnoses",
+      vaccine: "Vaccines",
+      allergy: "Allergies",
+      imaging: "Imaging",
+    },
     ranges: {
       sixMonths: "6M",
       oneYear: "1Y",
@@ -417,10 +431,29 @@ export const en = {
     tableColumns: {
       biomarker: "Biomarker",
       value: "Value",
+      change: "Δ since previous",
       normalized: "Normalized",
       reference: "Reference",
       status: "Status",
       sourceLabel: "Source label",
+    },
+  },
+
+  // Cross-panel correlation ("what changed since last time")
+  insights: {
+    title: "Notable changes",
+    sinceLast: "Compared with your previous results for each biomarker.",
+    dashboardTitle: "What changed",
+    dashboardSince: "Notable shifts in your latest panel ({{date}}) vs the time before.",
+    baseline: "First reading for these biomarkers — future imports will be compared against this baseline.",
+    allStable: "No notable changes since last time — values held steady.",
+    since: "since {{date}}",
+    reason: {
+      became_out_of_range: "moved out of range",
+      worsened_critical: "reached a critical level",
+      back_in_range: "back in range",
+      large_move: "changed sharply",
+      moved_within_range: "shifted (still in range)",
     },
   },
 

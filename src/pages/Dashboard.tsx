@@ -3,10 +3,11 @@ import { Activity, AlertTriangle, CalendarRange, HeartPulse, Pill, TestTubes } f
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { useI18n } from "@/lib/i18n";
-import { getTimeline, listMedications, listPanels } from "@/db/repos";
+import { getLatestPanelChanges, getTimeline, listMedications, listPanels } from "@/db/repos";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
+import { NotableChanges } from "@/components/app/NotableChanges";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,20 +18,22 @@ export function Dashboard() {
   const { profileId } = useApp();
 
   const { data, loading } = useQuery(async () => {
-    const [panels, meds, timeline] = await Promise.all([
+    const [panels, meds, timeline, latestChanges] = await Promise.all([
       listPanels(profileId),
       listMedications(profileId),
       getTimeline(profileId),
+      getLatestPanelChanges(profileId),
     ]);
-    return { panels, meds, timeline };
+    return { panels, meds, timeline, latestChanges };
   }, [profileId]);
 
   if (loading || !data) return <Loading />;
 
-  const { panels, meds, timeline } = data;
+  const { panels, meds, timeline, latestChanges } = data;
   const latestPanel = panels[0] ?? null;
   const activeMeds = meds.filter((m) => !m.endDate);
   const recent = timeline.slice(0, 8);
+  const hasComparable = !!latestChanges?.changes.some((c) => c.change != null);
 
   const stats = [
     { label: t("dashboard.stats.labPanels"), value: panels.length, icon: TestTubes, to: "/labs" },
@@ -92,6 +95,19 @@ export function Dashboard() {
           </Link>
         ))}
       </div>
+
+      {hasComparable && (
+        <div className="mt-6">
+          <NotableChanges
+            changes={latestChanges!.changes}
+            title={t("insights.dashboardTitle")}
+            description={t("insights.dashboardSince", {
+              date: formatDate(latestChanges!.panel.date),
+            })}
+            limit={5}
+          />
+        </div>
+      )}
 
       <Card className="mt-6">
         <CardHeader className="flex-row items-center justify-between">

@@ -2,12 +2,20 @@ import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Sparkles, TestTubes, Trash2 } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
-import { createPanelWithResults, deletePanel, getPanel, getPanelResults } from "@/db/repos";
+import {
+  createPanelWithResults,
+  deletePanel,
+  getPanel,
+  getPanelChanges,
+  getPanelResults,
+} from "@/db/repos";
 import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
+import { DeltaBadge } from "@/components/app/DeltaBadge";
+import { NotableChanges } from "@/components/app/NotableChanges";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
@@ -32,15 +40,20 @@ export function LabPanelDetail() {
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { data, loading } = useQuery(async () => {
-    const [panel, results] = await Promise.all([getPanel(panelId), getPanelResults(panelId)]);
-    return { panel, results };
+    const [panel, results, changes] = await Promise.all([
+      getPanel(panelId),
+      getPanelResults(panelId),
+      getPanelChanges(panelId),
+    ]);
+    return { panel, results, changes };
   }, [panelId]);
 
   if (loading || !data) return <Loading />;
   if (!data.panel) return <EmptyState icon={TestTubes} title={t("labPanelDetail.panelNotFound")} />;
 
-  const { panel, results } = data;
+  const { panel, results, changes } = data;
   const outOfRange = results.filter((r) => r.outOfRange).length;
+  const changeByResult = new Map(changes.map((c) => [c.result.id, c]));
 
   return (
     <>
@@ -104,6 +117,10 @@ export function LabPanelDetail() {
         </div>
       )}
 
+      <div className="mb-4">
+        <NotableChanges changes={changes} />
+      </div>
+
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -111,6 +128,7 @@ export function LabPanelDetail() {
               <TableRow>
                 <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
                 <TableHead>{t("labPanelDetail.tableColumns.value")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.change")}</TableHead>
                 <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
                 <TableHead>{t("labPanelDetail.tableColumns.reference")}</TableHead>
                 <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
@@ -131,6 +149,16 @@ export function LabPanelDetail() {
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {formatValue(r.value)} {r.unit}
+                  </TableCell>
+                  <TableCell>
+                    {changeByResult.get(r.id)?.change ? (
+                      <DeltaBadge
+                        change={changeByResult.get(r.id)!.change!}
+                        unit={r.unitNormalized ?? r.unit}
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">
                     {r.valueNormalized != null && r.unitNormalized !== r.unit

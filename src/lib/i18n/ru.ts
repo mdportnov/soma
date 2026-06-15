@@ -510,6 +510,7 @@ export const ru = {
       unitPlaceholder: "например, %",
       refLowLabel: "Нижний реф.",
       refHighLabel: "Верхний реф.",
+      noRangeWarning: "Без референсного диапазона этот биомаркер никогда не будет помечен как вне нормы.",
       directionLabel: "Направление",
       directionOptions: {
         range: "В диапазоне",

@@ -507,6 +507,7 @@ export const en = {
       unitPlaceholder: "e.g. %",
       refLowLabel: "Ref. low",
       refHighLabel: "Ref. high",
+      noRangeWarning: "Without a reference range this biomarker will never be flagged out of range.",
       directionLabel: "Direction",
       directionOptions: {
         range: "In range",

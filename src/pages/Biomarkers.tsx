@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { Activity, Plus, Search } from "lucide-react";
+import { Activity, AlertTriangle, Plus, Search } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createBiomarker, getLatestResults, listBiomarkers } from "@/db/repos";
@@ -157,6 +157,9 @@ export function CreateBiomarkerDialog({
   existingCategories,
   unitCatalog,
   initialName = "",
+  initialUnit = "",
+  initialRefLow = "",
+  initialRefHigh = "",
 }: {
   open: boolean;
   onClose: () => void;
@@ -164,22 +167,32 @@ export function CreateBiomarkerDialog({
   existingCategories: string[];
   unitCatalog: string[];
   initialName?: string;
+  /** Prefills (e.g. from an import row): printed unit + parsed reference range. */
+  initialUnit?: string;
+  initialRefLow?: string;
+  initialRefHigh?: string;
 }) {
   const { t } = useI18n();
   const [name, setName] = React.useState(initialName);
   const [category, setCategory] = React.useState("Custom");
-  const [unit, setUnit] = React.useState("");
-  const [refLow, setRefLow] = React.useState("");
-  const [refHigh, setRefHigh] = React.useState("");
+  const [unit, setUnit] = React.useState(initialUnit);
+  const [refLow, setRefLow] = React.useState(initialRefLow);
+  const [refHigh, setRefHigh] = React.useState(initialRefHigh);
   const [aliases, setAliases] = React.useState("");
   const [direction, setDirection] = React.useState<"range" | "higher_better" | "lower_better">(
     "range",
   );
   const [saving, setSaving] = React.useState(false);
 
+  // Re-seed from props each time the dialog opens (a different import row).
   React.useEffect(() => {
-    if (open) setName(initialName);
-  }, [open, initialName]);
+    if (open) {
+      setName(initialName);
+      setUnit(initialUnit);
+      setRefLow(initialRefLow);
+      setRefHigh(initialRefHigh);
+    }
+  }, [open, initialName, initialUnit, initialRefLow, initialRefHigh]);
 
   const submit = async () => {
     if (!name.trim() || !unit.trim()) return;
@@ -269,6 +282,12 @@ export function CreateBiomarkerDialog({
             />
           </Field>
         </div>
+        {!refLow.trim() && !refHigh.trim() && (
+          <p className="flex items-start gap-1.5 text-[11px] text-warning">
+            <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+            {t("biomarkers.createDialog.noRangeWarning")}
+          </p>
+        )}
         <Field label={t("biomarkers.createDialog.aliasesLabel")}>
           <Input
             value={aliases}

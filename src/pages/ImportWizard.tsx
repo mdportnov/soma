@@ -140,6 +140,14 @@ export function ImportWizard() {
 
   const index = buildBiomarkerIndex(boot.biomarkers);
 
+  // The review row behind the open "create custom biomarker" dialog, used to
+  // pre-fill the new biomarker's name/unit/reference range from the document.
+  const customRow =
+    step.name === "review" && customForKey != null
+      ? step.rows.find((r) => r.key === customForKey)
+      : undefined;
+  const customRange = parseRefRange(customRow?.raw.ref_range_text ?? null);
+
   const pickFile = async () => {
     const selected = await open({
       multiple: false,
@@ -558,15 +566,10 @@ export function ImportWizard() {
       <CreateBiomarkerDialog
         open={customForKey != null}
         onClose={() => setCustomForKey(null)}
-        initialName={
-          step.name === "review" && customForKey != null
-            ? (() => {
-                const row = step.rows.find((r) => r.key === customForKey);
-                // Prefer the English form so new custom biomarkers stay English.
-                return row?.raw.analyte_en ?? row?.raw.raw_label ?? "";
-              })()
-            : ""
-        }
+        initialName={customRow?.raw.analyte_en ?? customRow?.raw.raw_label ?? ""}
+        initialUnit={customRow?.raw.unit ?? ""}
+        initialRefLow={customRange.low}
+        initialRefHigh={customRange.high}
         existingCategories={[...new Set(boot.biomarkers.map((b) => b.category))]}
         unitCatalog={allKnownUnits(boot.biomarkers.map((b) => b.defaultUnit))}
         onCreated={async (id) => {
@@ -827,6 +830,23 @@ function ReviewStep({
       </div>
     </>
   );
+}
+
+/**
+ * Best-effort parse of a printed reference-range string into low/high input
+ * strings: "3.5 - 5.0" → {low:"3.5", high:"5.0"}, "< 5" → {high:"5"},
+ * "> 1.0" → {low:"1.0"}, "0,9–1,3" → {low:"0.9", high:"1.3"}.
+ */
+function parseRefRange(text: string | null): { low: string; high: string } {
+  if (!text) return { low: "", high: "" };
+  // Comma decimals → dots; no leading minus (range hyphens aren't sign).
+  const [first, second] = text.replace(/,/g, ".").match(/\d+(?:\.\d+)?/g) ?? [];
+  if (first && second) return { low: first, high: second };
+  if (first) {
+    if (/[<≤]/.test(text)) return { low: "", high: first };
+    if (/[>≥]/.test(text)) return { low: first, high: "" };
+  }
+  return { low: "", high: "" };
 }
 
 /** Best-effort dose split: "500 mg" → { amount: 500, unit: "mg" }. */

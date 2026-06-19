@@ -2,8 +2,9 @@ import * as React from "react";
 import { Pencil, Plus, Syringe } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createVaccine, getProfile, listVaccines, updateVaccine } from "@/db/repos";
-import type { Vaccine } from "@/db/schema";
+import { createVaccine, getAttachment, getProfile, listVaccines, updateVaccine } from "@/db/repos";
+import type { Attachment, Vaccine } from "@/db/schema";
+import { SourceFileButton } from "@/components/app/SourceFile";
 import { PageHeader } from "@/components/app/PageHeader";
 import { VaccineCalendar } from "@/components/app/VaccineCalendar";
 import { VaccineTimeline } from "@/components/charts/VaccineTimeline";
@@ -35,6 +36,12 @@ export function Vaccines() {
   const { t } = useI18n();
   const { data: vaccines, loading, reload } = useQuery(() => listVaccines(profileId), [profileId]);
   const { data: profile } = useQuery(() => getProfile(profileId), [profileId]);
+  const { data: attachmentMap } = useQuery(async () => {
+    if (!vaccines) return new Map<number, Attachment>();
+    const ids = [...new Set(vaccines.map((v) => v.attachmentId).filter((id): id is number => id != null))];
+    const pairs = await Promise.all(ids.map(async (id) => [id, await getAttachment(id)] as const));
+    return new Map(pairs.filter((p): p is [number, Attachment] => p[1] != null));
+  }, [vaccines]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Vaccine | null>(null);
 
@@ -143,17 +150,26 @@ export function Vaccines() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="iconSm"
-                                  aria-label={t("common.edit")}
-                                  onClick={() => {
-                                    setEditing(v);
-                                    setFormOpen(true);
-                                  }}
-                                >
-                                  <Pencil />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  {v.attachmentId != null && attachmentMap?.has(v.attachmentId) && (
+                                    <SourceFileButton
+                                      size="iconSm"
+                                      variant="ghost"
+                                      attachment={attachmentMap.get(v.attachmentId) ?? null}
+                                    />
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="iconSm"
+                                    aria-label={t("common.edit")}
+                                    onClick={() => {
+                                      setEditing(v);
+                                      setFormOpen(true);
+                                    }}
+                                  >
+                                    <Pencil />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );

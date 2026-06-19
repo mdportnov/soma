@@ -36,6 +36,12 @@ export type LabExtraction = {
   /** Fasting state at draw if stated; null when unknown. */
   fasting: boolean | null;
   results: RawExtraction[];
+  /**
+   * Rows that had a real label but a non-numeric result (qualitative readings
+   * like "positive"/"negative", titres) — silently unsupported by the numeric
+   * pipeline, surfaced here so the user knows they were dropped. Capped.
+   */
+  skipped?: { label: string; rawValue: string }[];
 };
 
 /**
@@ -107,12 +113,42 @@ export interface AIProvider {
   testKey(): Promise<void>;
 }
 
+/**
+ * Coarse failure category the UI branches on. Keeps the original message/status
+ * for logs while letting the import screen pick the right message + affordance.
+ * - auth: key rejected (401/403) — fix in Settings, never retry.
+ * - rate_limit: 429 — transient, retried with backoff.
+ * - overloaded: 503/529 — transient, retried with backoff.
+ * - network: fetch threw (offline, DNS, TLS) — transient, retried with backoff.
+ * - bad_response: server replied OK but the body was unparseable/empty — retry.
+ * - unknown: any other non-ok status (most 4xx, 5xx) — not retried.
+ */
+export type AIErrorKind =
+  | "auth"
+  | "rate_limit"
+  | "overloaded"
+  | "network"
+  | "bad_response"
+  | "unknown";
+
 export class AIProviderError extends Error {
+  readonly kind: AIErrorKind;
+
   constructor(
     message: string,
     public readonly status?: number,
+    kind?: AIErrorKind,
   ) {
     super(message);
     this.name = "AIProviderError";
+    this.kind = kind ?? "unknown";
   }
+}
+
+/** True when the failure is transient and worth a backed-off retry. */
+export function isRetryableError(e: unknown): boolean {
+  return (
+    e instanceof AIProviderError &&
+    (e.kind === "rate_limit" || e.kind === "overloaded" || e.kind === "network")
+  );
 }

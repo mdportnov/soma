@@ -10,6 +10,7 @@ import { BiomarkerDetail } from "@/pages/BiomarkerDetail";
 import { Labs } from "@/pages/Labs";
 import { LabPanelNew } from "@/pages/LabPanelNew";
 import { LabPanelDetail } from "@/pages/LabPanelDetail";
+import { VerifyImport } from "@/pages/VerifyImport";
 import { ImportWizard } from "@/pages/ImportWizard";
 import { Medications } from "@/pages/Medications";
 import { Visits } from "@/pages/Visits";
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="labs/new" element={<LabPanelNew />} />
               <Route path="labs/import" element={<ImportWizard />} />
               <Route path="labs/:id" element={<LabPanelDetail />} />
+              <Route path="labs/:id/verify" element={<VerifyImport />} />
               <Route path="medications" element={<Medications />} />
               <Route path="visits" element={<Visits />} />
               <Route path="visits/:id" element={<VisitDetail />} />

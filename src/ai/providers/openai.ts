@@ -38,7 +38,7 @@ export class OpenAIProvider extends BaseProvider {
       .filter((c: any) => c.type === "output_text")
       .map((c: any) => c.text)
       .join("");
-    if (!text) throw new AIProviderError("Empty response from OpenAI");
+    if (!text) throw new AIProviderError("Empty response from OpenAI", undefined, "bad_response");
     return text;
   }
 }

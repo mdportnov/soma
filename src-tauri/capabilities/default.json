@@ -101,6 +101,23 @@
         },
         {
           "path": "$APPLOG/**"
+        },
+        {
+          "path": "$APPDATA/attachments"
+        },
+        {
+          "path": "$APPDATA/attachments/**"
+        }
+      ]
+    },
+    {
+      "identifier": "opener:allow-reveal-item-in-dir",
+      "allow": [
+        {
+          "path": "$APPDATA/attachments"
+        },
+        {
+          "path": "$APPDATA/attachments/**"
         }
       ]
     }

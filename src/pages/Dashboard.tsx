@@ -1,9 +1,23 @@
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, CalendarRange, HeartPulse, Pill, TestTubes } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CalendarRange,
+  ClipboardCheck,
+  HeartPulse,
+  Pill,
+  TestTubes,
+} from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { useI18n } from "@/lib/i18n";
-import { getLatestPanelChanges, getTimeline, listMedications, listPanels } from "@/db/repos";
+import {
+  countPanelsNeedingReview,
+  getLatestPanelChanges,
+  getTimeline,
+  listMedications,
+  listPanels,
+} from "@/db/repos";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -18,18 +32,19 @@ export function Dashboard() {
   const { profileId } = useApp();
 
   const { data, loading } = useQuery(async () => {
-    const [panels, meds, timeline, latestChanges] = await Promise.all([
+    const [panels, meds, timeline, latestChanges, reviewCount] = await Promise.all([
       listPanels(profileId),
       listMedications(profileId),
       getTimeline(profileId),
       getLatestPanelChanges(profileId),
+      countPanelsNeedingReview(profileId),
     ]);
-    return { panels, meds, timeline, latestChanges };
+    return { panels, meds, timeline, latestChanges, reviewCount };
   }, [profileId]);
 
   if (loading || !data) return <Loading />;
 
-  const { panels, meds, timeline, latestChanges } = data;
+  const { panels, meds, timeline, latestChanges, reviewCount } = data;
   const latestPanel = panels[0] ?? null;
   const activeMeds = meds.filter((m) => !m.endDate);
   const recent = timeline.slice(0, 8);
@@ -95,6 +110,29 @@ export function Dashboard() {
           </Link>
         ))}
       </div>
+
+      {reviewCount > 0 && (
+        <Card className="mt-6 border-warning/40">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-warning/10">
+              <ClipboardCheck className="size-4 text-warning" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{t("needsReview.globalTitle")}</p>
+              <p className="text-xs text-muted-foreground">
+                {reviewCount === 1
+                  ? t("needsReview.globalOne")
+                  : t("needsReview.globalMany", { count: String(reviewCount) })}
+              </p>
+            </div>
+            <Link to="/labs">
+              <Button variant="outline" size="sm">
+                {t("needsReview.globalCta")}
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {hasComparable && (
         <div className="mt-6">

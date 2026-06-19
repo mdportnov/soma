@@ -1,6 +1,7 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import {
   AIProviderError,
+  isRetryableError,
   type AIProvider,
   type ChatMessage,
   type DocumentInput,
@@ -50,7 +51,7 @@ export abstract class BaseProvider implements AIProvider {
       ],
       maxTokens: 16384,
     });
-    return validateLabExtraction(extractJson<unknown>(text));
+    return validateLabExtraction(parseModelJson(text));
   }
 
   async extractVaccinesFromDocument(doc: DocumentInput): Promise<RawVaccineExtraction[]> {
@@ -61,7 +62,7 @@ export abstract class BaseProvider implements AIProvider {
       ],
       maxTokens: 8192,
     });
-    return validateVaccines(extractJson<unknown>(text));
+    return validateVaccines(parseModelJson(text));
   }
 
   async extractDischargeFromDocument(doc: DocumentInput): Promise<RawDischargeExtraction> {
@@ -72,7 +73,7 @@ export abstract class BaseProvider implements AIProvider {
       ],
       maxTokens: 8192,
     });
-    return validateDischarge(extractJson<unknown>(text));
+    return validateDischarge(parseModelJson(text));
   }
 
   async mapBiomarker(
@@ -113,7 +114,12 @@ export abstract class BaseProvider implements AIProvider {
     await this.complete({ parts: [{ type: "text", text: TEST_PROMPT }], maxTokens: 16 });
   }
 
-  protected async postJson(
+  /**
+   * Single HTTP round-trip with status classification. Transient failures
+   * (rate_limit/overloaded/network) are retried by `postJson`; this method just
+   * raises a correctly-tagged AIProviderError so the retry layer can decide.
+   */
+  private async postJsonOnce(
     url: string,
     headers: Record<string, string>,
     body: unknown,
@@ -126,42 +132,122 @@ export abstract class BaseProvider implements AIProvider {
         body: JSON.stringify(body),
       });
     } catch (e) {
-      throw new AIProviderError(`Network error: ${e instanceof Error ? e.message : String(e)}`);
+      throw new AIProviderError(
+        `Network error: ${e instanceof Error ? e.message : String(e)}`,
+        undefined,
+        "network",
+      );
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       throw new AIProviderError(
         `${this.id} API error ${res.status}: ${detail.slice(0, 500)}`,
         res.status,
+        classifyStatus(res.status),
       );
     }
     return res.json();
   }
+
+  /**
+   * Wraps the single HTTP call with bounded exponential backoff: transient
+   * failures retry up to RETRY_DELAYS_MS.length times (3 attempts total).
+   * Auth / bad_response / unknown errors bubble up immediately — never retried.
+   */
+  protected async postJson(
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+  ): Promise<any> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        return await this.postJsonOnce(url, headers, body);
+      } catch (e) {
+        lastError = e;
+        const delay = RETRY_DELAYS_MS[attempt];
+        if (delay === undefined || !isRetryableError(e)) throw e;
+        // Small jitter so concurrent rows don't retry in lockstep.
+        await sleep(delay + Math.floor(Math.random() * 250));
+      }
+    }
+    throw lastError;
+  }
+}
+
+/** Backoff schedule for transient failures; length = max retries (2 → 3 tries). */
+const RETRY_DELAYS_MS = [500, 1500];
+
+/**
+ * Parse a model reply as JSON, re-tagging any failure as a `bad_response`
+ * AIProviderError so the UI shows "unreadable response" with a retry instead of
+ * a raw parse error. A truncated reply (hit the token cap) lands here too.
+ */
+function parseModelJson(text: string): unknown {
+  try {
+    return extractJson<unknown>(text);
+  } catch (e) {
+    throw new AIProviderError(
+      `Could not parse model response: ${e instanceof Error ? e.message : String(e)}`,
+      undefined,
+      "bad_response",
+    );
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Maps an HTTP status onto the coarse error taxonomy the UI branches on. */
+function classifyStatus(status: number): "auth" | "rate_limit" | "overloaded" | "unknown" {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429) return "rate_limit";
+  if (status === 503 || status === 529) return "overloaded";
+  return "unknown";
 }
 
 /**
  * Accepts the panel object `{collection_date, lab_name, fasting, results}` and,
  * for resilience, a bare `results` array from a model that ignored the schema.
  */
+/** Hard cap on surfaced skipped rows — a runaway report shouldn't bloat state. */
+const MAX_SKIPPED_ROWS = 50;
+
 function validateLabExtraction(parsed: unknown): LabExtraction {
+  const skipped: NonNullable<LabExtraction["skipped"]> = [];
   if (Array.isArray(parsed)) {
-    return { collectionDate: null, labName: null, fasting: null, results: validateExtractions(parsed) };
+    return {
+      collectionDate: null,
+      labName: null,
+      fasting: null,
+      results: validateExtractions(parsed, skipped),
+      skipped: skipped.length ? skipped : undefined,
+    };
   }
   if (typeof parsed !== "object" || parsed === null) {
-    throw new AIProviderError("Extraction did not return a JSON object");
+    throw new AIProviderError("Extraction did not return a JSON object", undefined, "bad_response");
   }
   const o = parsed as Record<string, unknown>;
+  const results = validateExtractions(o.results, skipped);
   return {
     collectionDate: isoDateOrNull(o.collection_date),
     labName: nullableStr(o.lab_name),
     fasting: typeof o.fasting === "boolean" ? o.fasting : null,
-    results: validateExtractions(o.results),
+    results,
+    skipped: skipped.length ? skipped : undefined,
   };
 }
 
-function validateExtractions(parsed: unknown): RawExtraction[] {
+/**
+ * Validate the analyte rows. Rows that carry a real label but a non-numeric
+ * result (qualitative "positive"/"negative", titres) are not silently dropped:
+ * they're collected into `skipped` (capped) so the UI can disclose them.
+ */
+function validateExtractions(
+  parsed: unknown,
+  skipped: NonNullable<LabExtraction["skipped"]>,
+): RawExtraction[] {
   if (!Array.isArray(parsed)) {
-    throw new AIProviderError("Extraction results is not a JSON array");
+    throw new AIProviderError("Extraction results is not a JSON array", undefined, "bad_response");
   }
   const rows: RawExtraction[] = [];
   for (const item of parsed) {
@@ -175,7 +261,16 @@ function validateExtractions(parsed: unknown): RawExtraction[] {
         : typeof o.value === "string"
           ? Number.parseFloat(o.value.replace(",", "."))
           : NaN;
-    if (!rawLabel || !Number.isFinite(value)) continue;
+    if (!rawLabel) continue;
+    if (!Number.isFinite(value)) {
+      // Real label, unusable value → record it as skipped rather than losing it.
+      if (skipped.length < MAX_SKIPPED_ROWS) {
+        const rawValue =
+          typeof o.value === "string" || typeof o.value === "number" ? String(o.value) : "";
+        skipped.push({ label: rawLabel, rawValue: rawValue.slice(0, 100) });
+      }
+      continue;
+    }
     rows.push({
       raw_label: rawLabel,
       analyte_en: typeof o.analyte_en === "string" ? o.analyte_en.trim().slice(0, 120) || null : null,
@@ -203,7 +298,11 @@ function isoDateOrNull(v: unknown): string | null {
 
 function validateVaccines(parsed: unknown): RawVaccineExtraction[] {
   if (!Array.isArray(parsed)) {
-    throw new AIProviderError("Vaccine extraction did not return a JSON array");
+    throw new AIProviderError(
+      "Vaccine extraction did not return a JSON array",
+      undefined,
+      "bad_response",
+    );
   }
   const rows: RawVaccineExtraction[] = [];
   for (const item of parsed) {
@@ -229,7 +328,11 @@ function validateVaccines(parsed: unknown): RawVaccineExtraction[] {
 
 function validateDischarge(parsed: unknown): RawDischargeExtraction {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new AIProviderError("Discharge extraction did not return a JSON object");
+    throw new AIProviderError(
+      "Discharge extraction did not return a JSON object",
+      undefined,
+      "bad_response",
+    );
   }
   const o = parsed as Record<string, unknown>;
   const diagnoses = Array.isArray(o.diagnoses)

@@ -40,7 +40,8 @@ export class OpenRouterProvider extends BaseProvider {
     );
 
     const text = data.choices?.[0]?.message?.content ?? "";
-    if (!text) throw new AIProviderError("Empty response from OpenRouter");
+    if (!text)
+      throw new AIProviderError("Empty response from OpenRouter", undefined, "bad_response");
     return text;
   }
 }

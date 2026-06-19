@@ -978,6 +978,90 @@ export const en = {
     },
   },
 
+  // Source-document linking (the original file an import came from)
+  sourceFile: {
+    title: "Source document",
+    attached: "Source file",
+    open: "Open original",
+    openInApp: "View original",
+    openExternally: "Open in default app",
+    revealInFinder: "Show in folder",
+    page: "Page {{n}}",
+    fromPage: "from page {{n}}",
+    none: "No source file",
+    manualEntry: "Entered manually — no source document.",
+    missing: "The original file could not be found. It may have been moved or deleted.",
+    previewUnsupported: "Inline preview isn't available for this file type.",
+    pdf: "PDF document",
+    image: "Image",
+    close: "Close",
+    loading: "Loading document…",
+  },
+
+  // Persistent "needs verification" state for uncertain AI mappings
+  needsReview: {
+    badge: "{{count}} to review",
+    one: "1 result needs review",
+    many: "{{count}} results need review",
+    panelTitle: "Some results need your review",
+    panelDescription:
+      "These mappings were uncertain — open the original document, check each value, and confirm.",
+    rowHint: "Uncertain — verify against the source",
+    confirm: "Confirm",
+    confirmRow: "Confirm mapping",
+    confirmAll: "Confirm all",
+    reviewed: "Verified",
+    allReviewed: "All results verified",
+    verifyAction: "Review & verify",
+    // Global indicator (dashboard / nav)
+    globalTitle: "Imports awaiting review",
+    globalOne: "1 import has unverified results",
+    globalMany: "{{count}} imports have unverified results",
+    globalCta: "Review now",
+    confirmedToast: "Marked as verified",
+  },
+
+  // Side-by-side verify screen (document ⟷ extracted values)
+  verify: {
+    title: "Verify import",
+    description: "Compare each extracted value against the original document.",
+    sourcePane: "Original document",
+    resultsPane: "Extracted results",
+    onlyUncertain: "Only rows needing review",
+    showAll: "Show all rows",
+    confirm: "Confirm",
+    confirmAll: "Confirm all remaining",
+    edit: "Edit mapping",
+    done: "Done",
+    backToPanel: "Back to panel",
+    empty: "Nothing left to verify.",
+    jumpToPage: "Go to page {{n}}",
+  },
+
+  // Typed AI import errors (replaces the single generic banner)
+  importErrors: {
+    authTitle: "API key rejected",
+    authBody: "Your AI provider rejected the key. Check it in Settings.",
+    authAction: "Open Settings",
+    rateLimited: "The provider is rate-limiting requests.",
+    overloaded: "The AI provider is overloaded.",
+    retrying: "Temporary issue — retrying ({{attempt}}/{{max}})…",
+    network: "Couldn't reach the AI provider. Check your connection.",
+    retry: "Try again",
+    badDocumentTitle: "No results found",
+    badDocumentBody:
+      "We couldn't find any values in this file. Is it the right document type, or is the scan readable?",
+    switchType: "Change document type",
+    truncatedTitle: "Document may be too large",
+    truncatedBody:
+      "The response was cut off, so some results may be missing. Review carefully or split the file.",
+    parseFailed: "The AI returned an unreadable response. Try again.",
+    droppedRows: "{{count}} non-numeric row(s) were skipped (e.g. positive/negative, titres).",
+    showDropped: "Show skipped rows",
+    dateNotRecognized: "Couldn't read the collection date — defaulted to today. Please set it.",
+    genericTitle: "Import failed",
+  },
+
   // Dashboard page
   dashboard: {
     noRecordsTitle: "No records yet",

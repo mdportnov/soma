@@ -8,7 +8,11 @@ import {
   getPanel,
   getPanelChanges,
   getPanelResults,
+  getPanelSource,
+  markPanelReviewed,
+  markResultReviewed,
 } from "@/db/repos";
+import { SourceFileButton, SourcePageLink } from "@/components/app/SourceFile";
 import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
@@ -39,21 +43,23 @@ export function LabPanelDetail() {
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
-  const { data, loading } = useQuery(async () => {
-    const [panel, results, changes] = await Promise.all([
+  const { data, loading, reload } = useQuery(async () => {
+    const [panel, results, changes, source] = await Promise.all([
       getPanel(panelId),
       getPanelResults(panelId),
       getPanelChanges(panelId),
+      getPanelSource(panelId),
     ]);
-    return { panel, results, changes };
+    return { panel, results, changes, source };
   }, [panelId]);
 
   if (loading || !data) return <Loading />;
   if (!data.panel) return <EmptyState icon={TestTubes} title={t("labPanelDetail.panelNotFound")} />;
 
-  const { panel, results, changes } = data;
+  const { panel, results, changes, source } = data;
   const outOfRange = results.filter((r) => r.outOfRange).length;
   const changeByResult = new Map(changes.map((c) => [c.result.id, c]));
+  const needsReview = results.filter((r) => r.reviewedAt == null);
 
   return (
     <>
@@ -82,6 +88,7 @@ export function LabPanelDetail() {
               </Badge>
             )}
             <Badge variant="secondary">{t(`types.${panel.panelType}`)}</Badge>
+            <SourceFileButton attachment={source} />
             <Button
               variant="outline"
               size="icon"
@@ -123,6 +130,36 @@ export function LabPanelDetail() {
         <NotableChanges changes={changes} />
       </div>
 
+      {needsReview.length > 0 && (
+        <div className="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">{t("needsReview.panelTitle")}</p>
+              <p className="text-xs text-muted-foreground">{t("needsReview.panelDescription")}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link
+                to={`/labs/${panelId}/verify`}
+                className="text-xs text-primary hover:underline"
+              >
+                {t("needsReview.verifyAction")}
+              </Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  await markPanelReviewed(panelId);
+                  await reload();
+                  toast.show(t("needsReview.confirmedToast"));
+                }}
+              >
+                {t("needsReview.confirmAll")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -139,7 +176,10 @@ export function LabPanelDetail() {
             </TableHeader>
             <TableBody>
               {results.map((r) => (
-                <TableRow key={r.id}>
+                <TableRow
+                  key={r.id}
+                  className={r.reviewedAt == null ? "bg-warning/5" : undefined}
+                >
                   <TableCell>
                     <Link
                       to={`/biomarkers/${r.biomarkerId}`}
@@ -186,11 +226,38 @@ export function LabPanelDetail() {
                       evaluated={r.valueNormalized != null}
                     />
                   </TableCell>
-                  <TableCell
-                    className="max-w-44 truncate text-xs text-muted-foreground"
-                    title={r.rawLabel ?? undefined}
-                  >
-                    {r.rawLabel ?? "—"}
+                  <TableCell className="max-w-52 text-xs text-muted-foreground">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="truncate" title={r.rawLabel ?? undefined}>
+                        {r.rawLabel ?? "—"}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {/* Trusted rows (exact/manual) carry no badge — the absence
+                            is the signal; only uncertain mappings are flagged. */}
+                        {r.confidence === "translated" || r.confidence === "fuzzy" ? (
+                          <Badge variant="warning" className="text-[10px]">
+                            {r.confidence}
+                          </Badge>
+                        ) : r.confidence === "ai" ? (
+                          <Badge className="text-[10px]">AI</Badge>
+                        ) : null}
+                        <SourcePageLink attachment={source} page={r.sourcePage} />
+                      </div>
+                      {r.reviewedAt == null && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-5 px-1 text-[10px]"
+                          onClick={async () => {
+                            await markResultReviewed(r.id);
+                            await reload();
+                            toast.show(t("needsReview.confirmedToast"));
+                          }}
+                        >
+                          {t("needsReview.confirm")}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

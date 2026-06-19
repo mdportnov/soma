@@ -27,7 +27,8 @@ import {
   updateAttachment,
 } from "@/db/repos";
 import { getConfiguredProvider } from "@/ai";
-import type { AIProvider, RawVaccineExtraction } from "@/ai/types";
+import { AIProviderError } from "@/ai/types";
+import type { AIErrorKind, AIProvider, RawVaccineExtraction } from "@/ai/types";
 import {
   buildBiomarkerIndex,
   mapExtractions,
@@ -64,6 +65,14 @@ import { useI18n } from "@/lib/i18n";
 import type { Biomarker } from "@/db/schema";
 
 type DocType = "lab" | "vaccine" | "discharge";
+
+/**
+ * UI-facing import failure. `affordance` drives which action button (if any) the
+ * banner offers; `kind === "empty"` is the "no quantitative results" case that
+ * sends the user back to pick a different document type.
+ */
+type ImportError =
+  | { kind: AIErrorKind | "empty"; affordance: "settings" | "retry" | "switchType" | "none"; message: string };
 
 type Step =
   | { name: "selectType" }
@@ -102,8 +111,14 @@ export function ImportWizard() {
   const [docType, setDocType] = React.useState<DocType | null>(null);
   const [filePath, setFilePath] = React.useState<string | null>(null);
   const [step, setStep] = React.useState<Step>({ name: "selectType" });
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<ImportError | null>(null);
   const [customForKey, setCustomForKey] = React.useState<number | null>(null);
+  // Non-numeric rows the model returned (qualitative results) — surfaced in the
+  // review step. Reset on every extraction; cleared when the user dismisses.
+  const [skipped, setSkipped] = React.useState<{ label: string; rawValue: string }[]>([]);
+  // True when the extraction couldn't read the collection date and we fell back
+  // to today — shown as a small warning near the Date field in review.
+  const [dateGuessed, setDateGuessed] = React.useState(false);
 
   // Panel meta (phase 3)
   const [date, setDate] = React.useState(todayISO());
@@ -150,6 +165,36 @@ export function ImportWizard() {
       : undefined;
   const customRange = parseRefRange(customRow?.raw.ref_range_text ?? null);
 
+  // Maps any thrown error onto the typed banner model: AI failures branch on
+  // their `kind`, everything else falls back to a generic retry-less message.
+  const toImportError = (e: unknown): ImportError => {
+    if (e instanceof AIProviderError) {
+      switch (e.kind) {
+        case "auth":
+          return { kind: "auth", affordance: "settings", message: t("importErrors.authBody") };
+        case "rate_limit":
+          return { kind: "rate_limit", affordance: "retry", message: t("importErrors.rateLimited") };
+        case "overloaded":
+          return { kind: "overloaded", affordance: "retry", message: t("importErrors.overloaded") };
+        case "network":
+          return { kind: "network", affordance: "retry", message: t("importErrors.network") };
+        case "bad_response":
+          return {
+            kind: "bad_response",
+            affordance: "retry",
+            message: t("importErrors.parseFailed"),
+          };
+        default:
+          return { kind: "unknown", affordance: "none", message: e.message };
+      }
+    }
+    return {
+      kind: "unknown",
+      affordance: "none",
+      message: e instanceof Error ? e.message : String(e),
+    };
+  };
+
   const pickFile = async () => {
     const selected = await open({
       multiple: false,
@@ -165,6 +210,8 @@ export function ImportWizard() {
     if (!filePath) return;
     setStep({ name: "extracting" });
     setError(null);
+    setSkipped([]);
+    setDateGuessed(false);
     try {
       const bytes = await readFile(filePath);
       const doc = {
@@ -225,12 +272,22 @@ export function ImportWizard() {
       // Lab report (default): Phase 1 raw extraction (never written to lab_result).
       const extraction = await provider.extractFromDocument(doc);
       if (!extraction.results.length) {
-        throw new Error("No quantitative results found in the document.");
+        // Distinct from an error: the document parsed fine but held no values —
+        // most likely the wrong document type. Offer a route back to selection.
+        setError({
+          kind: "empty",
+          affordance: "switchType",
+          message: t("importErrors.badDocumentBody"),
+        });
+        setStep({ name: "pick" });
+        return;
       }
       // Pre-fill panel metadata from the document so an old report imported
       // today keeps its real collection date — essential for the trend.
       if (extraction.collectionDate) setDate(extraction.collectionDate);
+      else setDateGuessed(true);
       if (extraction.labName && !labName) setLabName(extraction.labName);
+      if (extraction.skipped?.length) setSkipped(extraction.skipped);
       // Phase 2: deterministic mapping + narrow AI disambiguation.
       const mapped = await mapExtractions(extraction.results, boot.biomarkers, provider);
       setStep({
@@ -239,7 +296,7 @@ export function ImportWizard() {
       });
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(toImportError(e));
       setStep({ name: "pick" });
     }
   };
@@ -265,7 +322,7 @@ export function ImportWizard() {
       navigate("/vaccines");
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(toImportError(e));
       setStep({ name: "vaccineReview", rows });
     }
   };
@@ -321,7 +378,7 @@ export function ImportWizard() {
       navigate(visitId != null ? `/visits/${visitId}` : "/visits");
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(toImportError(e));
       setStep({ name: "dischargeReview", meta, rows });
     }
   };
@@ -399,7 +456,7 @@ export function ImportWizard() {
       navigate(`/labs/${panelId}`);
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(toImportError(e));
       setStep({ name: "review", rows });
     }
   };
@@ -412,7 +469,46 @@ export function ImportWizard() {
       {error && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          {error}
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">
+              {error.kind === "auth"
+                ? t("importErrors.authTitle")
+                : error.kind === "empty"
+                  ? t("importErrors.badDocumentTitle")
+                  : t("importErrors.genericTitle")}
+            </p>
+            <p className="mt-0.5 text-xs opacity-90">{error.message}</p>
+            {error.affordance === "settings" && (
+              <Link to="/settings" className="mt-2 inline-block">
+                <Button size="sm" variant="outline">
+                  <SettingsIcon /> {t("importErrors.authAction")}
+                </Button>
+              </Link>
+            )}
+            {error.affordance === "retry" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() => runExtraction(boot.provider!)}
+              >
+                {t("importErrors.retry")}
+              </Button>
+            )}
+            {error.affordance === "switchType" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() => {
+                  setError(null);
+                  setStep({ name: "selectType" });
+                }}
+              >
+                {t("importErrors.switchType")}
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -517,6 +613,9 @@ export function ImportWizard() {
             onCreateCustom={(key) => setCustomForKey(key)}
             meta={{ date, labName, city, country, panelType }}
             setMeta={{ setDate, setLabName, setCity, setCountry, setPanelType }}
+            skipped={skipped}
+            onDismissSkipped={() => setSkipped([])}
+            dateGuessed={dateGuessed}
             onSave={() => save(step.rows)}
           />
         )}
@@ -641,6 +740,9 @@ function ReviewStep({
   onCreateCustom,
   meta,
   setMeta,
+  skipped,
+  onDismissSkipped,
+  dateGuessed,
   onSave,
 }: {
   rows: ReviewRow[];
@@ -663,9 +765,15 @@ function ReviewStep({
     setCountry: (v: string) => void;
     setPanelType: (v: "blood" | "urine" | "other") => void;
   };
+  skipped: { label: string; rawValue: string }[];
+  onDismissSkipped: () => void;
+  dateGuessed: boolean;
   onSave: () => void;
 }) {
   const { t } = useI18n();
+  // Local dismiss + expand state for the "non-numeric rows skipped" note.
+  const [skippedDismissed, setSkippedDismissed] = React.useState(false);
+  const [showSkipped, setShowSkipped] = React.useState(false);
   const includedCount = rows.filter((r) => r.include && r.biomarkerId != null).length;
   const duplicates = rows.filter((r) => r.include && r.duplicate).length;
 
@@ -687,6 +795,42 @@ function ReviewStep({
 
   return (
     <>
+      {skipped.length > 0 && !skippedDismissed && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p>{t("importErrors.droppedRows", { count: String(skipped.length) })}</p>
+            <button
+              type="button"
+              className="mt-1 inline-flex cursor-pointer items-center gap-1 text-xs underline-offset-2 hover:underline"
+              onClick={() => setShowSkipped((v) => !v)}
+            >
+              {t("importErrors.showDropped")}
+            </button>
+            {showSkipped && (
+              <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs opacity-90">
+                {skipped.map((s, i) => (
+                  <li key={i} className="truncate" title={`${s.label}: ${s.rawValue}`}>
+                    {s.label}
+                    {s.rawValue ? ` — ${s.rawValue}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            className="cursor-pointer text-warning/70 hover:text-warning"
+            onClick={() => {
+              setSkippedDismissed(true);
+              onDismissSkipped();
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>{t("importWizard.reviewExtractedResults")}</CardTitle>
@@ -802,6 +946,12 @@ function ReviewStep({
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Field label={t("fields.date")}>
             <DateInput value={meta.date} onChange={setMeta.setDate} />
+            {dateGuessed && (
+              <p className="mt-1 flex items-start gap-1 text-[11px] text-warning">
+                <AlertTriangle className="mt-px size-3 shrink-0" />
+                {t("importErrors.dateNotRecognized")}
+              </p>
+            )}
           </Field>
           <Field label={t("labPanelNew.fields.labName")}>
             <Input value={meta.labName} onChange={(e) => setMeta.setLabName(e.target.value)} />

@@ -7,10 +7,12 @@ import {
   createPrescription,
   createVisit,
   deleteVisit,
+  getLinkedAttachment,
   getVisit,
   listDiagnosesForVisit,
   listPrescriptionsForVisit,
 } from "@/db/repos";
+import { SourceFileButton } from "@/components/app/SourceFile";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -40,17 +42,18 @@ export function VisitDetail() {
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { data, loading, reload } = useQuery(async () => {
-    const [visit, diagnoses, prescriptions] = await Promise.all([
+    const [visit, diagnoses, prescriptions, source] = await Promise.all([
       getVisit(visitId),
       listDiagnosesForVisit(visitId),
       listPrescriptionsForVisit(visitId),
+      getLinkedAttachment("visit", visitId),
     ]);
-    return { visit, diagnoses, prescriptions };
+    return { visit, diagnoses, prescriptions, source };
   }, [visitId]);
 
   if (loading || !data) return <Loading />;
   if (!data.visit) return <EmptyState icon={Stethoscope} title={t("visitDetail.visitNotFound")} />;
-  const { visit, diagnoses, prescriptions } = data;
+  const { visit, diagnoses, prescriptions, source } = data;
 
   return (
     <>
@@ -71,6 +74,7 @@ export function VisitDetail() {
           .join(" · ")}
         actions={
           <>
+            <SourceFileButton attachment={source} />
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil /> Edit
             </Button>

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Sparkles, TestTubes } from "lucide-react";
+import { Paperclip, Plus, Sparkles, TestTubes } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { listPanels } from "@/db/repos";
@@ -90,20 +90,32 @@ export function Labs() {
                   </TableCell>
                   <TableCell className="tabular-nums">{p.resultCount}</TableCell>
                   <TableCell>
-                    {p.outOfRangeCount > 0 ? (
-                      <Badge variant="warning">{p.outOfRangeCount}</Badge>
-                    ) : (
-                      <Badge variant="success">0</Badge>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1">
+                      {p.outOfRangeCount > 0 ? (
+                        <Badge variant="warning">{p.outOfRangeCount}</Badge>
+                      ) : (
+                        <Badge variant="success">0</Badge>
+                      )}
+                      {p.needsReviewCount > 0 && (
+                        <Badge variant="warning">
+                          {t("needsReview.badge", { count: String(p.needsReviewCount) })}
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
-                    {p.importMethod === "ai" ? (
-                      <Badge>
-                        <Sparkles className="size-3" /> {t("labs.importSource.ai")}
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">{t("labs.importSource.manual")}</Badge>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {p.importMethod === "ai" ? (
+                        <Badge>
+                          <Sparkles className="size-3" /> {t("labs.importSource.ai")}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">{t("labs.importSource.manual")}</Badge>
+                      )}
+                      {p.sourceFileId != null && (
+                        <Paperclip className="size-3 text-muted-foreground" />
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

@@ -24,7 +24,7 @@ export class GeminiProvider extends BaseProvider {
     const text = (data.candidates?.[0]?.content?.parts ?? [])
       .map((p: any) => p.text ?? "")
       .join("");
-    if (!text) throw new AIProviderError("Empty response from Gemini");
+    if (!text) throw new AIProviderError("Empty response from Gemini", undefined, "bad_response");
     return text;
   }
 }

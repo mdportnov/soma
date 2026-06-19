@@ -37,7 +37,7 @@ export class AnthropicProvider extends BaseProvider {
       .filter((b: any) => b.type === "text")
       .map((b: any) => b.text)
       .join("");
-    if (!text) throw new AIProviderError("Empty response from Anthropic");
+    if (!text) throw new AIProviderError("Empty response from Anthropic", undefined, "bad_response");
     return text;
   }
 }

@@ -851,12 +851,15 @@ function BpForm({
 
   const sysNum = Number(systolic);
   const diaNum = Number(diastolic);
-  const valid =
-    date &&
+  const bothEntered =
     systolic.trim() !== "" &&
     diastolic.trim() !== "" &&
     Number.isFinite(sysNum) &&
     Number.isFinite(diaNum);
+  // Systolic must exceed diastolic; a transposed reading otherwise saves and is
+  // mis-staged as "normal" (e.g. 80/120 → normal), hiding a real anomaly.
+  const orderInvalid = bothEntered && sysNum <= diaNum;
+  const valid = date && bothEntered && !orderInvalid;
   const sysCrisis = sysTouched && Number.isFinite(sysNum) && sysNum > 180;
   const diaCrisis = diaTouched && Number.isFinite(diaNum) && diaNum > 120;
 
@@ -928,6 +931,11 @@ function BpForm({
             <Input type="number" value={heartRate} onChange={(e) => setHeartRate(e.target.value)} />
           </Field>
         </div>
+        {orderInvalid && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-500">
+            {t("common.validation.bpOrder")}
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label={t("bp.fields.position")}>
             <SelectMenu

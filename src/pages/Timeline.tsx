@@ -230,13 +230,12 @@ export function Timeline() {
             labels={labels}
           />
 
-          {enabled.has("lab_panel") &&
-            [...shifts.values()].some((s) => s.severity !== "info") && (
-              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className="inline-block size-2.5 rounded-full bg-destructive/30 ring-1 ring-destructive/50" />
-                {t("timeline.shiftHint")}
-              </p>
-            )}
+          {enabled.has("lab_panel") && [...shifts.values()].some((s) => s.severity !== "info") && (
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="inline-block size-2.5 rounded-full bg-destructive/30 ring-1 ring-destructive/50" />
+              {t("timeline.shiftHint")}
+            </p>
+          )}
 
           <h2 className="mb-2 mt-8 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("timeline.allEvents")}

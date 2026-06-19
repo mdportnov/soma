@@ -337,8 +337,7 @@ export async function createPanelWithResults(
       // A row needs review when its mapping is uncertain or its unit couldn't be
       // normalized (so no flag/trend) — but the caller may override explicitly.
       const needsReview = isAi && (uncertain || (bio != null && !convertible));
-      const reviewedAt =
-        r.reviewedAt !== undefined ? r.reviewedAt : needsReview ? null : now;
+      const reviewedAt = r.reviewedAt !== undefined ? r.reviewedAt : needsReview ? null : now;
       return {
         panelId: panelRow.id,
         biomarkerId: r.biomarkerId,
@@ -914,7 +913,9 @@ export async function getLinkedAttachment(
   const rows = await db
     .select()
     .from(attachment)
-    .where(and(eq(attachment.linkedEntityType, entityType), eq(attachment.linkedEntityId, entityId)))
+    .where(
+      and(eq(attachment.linkedEntityType, entityType), eq(attachment.linkedEntityId, entityId)),
+    )
     .limit(1);
   return rows[0] ?? null;
 }

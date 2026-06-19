@@ -57,7 +57,11 @@ export async function exportAllJson(): Promise<boolean> {
 
 function csvEscape(v: unknown): string {
   if (v == null) return "";
-  const s = String(v);
+  let s = String(v);
+  // Neutralize spreadsheet formula injection: a field starting with =, +, -, @
+  // (or a control char some apps treat as a formula lead) is executed by
+  // Excel/Sheets/LibreOffice on open. Prefix a single quote so it stays text.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 

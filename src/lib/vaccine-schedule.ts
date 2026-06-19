@@ -598,17 +598,22 @@ export type VaccineRecordLike = {
 };
 
 function monthsBetween(fromISO: string, toISO: string): number {
-  const f = new Date(fromISO + "T00:00:00");
-  const t = new Date(toISO + "T00:00:00");
-  let m = (t.getFullYear() - f.getFullYear()) * 12 + (t.getMonth() - f.getMonth());
-  if (t.getDate() < f.getDate()) m -= 1;
+  // Anchor in UTC so the comparison matches addMonthsISO's UTC arithmetic and
+  // never drifts a day across timezone offsets.
+  const f = new Date(fromISO + "T00:00:00Z");
+  const t = new Date(toISO + "T00:00:00Z");
+  let m = (t.getUTCFullYear() - f.getUTCFullYear()) * 12 + (t.getUTCMonth() - f.getUTCMonth());
+  if (t.getUTCDate() < f.getUTCDate()) m -= 1;
   return m;
 }
 
 function addMonthsISO(fromISO: string, months: number): string {
-  const d = new Date(fromISO + "T00:00:00");
+  // Build and serialize in UTC: a local-time Date fed to toISOString() shifts
+  // the calendar day for users west of UTC, making every suggested expiry/due
+  // date land one day early.
+  const d = new Date(fromISO + "T00:00:00Z");
   const whole = Math.round(months);
-  d.setMonth(d.getMonth() + whole);
+  d.setUTCMonth(d.getUTCMonth() + whole);
   return d.toISOString().slice(0, 10);
 }
 
@@ -714,7 +719,10 @@ export function suggestVaccineExpiry(
   if (!entry) return null;
   if (LIFETIME_IDS.has(entry.id)) return { lifetime: true, expiresAt: null };
   if (entry.recurring) {
-    return { lifetime: false, expiresAt: addMonthsISO(doseDateISO, entry.recurring.everyYears * 12) };
+    return {
+      lifetime: false,
+      expiresAt: addMonthsISO(doseDateISO, entry.recurring.everyYears * 12),
+    };
   }
   return null;
 }

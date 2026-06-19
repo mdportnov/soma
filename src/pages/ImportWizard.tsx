@@ -71,8 +71,11 @@ type DocType = "lab" | "vaccine" | "discharge";
  * banner offers; `kind === "empty"` is the "no quantitative results" case that
  * sends the user back to pick a different document type.
  */
-type ImportError =
-  | { kind: AIErrorKind | "empty"; affordance: "settings" | "retry" | "switchType" | "none"; message: string };
+type ImportError = {
+  kind: AIErrorKind | "empty";
+  affordance: "settings" | "retry" | "switchType" | "none";
+  message: string;
+};
 
 type Step =
   | { name: "selectType" }
@@ -173,7 +176,11 @@ export function ImportWizard() {
         case "auth":
           return { kind: "auth", affordance: "settings", message: t("importErrors.authBody") };
         case "rate_limit":
-          return { kind: "rate_limit", affordance: "retry", message: t("importErrors.rateLimited") };
+          return {
+            kind: "rate_limit",
+            affordance: "retry",
+            message: t("importErrors.rateLimited"),
+          };
         case "overloaded":
           return { kind: "overloaded", affordance: "retry", message: t("importErrors.overloaded") };
         case "network":
@@ -612,7 +619,18 @@ export function ImportWizard() {
             }
             onCreateCustom={(key) => setCustomForKey(key)}
             meta={{ date, labName, city, country, panelType }}
-            setMeta={{ setDate, setLabName, setCity, setCountry, setPanelType }}
+            setMeta={{
+              // Editing the date clears the "guessed/today" warning so it can't
+              // linger over a value the user has since corrected.
+              setDate: (v: string) => {
+                setDate(v);
+                setDateGuessed(false);
+              },
+              setLabName,
+              setCity,
+              setCountry,
+              setPanelType,
+            }}
             skipped={skipped}
             onDismissSkipped={() => setSkipped([])}
             dateGuessed={dateGuessed}
@@ -983,7 +1001,7 @@ function ReviewStep({
             {duplicates > 1 ? "s" : ""} selected
           </p>
         )}
-        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date}>
+        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date || duplicates > 0}>
           Confirm & save {includedCount} result{includedCount === 1 ? "" : "s"}
         </Button>
       </div>

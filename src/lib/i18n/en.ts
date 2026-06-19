@@ -50,6 +50,13 @@ export const en = {
     search: "Search…",
     saveChanges: "Save changes",
     addVisit: "Add visit",
+    validation: {
+      endBeforeStart: "The end date can't be before the start date.",
+      resolvedBeforeStart: "The resolved date can't be before the diagnosis date.",
+      expiryBeforeDose: "The expiry date can't be before the date given.",
+      futureBirthDate: "Birth date can't be in the future.",
+      bpOrder: "Systolic should be higher than diastolic — check the values.",
+    },
   },
 
   // Common field labels

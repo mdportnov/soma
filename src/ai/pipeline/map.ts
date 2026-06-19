@@ -1,5 +1,5 @@
 import type { Biomarker } from "@/db/schema";
-import type { AIProvider, RawExtraction } from "../types";
+import { AIProviderError, type AIProvider, type RawExtraction } from "../types";
 import { normalizeLabel, similarity } from "@/lib/fuzzy";
 import { convertToDefaultUnit, type ConversionResult } from "@/lib/units";
 
@@ -104,7 +104,11 @@ function autoAcceptCandidate(perLabel: Candidate[][]): Candidate | null {
   for (const cands of perLabel) {
     const top = cands[0];
     const second = cands[1];
-    if (top && top.score >= FUZZY_ACCEPT && (!second || top.score - second.score >= FUZZY_AMBIGUITY_GAP)) {
+    if (
+      top &&
+      top.score >= FUZZY_ACCEPT &&
+      (!second || top.score - second.score >= FUZZY_AMBIGUITY_GAP)
+    ) {
       return top;
     }
   }
@@ -209,8 +213,7 @@ export async function mapExtractions(
       });
       try {
         const label =
-          row.raw.analyte_en &&
-          row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase()
+          row.raw.analyte_en && row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase()
             ? `${row.raw.raw_label} (${row.raw.analyte_en})`
             : row.raw.raw_label;
         const picked = await provider.mapBiomarker(label, row.raw.unit, payload);
@@ -220,6 +223,10 @@ export async function mapExtractions(
           row.conversion = conversionFor(row.raw, picked, index);
         }
       } catch (e) {
+        // A bad/revoked key fails identically on every remaining row: abort the
+        // loop and surface it, rather than firing N doomed requests and handing
+        // back a review screen full of silently-unmapped rows with no banner.
+        if (e instanceof AIProviderError && e.kind === "auth") throw e;
         console.warn("AI mapping fallback failed; leaving row unmapped", e);
       }
     }

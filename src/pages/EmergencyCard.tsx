@@ -91,13 +91,17 @@ export function EmergencyCard() {
             <Button
               variant="outline"
               disabled={exporting !== null}
-              onClick={() => void runExport("html", () => exportEmergencyCardHtml(data, { t, locale }))}
+              onClick={() =>
+                void runExport("html", () => exportEmergencyCardHtml(data, { t, locale }))
+              }
             >
               <Download /> {t("emergency.exportHtml")}
             </Button>
             <Button
               disabled={exporting !== null}
-              onClick={() => void runExport("pdf", () => exportEmergencyCardPdf(data, { t, locale }))}
+              onClick={() =>
+                void runExport("pdf", () => exportEmergencyCardPdf(data, { t, locale }))
+              }
             >
               <FileDown /> {t("emergency.exportPdf")}
             </Button>
@@ -196,7 +200,9 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
             {p.organDonor != null && (
               <FieldRow
                 label={t("emergency.criticalStatus.organDonor")}
-                value={t(p.organDonor ? "emergency.criticalStatus.yes" : "emergency.criticalStatus.no")}
+                value={t(
+                  p.organDonor ? "emergency.criticalStatus.yes" : "emergency.criticalStatus.no",
+                )}
               />
             )}
           </CardContent>

@@ -104,7 +104,10 @@ function HeightInput({
     const { ft, inches } = cm != null ? cmToFtIn(cm) : { ft: NaN, inches: NaN };
     const setPart = (nextFt: number, nextIn: number) => {
       if (Number.isNaN(nextFt) && Number.isNaN(nextIn)) return onChange(null);
-      onChange(ftInToCm(Number.isNaN(nextFt) ? 0 : nextFt, Number.isNaN(nextIn) ? 0 : nextIn));
+      // Clamp to non-negative: HTML min isn't enforced on typed input.
+      const ftN = Number.isNaN(nextFt) ? 0 : Math.max(0, nextFt);
+      const inN = Number.isNaN(nextIn) ? 0 : Math.max(0, nextIn);
+      onChange(ftInToCm(ftN, inN));
     };
     return (
       <div className="flex gap-2">
@@ -132,7 +135,11 @@ function HeightInput({
       min={0}
       placeholder={t("profile.placeholders.cm")}
       value={cm ?? ""}
-      onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+      onChange={(e) => {
+        if (e.target.value === "") return onChange(null);
+        const n = Number(e.target.value);
+        onChange(Number.isFinite(n) && n >= 0 ? n : null);
+      }}
     />
   );
 }
@@ -163,6 +170,7 @@ function WeightInput({
       onChange={(e) => {
         if (e.target.value === "") return onChange(null);
         const n = Number(e.target.value);
+        if (!Number.isFinite(n) || n < 0) return onChange(null);
         onChange(imperial ? lbToKg(n) : n);
       }}
     />
@@ -171,7 +179,7 @@ function WeightInput({
 
 // ── grouped field sets ──────────────────────────────────────────────────────
 
-/** Required core fields: name, birth date, sex, height, weight. */
+/** Core fields: name, birth date and sex are required; height/weight optional. */
 export function CoreFields({ draft, patch }: { draft: ProfileDraft; patch: Patch }) {
   const { t } = useI18n();
 
@@ -185,6 +193,7 @@ export function CoreFields({ draft, patch }: { draft: ProfileDraft; patch: Patch
           value={draft.birthDate}
           onChange={(birthDate) => patch({ birthDate })}
           defaultMonth={new Date(1990, 0)}
+          disableFuture
         />
       </Field>
       <Field label={t("profile.fields.biologicalSex")}>

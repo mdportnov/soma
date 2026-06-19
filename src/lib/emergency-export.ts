@@ -192,7 +192,8 @@ export function generateEmergencyHtml(
   // ── Medications ───────────────────────────────────────────────────────────
   const medHeader = `<tr><th>${escapeHtml(t("emergency.medications.name"))}</th><th>${escapeHtml(t("emergency.medications.dose"))}</th><th>${escapeHtml(t("emergency.medications.schedule"))}</th><th>${escapeHtml(t("emergency.medications.since"))}</th></tr>`;
   const medRow = (m: EmergencyCardData["activeMedications"][number], prn: boolean): string => {
-    const dose = m.doseAmount != null ? `${m.doseAmount}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : "—";
+    const dose =
+      m.doseAmount != null ? `${m.doseAmount}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : "—";
     const baseFreq = m.schedule?.frequency ? m.schedule.frequency.replaceAll("_", " ") : "—";
     const freq = prn ? t("emergency.medications.asNeededTitle") : baseFreq;
     return row([escapeHtml(m.name), escapeHtml(dose), escapeHtml(freq), fd(m.startDate)]);

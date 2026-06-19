@@ -107,24 +107,37 @@ export type RestoreMeta = {
 
 /** Snapshot the live DB and write an encrypted backup into the configured folder. */
 export async function runBackup(): Promise<BackupInfo> {
-  const settings = loadBackupSettings();
-  if (!settings.enabled || !settings.destDir) {
-    throw new Error("Backups are not configured");
+  // Serialize: a manual "Back up now" and the scheduler's catch-up run can fire
+  // together and both vacuum into the same snapshot path, racing to a corrupt
+  // file. Coalesce overlapping calls onto a single in-flight run.
+  if (inFlightBackup) return inFlightBackup;
+  inFlightBackup = (async () => {
+    const settings = loadBackupSettings();
+    if (!settings.enabled || !settings.destDir) {
+      throw new Error("Backups are not configured");
+    }
+    const snapshotPath = await invoke<string>("backup_snapshot_target");
+    await vacuumInto(snapshotPath);
+    const info = await invoke<BackupInfo>("create_backup", {
+      snapshotPath,
+      destDir: settings.destDir,
+      schemaVersion,
+    });
+    saveBackupSettings({
+      ...loadBackupSettings(),
+      lastBackupAt: info.createdAt,
+      lastResult: { ok: true, message: `${info.fileName} written`, at: info.createdAt },
+    });
+    return info;
+  })();
+  try {
+    return await inFlightBackup;
+  } finally {
+    inFlightBackup = null;
   }
-  const snapshotPath = await invoke<string>("backup_snapshot_target");
-  await vacuumInto(snapshotPath);
-  const info = await invoke<BackupInfo>("create_backup", {
-    snapshotPath,
-    destDir: settings.destDir,
-    schemaVersion,
-  });
-  saveBackupSettings({
-    ...loadBackupSettings(),
-    lastBackupAt: info.createdAt,
-    lastResult: { ok: true, message: `${info.fileName} written`, at: info.createdAt },
-  });
-  return info;
 }
+
+let inFlightBackup: Promise<BackupInfo> | null = null;
 
 /** Decrypt + validate a backup file into staging; nothing is replaced yet. */
 export function inspectBackup(path: string, passphrase: string): Promise<RestoreMeta> {

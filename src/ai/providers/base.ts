@@ -238,6 +238,28 @@ function validateLabExtraction(parsed: unknown): LabExtraction {
 }
 
 /**
+ * Parse a numeric string that may use locale formatting from a scanned report:
+ * thousands separators (`1,234` / `1.234` / `1 234` / `1'234`) and a decimal
+ * comma (`12,5`). The previous `replace(",", ".")` only swapped the first comma,
+ * turning `"1.234,56"` into `1.234` — a silent 1000× error. We detect the
+ * decimal separator as the right-most of `.`/`,` and strip the rest.
+ */
+export function parseLocaleNumber(raw: string): number {
+  let s = raw.trim().replace(/[\s']/g, "");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma !== -1 && lastDot !== -1) {
+    // Both present: the right-most separator is the decimal point.
+    if (lastComma > lastDot) s = s.replace(/\./g, "").replace(",", ".");
+    else s = s.replace(/,/g, "");
+  } else if (lastComma !== -1) {
+    // Commas only: treat the last as decimal, the rest as thousands groupers.
+    s = s.replace(/,(?=.*,)/g, "").replace(",", ".");
+  }
+  return Number.parseFloat(s);
+}
+
+/**
  * Validate the analyte rows. Rows that carry a real label but a non-numeric
  * result (qualitative "positive"/"negative", titres) are not silently dropped:
  * they're collected into `skipped` (capped) so the UI can disclose them.
@@ -259,7 +281,7 @@ function validateExtractions(
       typeof o.value === "number"
         ? o.value
         : typeof o.value === "string"
-          ? Number.parseFloat(o.value.replace(",", "."))
+          ? parseLocaleNumber(o.value)
           : NaN;
     if (!rawLabel) continue;
     if (!Number.isFinite(value)) {
@@ -273,7 +295,8 @@ function validateExtractions(
     }
     rows.push({
       raw_label: rawLabel,
-      analyte_en: typeof o.analyte_en === "string" ? o.analyte_en.trim().slice(0, 120) || null : null,
+      analyte_en:
+        typeof o.analyte_en === "string" ? o.analyte_en.trim().slice(0, 120) || null : null,
       value,
       unit: typeof o.unit === "string" ? o.unit.trim().slice(0, 40) : "",
       ref_range_text:

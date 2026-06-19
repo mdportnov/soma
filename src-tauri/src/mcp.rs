@@ -107,7 +107,9 @@ fn detected(app: &AppHandle, c: &Client) -> bool {
         "claude-code" => h.join(".claude.json").exists() || h.join(".claude").exists(),
         "codex" => h.join(".codex").exists(),
         "gemini" => h.join(".gemini").exists(),
-        "cursor" => h.join(".cursor").exists() || PathBuf::from("/Applications/Cursor.app").exists(),
+        "cursor" => {
+            h.join(".cursor").exists() || PathBuf::from("/Applications/Cursor.app").exists()
+        }
         "vscode" => root.map(|r| r.join("Code").exists()).unwrap_or(false),
         _ => false,
     }
@@ -166,7 +168,10 @@ pub struct ClientStatus {
 /// Status of every supported client: where its config lives, whether it looks
 /// installed, and whether Soma is already wired up.
 #[tauri::command]
-pub fn mcp_clients_status(app: AppHandle, server_path: String) -> Result<Vec<ClientStatus>, String> {
+pub fn mcp_clients_status(
+    app: AppHandle,
+    server_path: String,
+) -> Result<Vec<ClientStatus>, String> {
     CLIENTS
         .iter()
         .map(|c| {

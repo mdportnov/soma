@@ -219,9 +219,7 @@ export function EnrichedTimeline({
                     content={
                       <>
                         <span className="font-medium">{e.title}</span> — {formatDate(e.date)}
-                        {e.subtitle && (
-                          <div className="text-muted-foreground">{e.subtitle}</div>
-                        )}
+                        {e.subtitle && <div className="text-muted-foreground">{e.subtitle}</div>}
                         {shift && (
                           <div className="font-medium text-warning">
                             {t("timeline.shiftCount", { count: String(shift.count) })}
@@ -353,7 +351,9 @@ export function EnrichedTimeline({
           onClick={() => setMedsExpanded((v) => !v)}
           className="flex w-full items-center gap-1.5 border-b border-dashed py-1.5 pl-2 text-[11px] font-medium text-muted-foreground last:border-0 hover:bg-muted/20"
         >
-          <ChevronDown className={cn("size-3.5 transition-transform", medsExpanded && "rotate-180")} />
+          <ChevronDown
+            className={cn("size-3.5 transition-transform", medsExpanded && "rotate-180")}
+          />
           {medsExpanded
             ? t("timeline.medsLess")
             : t("timeline.medsMore", { count: String(medsInRange.length - MED_LIMIT) })}

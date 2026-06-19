@@ -279,7 +279,8 @@ export async function generateEmergencyPdf(
     writeText(t("emergency.medications.none"), { color: MUTED });
   } else {
     const writeMed = (m: EmergencyCardData["activeMedications"][number], prn: boolean) => {
-      const dose = m.doseAmount != null ? `${m.doseAmount}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : "";
+      const dose =
+        m.doseAmount != null ? `${m.doseAmount}${m.doseUnit ? ` ${m.doseUnit}` : ""}` : "";
       const freq = prn
         ? t("emergency.medications.asNeededTitle")
         : m.schedule?.frequency
@@ -312,7 +313,8 @@ export async function generateEmergencyPdf(
   } else {
     for (const v of data.recentVaccines) {
       const expired = !!v.expiresAt && v.expiresAt.slice(0, 10) < today;
-      const doseStr = v.dose != null ? t("emergency.vaccines.doseValue", { n: String(v.dose) }) : "";
+      const doseStr =
+        v.dose != null ? t("emergency.vaccines.doseValue", { n: String(v.dose) }) : "";
       const expiresStr = v.expiresAt
         ? `${t("emergency.vaccines.expires")} ${fd(v.expiresAt)}${expired ? ` (${t("emergency.vaccines.expired")})` : ""}`
         : "";

@@ -44,9 +44,7 @@ export function Collapsible({
         aria-controls={contentId}
         className="flex w-full items-start gap-3 p-5 text-left"
       >
-        {icon && (
-          <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
-        )}
+        {icon && <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-none tracking-tight">{title}</p>
           {description && (
@@ -70,10 +68,7 @@ export function Collapsible({
       >
         <div className="overflow-hidden">
           <div
-            className={cn(
-              "transition-opacity duration-200",
-              open ? "opacity-100" : "opacity-0",
-            )}
+            className={cn("transition-opacity duration-200", open ? "opacity-100" : "opacity-0")}
           >
             {children}
           </div>

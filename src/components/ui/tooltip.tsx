@@ -44,9 +44,7 @@ export function Tooltip({
             style={{
               left: coords.x,
               top: coords.y,
-              transform: coords.below
-                ? "translate(-50%, 0)"
-                : "translate(-50%, -100%)",
+              transform: coords.below ? "translate(-50%, 0)" : "translate(-50%, -100%)",
             }}
           >
             {content}

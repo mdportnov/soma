@@ -38,7 +38,10 @@ function createTranslator(lang: Lang) {
 
     // Interpolate variables if provided
     if (typeof value === "string" && vars) {
-      return value.replace(/\{\{(\w+)\}\}/g, (_, varName) => vars[varName] || "{{" + varName + "}}");
+      return value.replace(
+        /\{\{(\w+)\}\}/g,
+        (_, varName) => vars[varName] || "{{" + varName + "}}",
+      );
     }
 
     return String(value);
@@ -74,11 +77,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  const value = React.useMemo(() => ({
-    lang,
-    setLang,
-    t,
-  }), [lang, setLang, t]);
+  const value = React.useMemo(
+    () => ({
+      lang,
+      setLang,
+      t,
+    }),
+    [lang, setLang, t],
+  );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

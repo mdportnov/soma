@@ -57,9 +57,7 @@ export function SelectMenu({
       // Anchor the edge nearest the trigger so the panel hugs it and grows
       // toward the available space, sizing to its content rather than a
       // guessed height (which would leave a gap above the trigger).
-      ...(openUp
-        ? { bottom: window.innerHeight - rect.top + 4 }
-        : { top: rect.bottom + 4 }),
+      ...(openUp ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
       left: rect.left,
       width: rect.width,
       maxHeight: Math.min(320, openUp ? spaceAbove : spaceBelow),

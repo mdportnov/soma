@@ -641,7 +641,10 @@ export async function updateAllergy(id: number, data: Partial<NewAllergy>) {
  * critical safety data must be resolved, never silently removed.
  */
 export async function deleteAllergy(id: number) {
-  const rows = await db.select({ severity: allergy.severity }).from(allergy).where(eq(allergy.id, id));
+  const rows = await db
+    .select({ severity: allergy.severity })
+    .from(allergy)
+    .where(eq(allergy.id, id));
   if (rows[0]?.severity === "anaphylactic") {
     throw new Error("Anaphylactic allergies cannot be deleted — mark as resolved instead.");
   }
@@ -678,7 +681,12 @@ export async function listSymptomLog(profileId: number): Promise<SymptomLog[]> {
     .orderBy(desc(symptomLog.date), desc(symptomLog.time));
 }
 
-export type SymptomPoint = { date: string; time: string | null; severity: number; notes: string | null };
+export type SymptomPoint = {
+  date: string;
+  time: string | null;
+  severity: number;
+  notes: string | null;
+};
 
 /** Time series of one symptom (chart overlay), case-insensitive name match. */
 export async function getSymptomSeries(

@@ -93,10 +93,11 @@ export function Journal() {
     setParams(p, { replace: true });
   };
 
-  const { data: profile, loading, reload: reloadProfile } = useQuery(
-    () => getProfile(profileId),
-    [profileId],
-  );
+  const {
+    data: profile,
+    loading,
+    reload: reloadProfile,
+  } = useQuery(() => getProfile(profileId), [profileId]);
   const [goalOpen, setGoalOpen] = React.useState(false);
   if (loading || !profile) return <Loading />;
   const unitSystem: UnitSystem = profile.unitSystem ?? "metric";

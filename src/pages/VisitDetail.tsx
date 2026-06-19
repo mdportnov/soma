@@ -230,13 +230,9 @@ export function VisitDetail() {
               const label = visit.doctorName || visit.clinic || visit.specialty || t("nav.visits");
               await deleteVisit(visitId);
               navigate("/visits");
-              toast.showAction(
-                t("toasts.deleted", { name: label }),
-                t("common.undo"),
-                async () => {
-                  await createVisit(visitData);
-                },
-              );
+              toast.showAction(t("toasts.deleted", { name: label }), t("common.undo"), async () => {
+                await createVisit(visitData);
+              });
             }}
           >
             {t("visitDetail.deleteVisit")}
@@ -294,7 +290,9 @@ function PrescriptionDialog({
         notes: notes.trim() || null,
       });
       onSaved();
-      toast.show(t("toasts.added", { name: drugName.trim() || t("visitDetail.fields.prescription") }));
+      toast.show(
+        t("toasts.added", { name: drugName.trim() || t("visitDetail.fields.prescription") }),
+      );
     } finally {
       setSaving(false);
     }

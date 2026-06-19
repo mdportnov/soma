@@ -117,7 +117,10 @@ export function JournalOverview({
   const windowEnd = maxTs;
   const windowStart =
     range === "all" ? minTs : Math.max(minTs, windowEnd - RANGE_DAYS[range] * DAY);
-  const domain: [number, number] = [windowStart, windowEnd === windowStart ? windowEnd + DAY : windowEnd];
+  const domain: [number, number] = [
+    windowStart,
+    windowEnd === windowStart ? windowEnd + DAY : windowEnd,
+  ];
   const inRange = (iso: string) => tsOf(iso) >= windowStart;
 
   const weightInRange = weight.filter((r) => inRange(r.date));
@@ -165,39 +168,48 @@ export function JournalOverview({
 
   // ── Unified activity log (newest first) ──
   const logItems = [
-    ...weight.filter((r) => inRange(r.date)).map((r) => ({
-      key: `w${r.id}`,
-      sort: tsOf(r.date),
-      date: r.date,
-      time: null as string | null,
-      kind: "weight" as const,
-      icon: Scale,
-      color: PRIMARY,
-      label: `${formatValue(toDisplay(r.weightKg), 1)} ${unitLabel}`,
-      note: r.notes,
-    })),
-    ...bp.filter((r) => inRange(r.date)).map((r) => ({
-      key: `b${r.id}`,
-      sort: tsOf(r.date) + Math.max(0, minsOf(r.time)),
-      date: r.date,
-      time: r.time,
-      kind: "bp" as const,
-      icon: HeartPulse,
-      color: bpStageColor(r.systolic, r.diastolic),
-      label: `${r.systolic}/${r.diastolic}`,
-      note: r.heartRateBpm != null ? t("journal.overview.pulse", { n: String(r.heartRateBpm) }) : r.notes,
-    })),
-    ...symptoms.filter((r) => inRange(r.date)).map((r) => ({
-      key: `s${r.id}`,
-      sort: tsOf(r.date) + Math.max(0, minsOf(r.time)),
-      date: r.date,
-      time: r.time,
-      kind: "symptom" as const,
-      icon: Stethoscope,
-      color: severityColor(r.severity),
-      label: `${r.symptomName} · ${r.severity}`,
-      note: r.notes,
-    })),
+    ...weight
+      .filter((r) => inRange(r.date))
+      .map((r) => ({
+        key: `w${r.id}`,
+        sort: tsOf(r.date),
+        date: r.date,
+        time: null as string | null,
+        kind: "weight" as const,
+        icon: Scale,
+        color: PRIMARY,
+        label: `${formatValue(toDisplay(r.weightKg), 1)} ${unitLabel}`,
+        note: r.notes,
+      })),
+    ...bp
+      .filter((r) => inRange(r.date))
+      .map((r) => ({
+        key: `b${r.id}`,
+        sort: tsOf(r.date) + Math.max(0, minsOf(r.time)),
+        date: r.date,
+        time: r.time,
+        kind: "bp" as const,
+        icon: HeartPulse,
+        color: bpStageColor(r.systolic, r.diastolic),
+        label: `${r.systolic}/${r.diastolic}`,
+        note:
+          r.heartRateBpm != null
+            ? t("journal.overview.pulse", { n: String(r.heartRateBpm) })
+            : r.notes,
+      })),
+    ...symptoms
+      .filter((r) => inRange(r.date))
+      .map((r) => ({
+        key: `s${r.id}`,
+        sort: tsOf(r.date) + Math.max(0, minsOf(r.time)),
+        date: r.date,
+        time: r.time,
+        kind: "symptom" as const,
+        icon: Stethoscope,
+        color: severityColor(r.severity),
+        label: `${r.symptomName} · ${r.severity}`,
+        note: r.notes,
+      })),
   ].sort((a, b) => b.sort - a.sort);
 
   const logGroups: { date: string; items: typeof logItems }[] = [];
@@ -441,7 +453,11 @@ export function JournalOverview({
                 <ResponsiveContainer>
                   <ScatterChart margin={CHART_MARGIN} syncId={SYNC} syncMethod="value">
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis {...xAxisProps} tickFormatter={tickFmt} axisLine={{ stroke: "var(--border)" }} />
+                    <XAxis
+                      {...xAxisProps}
+                      tickFormatter={tickFmt}
+                      axisLine={{ stroke: "var(--border)" }}
+                    />
                     <YAxis
                       type="number"
                       dataKey="severity"
@@ -502,7 +518,9 @@ export function JournalOverview({
                           >
                             <span
                               className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full"
-                              style={{ backgroundColor: `color-mix(in srgb, ${item.color} 16%, transparent)` }}
+                              style={{
+                                backgroundColor: `color-mix(in srgb, ${item.color} 16%, transparent)`,
+                              }}
                             >
                               <Icon className="size-3" style={{ color: item.color }} />
                             </span>
@@ -510,11 +528,15 @@ export function JournalOverview({
                               <p className="text-sm tabular-nums">
                                 <span className="font-medium">{item.label}</span>
                                 {item.time && (
-                                  <span className="ml-1.5 text-xs text-muted-foreground">{item.time}</span>
+                                  <span className="ml-1.5 text-xs text-muted-foreground">
+                                    {item.time}
+                                  </span>
                                 )}
                               </p>
                               {item.note && (
-                                <p className="truncate text-xs text-muted-foreground">{item.note}</p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {item.note}
+                                </p>
                               )}
                             </div>
                           </li>

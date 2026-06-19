@@ -148,8 +148,13 @@ export function Combobox({
     if (open) setTimeout(() => searchRef.current?.focus(), 0);
   }, [open]);
 
-  // Scroll active row into view via data-active attribute
+  // Scroll the active row into view, but ONLY when navigating by keyboard.
+  // Doing it on hover makes the list nudge under the cursor, which retriggers
+  // mouseenter on a neighbouring row → visible jitter while moving the mouse.
+  const navByKeyboard = React.useRef(false);
   React.useEffect(() => {
+    if (!navByKeyboard.current) return;
+    navByKeyboard.current = false;
     const panel = listRef.current;
     if (!panel) return;
     const activeEl = panel.querySelector<HTMLElement>("[data-active=true]");
@@ -183,9 +188,11 @@ export function Combobox({
       triggerRef.current?.focus();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
+      navByKeyboard.current = true;
       setActiveIndex((i) => Math.min(i + 1, flatOptions.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      navByKeyboard.current = true;
       setActiveIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();

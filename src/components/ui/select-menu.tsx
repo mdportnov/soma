@@ -104,13 +104,25 @@ export function SelectMenu({
     };
   }, [open, computePanel]);
 
-  // Scroll active row into view via data-active attribute
-  React.useEffect(() => {
-    const panel = listRef.current;
-    if (!panel) return;
-    const activeEl = panel.querySelector<HTMLElement>("[data-active=true]");
+  const scrollActiveIntoView = React.useCallback(() => {
+    const activeEl = listRef.current?.querySelector<HTMLElement>("[data-active=true]");
     activeEl?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex, open]);
+  }, []);
+
+  // On open, bring the current selection into view.
+  React.useEffect(() => {
+    if (open) scrollActiveIntoView();
+  }, [open, scrollActiveIntoView]);
+
+  // While open, follow the active row ONLY for keyboard navigation. Doing it on
+  // hover nudges the list under the cursor and retriggers mouseenter on a
+  // neighbour → visible jitter while moving the mouse.
+  const navByKeyboard = React.useRef(false);
+  React.useEffect(() => {
+    if (!navByKeyboard.current) return;
+    navByKeyboard.current = false;
+    scrollActiveIntoView();
+  }, [activeIndex, scrollActiveIntoView]);
 
   // Outside click
   React.useEffect(() => {
@@ -139,15 +151,19 @@ export function SelectMenu({
       triggerRef.current?.focus();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
+      navByKeyboard.current = true;
       setActiveIndex((i) => Math.min(i + 1, options.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      navByKeyboard.current = true;
       setActiveIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Home") {
       e.preventDefault();
+      navByKeyboard.current = true;
       setActiveIndex(0);
     } else if (e.key === "End") {
       e.preventDefault();
+      navByKeyboard.current = true;
       setActiveIndex(options.length - 1);
     } else if (e.key === "Enter") {
       e.preventDefault();

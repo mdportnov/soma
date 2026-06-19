@@ -370,19 +370,20 @@ export function JournalOverview({
                             strokeDasharray="2 3"
                           />
                         )}
-                        <Line
-                          type="linear"
-                          dataKey="plan"
+                        <ReferenceLine
+                          ifOverflow="visible"
                           stroke="var(--success)"
                           strokeWidth={1.5}
                           strokeDasharray="5 4"
-                          dot={false}
-                          connectNulls
-                          isAnimationActive={false}
+                          segment={[
+                            { x: goalTs(goal.startDate), y: toDisplay(goal.startKg) },
+                            { x: goalTs(goal.targetDate), y: toDisplay(goal.targetKg) },
+                          ]}
                         />
                         <ReferenceDot
                           x={goalTs(goal.targetDate)}
                           y={toDisplay(goal.targetKg)}
+                          ifOverflow="visible"
                           r={3.5}
                           fill="var(--success)"
                           stroke="var(--card)"

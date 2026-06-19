@@ -343,19 +343,20 @@ function WeightTab({
                               }}
                             />
                           )}
-                          <Line
-                            type="linear"
-                            dataKey="plan"
+                          <ReferenceLine
+                            ifOverflow="visible"
                             stroke="var(--success)"
                             strokeWidth={1.5}
                             strokeDasharray="5 4"
-                            dot={false}
-                            connectNulls
-                            isAnimationActive={false}
+                            segment={[
+                              { x: tsOf(goal.startDate), y: toDisplay(goal.startKg) },
+                              { x: tsOf(goal.targetDate), y: goalTargetDisplay },
+                            ]}
                           />
                           <ReferenceDot
                             x={tsOf(goal.targetDate)}
                             y={goalTargetDisplay}
+                            ifOverflow="visible"
                             r={4}
                             fill="var(--success)"
                             stroke="var(--card)"

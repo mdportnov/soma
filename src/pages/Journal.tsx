@@ -15,7 +15,6 @@ import {
   Line,
   LineChart,
   ReferenceArea,
-  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -329,31 +328,6 @@ function WeightTab({
                               }}
                             />
                           )}
-                          <ReferenceLine
-                            ifOverflow="visible"
-                            stroke="var(--success)"
-                            strokeWidth={1.5}
-                            strokeDasharray="5 4"
-                            segment={[
-                              { x: tsOf(goal.startDate), y: toDisplay(goal.startKg) },
-                              { x: tsOf(goal.targetDate), y: goalTargetDisplay },
-                            ]}
-                          />
-                          <ReferenceDot
-                            x={tsOf(goal.targetDate)}
-                            y={goalTargetDisplay}
-                            ifOverflow="visible"
-                            r={4}
-                            fill="var(--success)"
-                            stroke="var(--card)"
-                            strokeWidth={2}
-                            label={{
-                              value: `${formatValue(goalTargetDisplay, 1)} ${unitLabel}`,
-                              position: "top",
-                              fill: "var(--success)",
-                              fontSize: 11,
-                            }}
-                          />
                         </>
                       ) : (
                         targetDisplay != null && (
@@ -402,6 +376,21 @@ function WeightTab({
                         connectNulls
                         isAnimationActive={false}
                       />
+                      {/* Plan glide path MUST be a direct child of LineChart — a
+                          Line series nested in a conditional fragment is silently
+                          dropped by the app's WKWebView (works in Chromium). */}
+                      {goal && goalTargetDisplay != null && (
+                        <Line
+                          type="linear"
+                          dataKey="plan"
+                          stroke="var(--success)"
+                          strokeWidth={1.5}
+                          strokeDasharray="5 4"
+                          dot={false}
+                          connectNulls
+                          isAnimationActive={false}
+                        />
+                      )}
                     </LineChart>
                   </ResponsiveContainer>
               </div>

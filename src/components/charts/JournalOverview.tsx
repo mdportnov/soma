@@ -6,7 +6,6 @@ import {
   Line,
   LineChart,
   ReferenceArea,
-  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -361,35 +360,12 @@ export function JournalOverview({
                         );
                       }}
                     />
-                    {goal && (
-                      <>
-                        {todayTs > domain[0] && todayTs < domain[1] && (
-                          <ReferenceLine
-                            x={todayTs}
-                            stroke="var(--muted-foreground)"
-                            strokeDasharray="2 3"
-                          />
-                        )}
-                        <ReferenceLine
-                          ifOverflow="visible"
-                          stroke="var(--success)"
-                          strokeWidth={1.5}
-                          strokeDasharray="5 4"
-                          segment={[
-                            { x: goalTs(goal.startDate), y: toDisplay(goal.startKg) },
-                            { x: goalTs(goal.targetDate), y: toDisplay(goal.targetKg) },
-                          ]}
-                        />
-                        <ReferenceDot
-                          x={goalTs(goal.targetDate)}
-                          y={toDisplay(goal.targetKg)}
-                          ifOverflow="visible"
-                          r={3.5}
-                          fill="var(--success)"
-                          stroke="var(--card)"
-                          strokeWidth={2}
-                        />
-                      </>
+                    {goal && todayTs > domain[0] && todayTs < domain[1] && (
+                      <ReferenceLine
+                        x={todayTs}
+                        stroke="var(--muted-foreground)"
+                        strokeDasharray="2 3"
+                      />
                     )}
                     <Line
                       type="monotone"
@@ -400,6 +376,21 @@ export function JournalOverview({
                       connectNulls
                       isAnimationActive={false}
                     />
+                    {/* Plan glide path MUST be a direct child of LineChart — a
+                        Line series nested in a conditional fragment is silently
+                        dropped by the app's WKWebView (renders fine in Chromium). */}
+                    {goal && (
+                      <Line
+                        type="linear"
+                        dataKey="plan"
+                        stroke="var(--success)"
+                        strokeWidth={1.5}
+                        strokeDasharray="5 4"
+                        dot={false}
+                        connectNulls
+                        isAnimationActive={false}
+                      />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>

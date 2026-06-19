@@ -93,14 +93,19 @@ export function buildWeightSeries(opts: {
     const targetTs = tsOf(goal.targetDate);
     const endTs = planEndTs != null ? Math.min(targetTs, planEndTs) : targetTs;
     if (endTs >= startTs) {
-      // Anchor rows at both ends so the straight plan line is fully drawn even
-      // where there is no actual weigh-in.
-      for (const ts of [startTs, endTs]) {
-        const row = ensure(ts);
+      // Emit a DENSE plan series (one point ~weekly) rather than just two end
+      // anchors. A sparse two-point line renders in Chromium but not in the
+      // app's WKWebView; a dense series draws reliably, exactly like the actual
+      // weight line. Endpoints are pinned so the path reaches start and target.
+      const STEP = 7 * 24 * 60 * 60 * 1000;
+      const stamp = (ts: number) => {
         const v = planKgAt(goal, ts);
-        if (v != null) row.plan = toDisplay(v);
-      }
-      // Fill the plan value on every existing row inside the window.
+        if (v != null) ensure(ts).plan = toDisplay(v);
+      };
+      for (let ts = startTs; ts < endTs; ts += STEP) stamp(ts);
+      stamp(startTs);
+      stamp(endTs);
+      // Also fill any existing actual-weigh-in rows inside the window.
       for (const row of byTs.values()) {
         if (row.t >= startTs && row.t <= endTs && row.plan == null) {
           const v = planKgAt(goal, row.t);

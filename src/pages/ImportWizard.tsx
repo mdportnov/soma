@@ -385,6 +385,10 @@ export function ImportWizard() {
           value: r.raw.value,
           unit: r.raw.unit || byId.get(r.biomarkerId!)?.defaultUnit || "",
           rawLabel: r.raw.raw_label,
+          sourcePage: r.raw.page,
+          // "none" only survives here when the user hand-picked the biomarker for
+          // a previously-unmatched row, so that selection is author-trusted.
+          confidence: r.confidence === "none" ? ("manual" as const) : r.confidence,
         })),
         byId,
       );

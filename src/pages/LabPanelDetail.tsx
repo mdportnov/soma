@@ -219,6 +219,9 @@ export function LabPanelDetail() {
                 value: r.value,
                 unit: r.unit,
                 rawLabel: r.rawLabel,
+                sourcePage: r.sourcePage,
+                confidence: r.confidence,
+                reviewedAt: r.reviewedAt,
               }));
               const biosById = new Map(results.map((r) => [r.biomarkerId, r.biomarker]));
               await deletePanel(panelId);

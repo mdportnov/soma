@@ -18,6 +18,7 @@ import {
   visit,
   weightLog,
   type Allergy,
+  type Attachment,
   type Biomarker,
   type BpLog,
   type Diagnosis,
@@ -217,7 +218,12 @@ export async function getReferenceRangesByBiomarker(): Promise<Map<number, Demog
 
 // ── lab panels & results ───────────────────────────────────────────────────
 
-export type PanelWithCount = LabPanel & { resultCount: number; outOfRangeCount: number };
+export type PanelWithCount = LabPanel & {
+  resultCount: number;
+  outOfRangeCount: number;
+  /** Results still awaiting the user's verification (uncertain AI mappings). */
+  needsReviewCount: number;
+};
 
 export async function listPanels(profileId: number): Promise<PanelWithCount[]> {
   const rows = await db
@@ -225,6 +231,7 @@ export async function listPanels(profileId: number): Promise<PanelWithCount[]> {
       panel: labPanel,
       resultCount: count(labResult.id),
       outOfRangeCount: sql<number>`coalesce(sum(${labResult.outOfRange}), 0)`,
+      needsReviewCount: sql<number>`coalesce(sum(case when ${labResult.reviewedAt} is null then 1 else 0 end), 0)`,
     })
     .from(labPanel)
     .leftJoin(labResult, eq(labResult.panelId, labPanel.id))
@@ -235,6 +242,7 @@ export async function listPanels(profileId: number): Promise<PanelWithCount[]> {
     ...r.panel,
     resultCount: r.resultCount,
     outOfRangeCount: Number(r.outOfRangeCount),
+    needsReviewCount: Number(r.needsReviewCount),
   }));
 }
 
@@ -270,11 +278,20 @@ export async function getPanelResults(panelId: number): Promise<ResultWithBiomar
     );
 }
 
+export type ResultConfidence = "exact" | "translated" | "fuzzy" | "ai" | "manual";
+
 export type ResultInput = {
   biomarkerId: number;
   value: number;
   unit: string;
   rawLabel?: string | null;
+  /** 1-based source-document page, carried for "open original → jump to page". */
+  sourcePage?: number | null;
+  /** Mapping provenance from the import pipeline; defaults by import method. */
+  confidence?: ResultConfidence | null;
+  /** Explicit review state. When omitted it is derived: AI imports with an
+   *  uncertain (translated/fuzzy/ai) or unconvertible mapping start unreviewed. */
+  reviewedAt?: string | null;
 };
 
 /** Creates a panel with results; computes normalization + flags per result. */
@@ -293,21 +310,35 @@ export async function createPanelWithResults(
       ageYears: ageYearsFrom(prof?.birthDate, new Date(`${panelData.date.slice(0, 10)}T00:00:00Z`)),
     };
     const rangesByBiomarker = await getReferenceRangesByBiomarker();
+    // Only AI imports carry uncertainty — manual entries are author-trusted and
+    // never enter the "needs review" queue.
+    const isAi = panelData.importMethod === "ai";
+    const now = new Date().toISOString();
     const values: NewLabResult[] = results.map((r) => {
       const bio = biomarkersById.get(r.biomarkerId);
       let unitNormalized: string | null = null;
       let valueNormalized: number | null = null;
       let outOfRange = false;
       let flag: "low" | "high" | "critical" | null = null;
+      let convertible = false;
       if (bio) {
         const conv = convertToDefaultUnit(r.value, r.unit, bio);
         if (conv.ok) {
+          convertible = true;
           unitNormalized = conv.unit;
           valueNormalized = conv.value;
           const effective = resolveRange(bio, rangesByBiomarker.get(r.biomarkerId), ctx);
           ({ outOfRange, flag } = computeFlag(conv.value, effective));
         }
       }
+      const confidence: ResultConfidence = r.confidence ?? (isAi ? "ai" : "manual");
+      const uncertain =
+        confidence === "translated" || confidence === "fuzzy" || confidence === "ai";
+      // A row needs review when its mapping is uncertain or its unit couldn't be
+      // normalized (so no flag/trend) — but the caller may override explicitly.
+      const needsReview = isAi && (uncertain || (bio != null && !convertible));
+      const reviewedAt =
+        r.reviewedAt !== undefined ? r.reviewedAt : needsReview ? null : now;
       return {
         panelId: panelRow.id,
         biomarkerId: r.biomarkerId,
@@ -318,6 +349,9 @@ export async function createPanelWithResults(
         outOfRange,
         flag,
         rawLabel: r.rawLabel ?? null,
+        sourcePage: r.sourcePage ?? null,
+        confidence,
+        reviewedAt,
       };
     });
     await db.insert(labResult).values(values);
@@ -858,6 +892,60 @@ export async function createAttachment(data: NewAttachment): Promise<number> {
 
 export async function updateAttachment(id: number, data: Partial<NewAttachment>) {
   await db.update(attachment).set(data).where(eq(attachment.id, id));
+}
+
+export async function getAttachment(id: number): Promise<Attachment | null> {
+  const rows = await db.select().from(attachment).where(eq(attachment.id, id));
+  return rows[0] ?? null;
+}
+
+/** The source document a lab panel was imported from, or null if entered by hand. */
+export async function getPanelSource(panelId: number): Promise<Attachment | null> {
+  const panel = await getPanel(panelId);
+  if (!panel?.sourceFileId) return null;
+  return getAttachment(panel.sourceFileId);
+}
+
+/** Attachment linked to a polymorphic entity (visit, vaccine, …), if any. */
+export async function getLinkedAttachment(
+  entityType: string,
+  entityId: number,
+): Promise<Attachment | null> {
+  const rows = await db
+    .select()
+    .from(attachment)
+    .where(and(eq(attachment.linkedEntityType, entityType), eq(attachment.linkedEntityId, entityId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// ── needs-review queue ─────────────────────────────────────────────────────
+
+/** Number of panels with at least one result still awaiting verification. */
+export async function countPanelsNeedingReview(profileId: number): Promise<number> {
+  const rows = await db
+    .select({ panelId: labResult.panelId })
+    .from(labResult)
+    .innerJoin(labPanel, eq(labResult.panelId, labPanel.id))
+    .where(and(eq(labPanel.profileId, profileId), isNull(labResult.reviewedAt)))
+    .groupBy(labResult.panelId);
+  return rows.length;
+}
+
+/** Marks one result as verified by the user (clears it from the review queue). */
+export async function markResultReviewed(resultId: number): Promise<void> {
+  await db
+    .update(labResult)
+    .set({ reviewedAt: new Date().toISOString() })
+    .where(eq(labResult.id, resultId));
+}
+
+/** Clears every outstanding review flag on a panel in one pass. */
+export async function markPanelReviewed(panelId: number): Promise<void> {
+  await db
+    .update(labResult)
+    .set({ reviewedAt: new Date().toISOString() })
+    .where(and(eq(labResult.panelId, panelId), isNull(labResult.reviewedAt)));
 }
 
 // ── unified timeline (§3: query union, no dedicated table) ────────────────

@@ -199,6 +199,17 @@ export const labResult = sqliteTable(
     flag: text("flag", { enum: ["low", "high", "critical"] }),
     /** Original label string from the source document — mapping audit trail. */
     rawLabel: text("raw_label"),
+    /** 1-based page of the source document this value was read from; null = unknown.
+     *  Lets "open original" deep-link straight to the page that produced the row. */
+    sourcePage: integer("source_page"),
+    /** Mapping provenance carried over from import so the audit trail survives the
+     *  wizard: how this row reached its biomarker. null/"manual" = user-entered. */
+    confidence: text("confidence", {
+      enum: ["exact", "translated", "fuzzy", "ai", "manual"],
+    }),
+    /** When the user confirmed an uncertain mapping. null = still needs review;
+     *  trusted rows (exact match, manual entry) are stamped at insert time. */
+    reviewedAt: text("reviewed_at"),
   },
   (t) => [
     index("lab_result_panel_idx").on(t.panelId),

@@ -44,7 +44,7 @@ const daysAgo = (n: number) => {
 };
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const round = (v: number, p = 1) => Math.round(v * 10 ** p) / 10 ** p;
-const pickOne = <T,>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)];
+const pickOne = <T>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)];
 
 function flagFor(v: number, lo: number | null, hi: number | null) {
   if (lo != null && v < lo) return { outOfRange: 1, flag: v < lo * 0.8 ? "critical" : "low" };
@@ -78,7 +78,8 @@ function makeReportPdf(name: string, lab: string, date: string, lines: string[])
 async function main() {
   mkdirSync(ATTACH_DIR, { recursive: true });
   // Fresh start.
-  for (const f of ["soma.db", "soma.db-wal", "soma.db-shm"]) rmSync(join(APP_DIR, f), { force: true });
+  for (const f of ["soma.db", "soma.db-wal", "soma.db-shm"])
+    rmSync(join(APP_DIR, f), { force: true });
 
   const db = new DatabaseSync(DB_PATH);
   db.exec("PRAGMA foreign_keys = OFF");
@@ -86,9 +87,14 @@ async function main() {
 
   // 1. Schema from the single consolidated migration.
   const migFile = readdirSync(MIG_DIR).find((f) => f.endsWith(".sql"))!;
-  const migSql = readFileSync(join(MIG_DIR, migFile), "utf8").replace(/-->\s*statement-breakpoint/g, "\n");
+  const migSql = readFileSync(join(MIG_DIR, migFile), "utf8").replace(
+    /-->\s*statement-breakpoint/g,
+    "\n",
+  );
   db.exec(migSql);
-  db.exec(`CREATE TABLE IF NOT EXISTS __migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`);
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS __migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`,
+  );
   db.prepare("INSERT INTO __migrations (name) VALUES (?)").run(migFile);
 
   // 2. Reference dictionary (real production data).
@@ -99,7 +105,19 @@ async function main() {
   db.prepare(
     `INSERT INTO profile (name, birth_date, sex, height_cm, weight_kg, target_weight_kg, blood_type, rh_factor, unit_system, citizenship, onboarded_at, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'metric', ?, ?, ?)`,
-  ).run("Mike Portnov", "1992-04-15", "male", 182, 78, 74, "O", "positive", "Russia", nowISO(), nowISO());
+  ).run(
+    "Mike Portnov",
+    "1992-04-15",
+    "male",
+    182,
+    78,
+    74,
+    "O",
+    "positive",
+    "Russia",
+    nowISO(),
+    nowISO(),
+  );
   const profileId = Number(
     (db.prepare("SELECT id FROM profile LIMIT 1").get() as { id: number }).id,
   );
@@ -157,7 +175,9 @@ async function main() {
       const excursion = Math.random() < 0.18 ? span * (Math.random() < 0.5 ? -0.9 : 0.9) : 0;
       const value = round(Math.max(0, mid + drift + excursion + rand(-span * 0.1, span * 0.1)), 2);
       const { outOfRange, flag } = flagFor(value, lo, hi);
-      reportLines.push(`${b.canonical_name}: ${value} ${b.default_unit}  (ref ${lo ?? "–"}–${hi ?? "–"})`);
+      reportLines.push(
+        `${b.canonical_name}: ${value} ${b.default_unit}  (ref ${lo ?? "–"}–${hi ?? "–"})`,
+      );
 
       // Provenance: manual panels are trusted; AI panels mix exact + uncertain.
       let confidence: string;
@@ -195,18 +215,25 @@ async function main() {
       db.prepare(
         `INSERT INTO attachment (profile_id, file_path, mime_type, kind, linked_entity_type) VALUES (?, ?, 'application/pdf', 'lab_pdf', 'lab_panel')`,
       ).run(profileId, pdfPath);
-      sourceFileId = Number((db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
+      sourceFileId = Number(
+        (db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
+      );
     }
 
     db.prepare(
       `INSERT INTO lab_panel (profile_id, date, lab_name, city, country, panel_type, fasting, source_file_id, import_method, created_at)
        VALUES (?, ?, ?, ?, ?, 'blood', 1, ?, ?, ?)`,
     ).run(profileId, date, lab, city, country, sourceFileId, isAi ? "ai" : "manual", nowISO());
-    const panelId = Number((db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
+    const panelId = Number(
+      (db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
+    );
     panelCount++;
 
     if (sourceFileId != null) {
-      db.prepare("UPDATE attachment SET linked_entity_id = ? WHERE id = ?").run(panelId, sourceFileId);
+      db.prepare("UPDATE attachment SET linked_entity_id = ? WHERE id = ?").run(
+        panelId,
+        sourceFileId,
+      );
     }
 
     const ins = db.prepare(
@@ -233,12 +260,23 @@ async function main() {
   });
 
   // ── 5. Vaccines (two share a certificate PDF) ──────────────────────────────
-  const certLines = ["COVID-19 (Comirnaty) — 2021-06-10", "Influenza — 2023-10-02", "Hepatitis B — 2019-03-15"];
-  const certPath = makeReportPdf("vaccination-certificate.pdf", "International Vaccination Certificate", "—", certLines);
+  const certLines = [
+    "COVID-19 (Comirnaty) — 2021-06-10",
+    "Influenza — 2023-10-02",
+    "Hepatitis B — 2019-03-15",
+  ];
+  const certPath = makeReportPdf(
+    "vaccination-certificate.pdf",
+    "International Vaccination Certificate",
+    "—",
+    certLines,
+  );
   db.prepare(
     `INSERT INTO attachment (profile_id, file_path, mime_type, kind, linked_entity_type) VALUES (?, ?, 'application/pdf', 'vaccination_cert', 'vaccine')`,
   ).run(profileId, certPath);
-  const certId = Number((db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
+  const certId = Number(
+    (db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
+  );
   const vaccines: [string, string, string | null, number | null, number | null][] = [
     ["COVID-19 (Comirnaty)", "2021-06-10", "Pfizer-BioNTech", 2, certId],
     ["Influenza", "2023-10-02", "Sanofi", 1, certId],
@@ -261,9 +299,18 @@ async function main() {
   db.prepare(
     `INSERT INTO attachment (profile_id, file_path, mime_type, kind, linked_entity_type) VALUES (?, ?, 'application/pdf', 'discharge', 'visit')`,
   ).run(profileId, dischargePath);
-  const dischargeId = Number((db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
+  const dischargeId = Number(
+    (db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
+  );
   const visits: [string, string, string, string, string | null, number | null][] = [
-    [daysAgo(200), "Dr. Ivanova", "City Clinical Hospital", "Pulmonology", "Acute bronchitis, recovered", dischargeId],
+    [
+      daysAgo(200),
+      "Dr. Ivanova",
+      "City Clinical Hospital",
+      "Pulmonology",
+      "Acute bronchitis, recovered",
+      dischargeId,
+    ],
     [daysAgo(120), "Dr. Lee", "Bumrungrad", "Dermatology", "Isotretinoin follow-up", null],
     [daysAgo(40), "Dr. Costa", "Hospital da Luz", "General", "Annual check-up — all good", null],
   ];
@@ -274,7 +321,8 @@ async function main() {
     ).run(profileId, d, doc2, clinic, spec, notes);
     const vid = Number((db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id);
     if (idx === 0) firstVisitId = vid;
-    if (att != null) db.prepare("UPDATE attachment SET linked_entity_id = ? WHERE id = ?").run(vid, att);
+    if (att != null)
+      db.prepare("UPDATE attachment SET linked_entity_id = ? WHERE id = ?").run(vid, att);
   });
 
   // ── 7. Medications, diagnoses, allergies ───────────────────────────────────
@@ -312,8 +360,12 @@ async function main() {
 
   // ── 8. Weight + BP logs (charts) ───────────────────────────────────────────
   for (let d = 360; d >= 0; d -= 7) {
-    const w = round(82 - (360 - d) / 360 * 8 + rand(-0.6, 0.6), 1);
-    db.prepare(`INSERT INTO weight_log (profile_id, date, weight_kg) VALUES (?, ?, ?)`).run(profileId, daysAgo(d), w);
+    const w = round(82 - ((360 - d) / 360) * 8 + rand(-0.6, 0.6), 1);
+    db.prepare(`INSERT INTO weight_log (profile_id, date, weight_kg) VALUES (?, ?, ?)`).run(
+      profileId,
+      daysAgo(d),
+      w,
+    );
   }
   for (let d = 180; d >= 0; d -= 10) {
     const sys = Math.round(rand(115, 132));

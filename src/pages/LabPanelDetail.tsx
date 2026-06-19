@@ -138,10 +138,7 @@ export function LabPanelDetail() {
               <p className="text-xs text-muted-foreground">{t("needsReview.panelDescription")}</p>
             </div>
             <div className="flex items-center gap-2">
-              <Link
-                to={`/labs/${panelId}/verify`}
-                className="text-xs text-primary hover:underline"
-              >
+              <Link to={`/labs/${panelId}/verify`} className="text-xs text-primary hover:underline">
                 {t("needsReview.verifyAction")}
               </Link>
               <Button
@@ -176,10 +173,7 @@ export function LabPanelDetail() {
             </TableHeader>
             <TableBody>
               {results.map((r) => (
-                <TableRow
-                  key={r.id}
-                  className={r.reviewedAt == null ? "bg-warning/5" : undefined}
-                >
+                <TableRow key={r.id} className={r.reviewedAt == null ? "bg-warning/5" : undefined}>
                   <TableCell>
                     <Link
                       to={`/biomarkers/${r.biomarkerId}`}

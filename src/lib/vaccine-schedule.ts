@@ -719,7 +719,10 @@ export function suggestVaccineExpiry(
   if (!entry) return null;
   if (LIFETIME_IDS.has(entry.id)) return { lifetime: true, expiresAt: null };
   if (entry.recurring) {
-    return { lifetime: false, expiresAt: addMonthsISO(doseDateISO, entry.recurring.everyYears * 12) };
+    return {
+      lifetime: false,
+      expiresAt: addMonthsISO(doseDateISO, entry.recurring.everyYears * 12),
+    };
   }
   return null;
 }

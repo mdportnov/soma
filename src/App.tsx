@@ -29,33 +29,33 @@ export default function App() {
     <I18nProvider>
       <AppProvider>
         <ToastProvider>
-        <HashRouter>
-          <Routes>
-            <Route element={<Shell />}>
-              <Route index element={<Dashboard />} />
-              <Route path="timeline" element={<Timeline />} />
-              <Route path="biomarkers" element={<Biomarkers />} />
-              <Route path="biomarkers/:id" element={<BiomarkerDetail />} />
-              <Route path="labs" element={<Labs />} />
-              <Route path="labs/new" element={<LabPanelNew />} />
-              <Route path="labs/import" element={<ImportWizard />} />
-              <Route path="labs/:id" element={<LabPanelDetail />} />
-              <Route path="labs/:id/verify" element={<VerifyImport />} />
-              <Route path="medications" element={<Medications />} />
-              <Route path="visits" element={<Visits />} />
-              <Route path="visits/:id" element={<VisitDetail />} />
-              <Route path="diagnoses" element={<Diagnoses />} />
-              <Route path="allergies" element={<Allergies />} />
-              <Route path="vaccines" element={<Vaccines />} />
-              <Route path="emergency" element={<EmergencyCard />} />
-              <Route path="journal" element={<Journal />} />
-              <Route path="imaging" element={<Imaging />} />
-              <Route path="imaging/new" element={<ImagingNew />} />
-              <Route path="imaging/:id" element={<ImagingNew />} />
-              <Route path="settings" element={<Settings />} />
-            </Route>
-          </Routes>
-        </HashRouter>
+          <HashRouter>
+            <Routes>
+              <Route element={<Shell />}>
+                <Route index element={<Dashboard />} />
+                <Route path="timeline" element={<Timeline />} />
+                <Route path="biomarkers" element={<Biomarkers />} />
+                <Route path="biomarkers/:id" element={<BiomarkerDetail />} />
+                <Route path="labs" element={<Labs />} />
+                <Route path="labs/new" element={<LabPanelNew />} />
+                <Route path="labs/import" element={<ImportWizard />} />
+                <Route path="labs/:id" element={<LabPanelDetail />} />
+                <Route path="labs/:id/verify" element={<VerifyImport />} />
+                <Route path="medications" element={<Medications />} />
+                <Route path="visits" element={<Visits />} />
+                <Route path="visits/:id" element={<VisitDetail />} />
+                <Route path="diagnoses" element={<Diagnoses />} />
+                <Route path="allergies" element={<Allergies />} />
+                <Route path="vaccines" element={<Vaccines />} />
+                <Route path="emergency" element={<EmergencyCard />} />
+                <Route path="journal" element={<Journal />} />
+                <Route path="imaging" element={<Imaging />} />
+                <Route path="imaging/new" element={<ImagingNew />} />
+                <Route path="imaging/:id" element={<ImagingNew />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+            </Routes>
+          </HashRouter>
         </ToastProvider>
       </AppProvider>
     </I18nProvider>

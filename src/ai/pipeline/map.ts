@@ -104,7 +104,11 @@ function autoAcceptCandidate(perLabel: Candidate[][]): Candidate | null {
   for (const cands of perLabel) {
     const top = cands[0];
     const second = cands[1];
-    if (top && top.score >= FUZZY_ACCEPT && (!second || top.score - second.score >= FUZZY_AMBIGUITY_GAP)) {
+    if (
+      top &&
+      top.score >= FUZZY_ACCEPT &&
+      (!second || top.score - second.score >= FUZZY_AMBIGUITY_GAP)
+    ) {
       return top;
     }
   }
@@ -209,8 +213,7 @@ export async function mapExtractions(
       });
       try {
         const label =
-          row.raw.analyte_en &&
-          row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase()
+          row.raw.analyte_en && row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase()
             ? `${row.raw.raw_label} (${row.raw.analyte_en})`
             : row.raw.raw_label;
         const picked = await provider.mapBiomarker(label, row.raw.unit, payload);

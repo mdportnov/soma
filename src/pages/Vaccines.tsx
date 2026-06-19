@@ -38,7 +38,9 @@ export function Vaccines() {
   const { data: profile } = useQuery(() => getProfile(profileId), [profileId]);
   const { data: attachmentMap } = useQuery(async () => {
     if (!vaccines) return new Map<number, Attachment>();
-    const ids = [...new Set(vaccines.map((v) => v.attachmentId).filter((id): id is number => id != null))];
+    const ids = [
+      ...new Set(vaccines.map((v) => v.attachmentId).filter((id): id is number => id != null)),
+    ];
     const pairs = await Promise.all(ids.map(async (id) => [id, await getAttachment(id)] as const));
     return new Map(pairs.filter((p): p is [number, Attachment] => p[1] != null));
   }, [vaccines]);

@@ -71,8 +71,11 @@ type DocType = "lab" | "vaccine" | "discharge";
  * banner offers; `kind === "empty"` is the "no quantitative results" case that
  * sends the user back to pick a different document type.
  */
-type ImportError =
-  | { kind: AIErrorKind | "empty"; affordance: "settings" | "retry" | "switchType" | "none"; message: string };
+type ImportError = {
+  kind: AIErrorKind | "empty";
+  affordance: "settings" | "retry" | "switchType" | "none";
+  message: string;
+};
 
 type Step =
   | { name: "selectType" }
@@ -173,7 +176,11 @@ export function ImportWizard() {
         case "auth":
           return { kind: "auth", affordance: "settings", message: t("importErrors.authBody") };
         case "rate_limit":
-          return { kind: "rate_limit", affordance: "retry", message: t("importErrors.rateLimited") };
+          return {
+            kind: "rate_limit",
+            affordance: "retry",
+            message: t("importErrors.rateLimited"),
+          };
         case "overloaded":
           return { kind: "overloaded", affordance: "retry", message: t("importErrors.overloaded") };
         case "network":

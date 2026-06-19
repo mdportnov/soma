@@ -1,9 +1,10 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, LineChart } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Info, LineChart } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getBiomarker, getBiomarkerSeries, listMedications, listSymptomLog } from "@/db/repos";
+import { getBiomarkerInfo } from "@/content/biomarker-info";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -32,7 +33,7 @@ import { cn, formatDate, formatValue } from "@/lib/utils";
 export function BiomarkerDetail() {
   const { id } = useParams();
   const { profileId } = useApp();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const biomarkerId = Number(id);
   const [activeOverlays, setActiveOverlays] = React.useState<Set<number>>(new Set());
   const [showSymptoms, setShowSymptoms] = React.useState(false);
@@ -52,6 +53,7 @@ export function BiomarkerDetail() {
     return <EmptyState icon={LineChart} title={t("biomarkerDetail.biomarkerNotFound")} />;
 
   const { bio, series, meds, symptoms } = data;
+  const info = getBiomarkerInfo(bio.canonicalName, lang);
 
   const toPoint = (p: (typeof series)[number]): ValuePoint => ({
     value: p.value,
@@ -117,6 +119,29 @@ export function BiomarkerDetail() {
           </Badge>
         )}
       </div>
+
+      {info && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Info className="size-4 text-muted-foreground" />
+              {t("biomarkerInfo.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p className="text-muted-foreground">{info.summary}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoBlock label={t("biomarkerInfo.highLabel")} accent="high" text={info.high} />
+              <InfoBlock label={t("biomarkerInfo.lowLabel")} accent="low" text={info.low} />
+            </div>
+            <InfoBlock label={t("biomarkerInfo.affectsLabel")} text={info.affects} />
+            <p className="flex items-start gap-1.5 border-t pt-3 text-[11px] text-muted-foreground">
+              <AlertTriangle className="mt-0.5 size-3 shrink-0 text-warning" />
+              {t("biomarkerInfo.disclaimer")}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {series.length === 0 ? (
         <EmptyState
@@ -211,27 +236,27 @@ export function BiomarkerDetail() {
                   {[...series].reverse().map((p, i) => {
                     const change = seriesChanges[series.length - 1 - i];
                     return (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Link to={`/labs/${p.panelId}`} className="text-primary hover:underline">
-                          {formatDate(p.date)}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="font-medium tabular-nums">
-                        {formatValue(p.value)} {p.unit}
-                      </TableCell>
-                      <TableCell>
-                        {change ? (
-                          <DeltaBadge change={change} unit={p.unit} />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <FlagBadge flag={p.outOfRange ? p.flag : null} evaluated={p.evaluated} />
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{p.labName ?? "—"}</TableCell>
-                    </TableRow>
+                      <TableRow key={i}>
+                        <TableCell>
+                          <Link to={`/labs/${p.panelId}`} className="text-primary hover:underline">
+                            {formatDate(p.date)}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="font-medium tabular-nums">
+                          {formatValue(p.value)} {p.unit}
+                        </TableCell>
+                        <TableCell>
+                          {change ? (
+                            <DeltaBadge change={change} unit={p.unit} />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <FlagBadge flag={p.outOfRange ? p.flag : null} evaluated={p.evaluated} />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{p.labName ?? "—"}</TableCell>
+                      </TableRow>
                     );
                   })}
                 </TableBody>
@@ -241,5 +266,31 @@ export function BiomarkerDetail() {
         </>
       )}
     </>
+  );
+}
+
+function InfoBlock({
+  label,
+  text,
+  accent,
+}: {
+  label: string;
+  text: string;
+  accent?: "high" | "low";
+}) {
+  return (
+    <div>
+      <p
+        className={cn(
+          "mb-0.5 text-xs font-semibold uppercase tracking-wide",
+          accent === "high" && "text-destructive",
+          accent === "low" && "text-primary",
+          !accent && "text-muted-foreground",
+        )}
+      >
+        {label}
+      </p>
+      <p className="text-sm leading-snug">{text}</p>
+    </div>
   );
 }

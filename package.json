@@ -12,6 +12,7 @@
     "tauri": "tauri",
     "mcp:sidecar": "pnpm -C mcp run build:sidecar",
     "db:generate": "drizzle-kit generate",
+    "check:biomarker-info": "tsx scripts/check-biomarker-info.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

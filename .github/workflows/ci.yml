@@ -36,6 +36,9 @@ jobs:
       - name: TypeScript
         run: pnpm typecheck
 
+      - name: Biomarker reference content coverage
+        run: pnpm check:biomarker-info
+
       - name: Build
         run: pnpm build
 

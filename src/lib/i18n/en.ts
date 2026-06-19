@@ -382,7 +382,8 @@ export const en = {
     title: "Timeline",
     description: "Your labs against medications, weight and vitals — one configurable time scale.",
     layersTitle: "Layers",
-    shiftHint: "Highlighted lab dots mark panels where a biomarker shifted strongly vs the previous one.",
+    shiftHint:
+      "Highlighted lab dots mark panels where a biomarker shifted strongly vs the previous one.",
     shiftCount: "{{count}} notable change(s) vs previous",
     medsMore: "+{{count}} more medications",
     medsLess: "Show fewer medications",
@@ -443,7 +444,8 @@ export const en = {
     outOfRange: "out of range",
     deletePanel: "Delete panel",
     deletePanelTitle: "Delete this panel?",
-    deletePanelDescription: "The panel and all its results will be removed. You can undo right after.",
+    deletePanelDescription:
+      "The panel and all its results will be removed. You can undo right after.",
     deletedToast: "Panel deleted.",
     panelNotFound: "Panel not found",
     tableColumns: {
@@ -463,7 +465,8 @@ export const en = {
     sinceLast: "Compared with your previous results for each biomarker.",
     dashboardTitle: "What changed",
     dashboardSince: "Notable shifts in your latest panel ({{date}}) vs the time before.",
-    baseline: "First reading for these biomarkers — future imports will be compared against this baseline.",
+    baseline:
+      "First reading for these biomarkers — future imports will be compared against this baseline.",
     allStable: "No notable changes since last time — values held steady.",
     since: "since {{date}}",
     unitChanged: "Units differ from the previous reading — change not comparable.",
@@ -507,7 +510,8 @@ export const en = {
       unitPlaceholder: "e.g. %",
       refLowLabel: "Ref. low",
       refHighLabel: "Ref. high",
-      noRangeWarning: "Without a reference range this biomarker will never be flagged out of range.",
+      noRangeWarning:
+        "Without a reference range this biomarker will never be flagged out of range.",
       directionLabel: "Direction",
       directionOptions: {
         range: "In range",
@@ -837,6 +841,17 @@ export const en = {
     emptyDescription: "Add a lab panel containing this biomarker to see the trend.",
     trendTitle: "Trend",
     allResultsTitle: "All results",
+  },
+
+  // "About this marker" reference card
+  biomarkerInfo: {
+    title: "About this marker",
+    summaryLabel: "What it is",
+    highLabel: "If elevated",
+    lowLabel: "If low",
+    affectsLabel: "What it affects",
+    disclaimer:
+      "Reference information only — not a diagnosis. Causes are possible, not definitive. Rely on your doctor's guidance for interpretation.",
   },
 
   // ImportWizard page

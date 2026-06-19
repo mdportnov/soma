@@ -1,11 +1,12 @@
 import * as React from "react";
-import { HeartPulse, Scale, Stethoscope, Target } from "lucide-react";
+import { HeartPulse, Plus, Scale, Stethoscope, Target } from "lucide-react";
 import {
   CartesianGrid,
   Cell,
   Line,
   LineChart,
   ReferenceArea,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -23,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn, formatDate, formatValue } from "@/lib/utils";
 import { kgToLb, type UnitSystem } from "@/lib/units";
 import { bpStageColor, isCrisis, isStage2 } from "@/lib/vitals";
-import { buildWeightSeries, type WeightGoal } from "@/lib/weightGoal";
+import { buildWeightSeries, goalTs, type WeightGoal } from "@/lib/weightGoal";
 import { useI18n } from "@/lib/i18n";
 
 type FocusTab = "weight" | "bp" | "symptoms";
@@ -68,6 +69,7 @@ export function JournalOverview({
   targetWeightKg,
   goal,
   onOpenTab,
+  onAdd,
   onEditGoal,
 }: {
   profileId: number;
@@ -75,9 +77,10 @@ export function JournalOverview({
   targetWeightKg: number | null;
   goal: WeightGoal | null;
   onOpenTab: (tab: FocusTab) => void;
+  onAdd: (tab: FocusTab) => void;
   onEditGoal: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { data, loading } = useQuery(async () => {
     const [weight, bp, symptoms] = await Promise.all([
       listWeightLog(profileId),
@@ -114,9 +117,13 @@ export function JournalOverview({
   ];
   const maxTs = Math.max(...allTs);
   const minTs = Math.min(...allTs);
-  const windowEnd = maxTs;
-  const windowStart =
-    range === "all" ? minTs : Math.max(minTs, windowEnd - RANGE_DAYS[range] * DAY);
+  // The selected range governs how far back we look (from the latest reading);
+  // a dated weight goal extends the shared domain forward to its deadline so the
+  // projection and target are in view. The synced panels stay aligned — the
+  // other metrics simply have no data past "now".
+  const dataEnd = maxTs;
+  const windowStart = range === "all" ? minTs : Math.max(minTs, dataEnd - RANGE_DAYS[range] * DAY);
+  const windowEnd = goal ? Math.max(dataEnd, goalTs(goal.targetDate)) : dataEnd;
   const domain: [number, number] = [
     windowStart,
     windowEnd === windowStart ? windowEnd + DAY : windowEnd,
@@ -127,14 +134,30 @@ export function JournalOverview({
   const weightData = weightInRange
     .map((r) => ({ t: tsOf(r.date), date: r.date, value: toDisplay(r.weightKg) }))
     .sort((a, b) => a.t - b.t);
-  // Actual weigh-ins + the goal's glide path, clamped to the visible window end
-  // so the projection never pushes this panel's x-domain past the others.
+  // Actual weigh-ins + the goal's glide path drawn out to the (goal-extended)
+  // domain end, i.e. the target deadline.
   const weightSeries = buildWeightSeries({
     actual: weightInRange,
     goal,
     toDisplay,
     planEndTs: domain[1],
   });
+  const todayTs = goalTs(new Date().toISOString());
+  // Include the goal's glide path (which descends to the target) in the y-range,
+  // otherwise "auto" only spans recent weigh-ins and the projection is drawn
+  // below the visible area.
+  const weightYValues = weightSeries
+    .flatMap((p) => [p.value, p.plan])
+    .filter((v): v is number => v != null);
+  const weightYDomain: [number | string, number | string] =
+    goal && weightYValues.length
+      ? (() => {
+          const lo = Math.min(...weightYValues);
+          const hi = Math.max(...weightYValues);
+          const pad = Math.max((hi - lo) * 0.08, 0.5);
+          return [Math.floor(lo - pad), Math.ceil(hi + pad)];
+        })()
+      : ["auto", "auto"];
   const bpData = bp
     .filter((r) => inRange(r.date))
     .map((r) => ({ t: tsOf(r.date), date: r.date, sys: r.systolic, dia: r.diastolic }))
@@ -156,7 +179,12 @@ export function JournalOverview({
     tickLine: false,
     minTickGap: 28,
   };
-  const tickFmt = (v: number) => formatDate(new Date(v).toISOString());
+  // Compact month axis shown under every panel (e.g. "Jun 25" / "июн. 25").
+  const monthFmt = (v: number) =>
+    new Date(v).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-GB", {
+      month: "short",
+      year: "2-digit",
+    });
 
   // ── Weight summary: latest value + delta vs. previous in-range reading ──
   const wLast = weightData[weightData.length - 1];
@@ -246,6 +274,7 @@ export function JournalOverview({
             title={t("journal.tabs.weight")}
             accent={PRIMARY}
             onOpen={() => onOpenTab("weight")}
+            onAdd={() => onAdd("weight")}
             summary={
               <span className="flex items-center gap-2">
                 {wLast && (
@@ -291,9 +320,10 @@ export function JournalOverview({
                     syncMethod="value"
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis {...xAxisProps} hide />
+                    <XAxis {...xAxisProps} tickFormatter={monthFmt} axisLine={false} />
                     <YAxis
-                      domain={["auto", "auto"]}
+                      domain={weightYDomain}
+                      allowDataOverflow
                       stroke="var(--muted-foreground)"
                       fontSize={11}
                       tickLine={false}
@@ -332,16 +362,33 @@ export function JournalOverview({
                       }}
                     />
                     {goal && (
-                      <Line
-                        type="linear"
-                        dataKey="plan"
-                        stroke="var(--success)"
-                        strokeWidth={1.5}
-                        strokeDasharray="5 4"
-                        dot={false}
-                        connectNulls
-                        isAnimationActive={false}
-                      />
+                      <>
+                        {todayTs > domain[0] && todayTs < domain[1] && (
+                          <ReferenceLine
+                            x={todayTs}
+                            stroke="var(--muted-foreground)"
+                            strokeDasharray="2 3"
+                          />
+                        )}
+                        <Line
+                          type="linear"
+                          dataKey="plan"
+                          stroke="var(--success)"
+                          strokeWidth={1.5}
+                          strokeDasharray="5 4"
+                          dot={false}
+                          connectNulls
+                          isAnimationActive={false}
+                        />
+                        <ReferenceDot
+                          x={goalTs(goal.targetDate)}
+                          y={toDisplay(goal.targetKg)}
+                          r={3.5}
+                          fill="var(--success)"
+                          stroke="var(--card)"
+                          strokeWidth={2}
+                        />
+                      </>
                     )}
                     <Line
                       type="monotone"
@@ -363,6 +410,7 @@ export function JournalOverview({
             title={t("journal.tabs.bp")}
             accent={SYS_C}
             onOpen={() => onOpenTab("bp")}
+            onAdd={() => onAdd("bp")}
             summary={
               bpLastRow && (
                 <span className="flex items-center gap-2">
@@ -385,7 +433,7 @@ export function JournalOverview({
                 <ResponsiveContainer>
                   <LineChart data={bpData} margin={CHART_MARGIN} syncId={SYNC} syncMethod="value">
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis {...xAxisProps} hide />
+                    <XAxis {...xAxisProps} tickFormatter={monthFmt} axisLine={false} />
                     <YAxis
                       domain={[40, 200]}
                       ticks={[40, 90, 140, 190]}
@@ -438,6 +486,7 @@ export function JournalOverview({
             title={t("journal.tabs.symptoms")}
             accent="#d97706"
             onOpen={() => onOpenTab("symptoms")}
+            onAdd={() => onAdd("symptoms")}
             summary={
               symptomData.length > 0 && (
                 <span className="text-xs text-muted-foreground">
@@ -455,7 +504,7 @@ export function JournalOverview({
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                       {...xAxisProps}
-                      tickFormatter={tickFmt}
+                      tickFormatter={monthFmt}
                       axisLine={{ stroke: "var(--border)" }}
                     />
                     <YAxis
@@ -558,15 +607,18 @@ function Panel({
   title,
   accent,
   onOpen,
+  onAdd,
   summary,
   children,
 }: {
   title: string;
   accent: string;
   onOpen: () => void;
+  onAdd?: () => void;
   summary?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-xl border bg-card">
       <div className="flex items-center justify-between gap-2 px-4 pt-3">
@@ -578,7 +630,20 @@ function Panel({
           <span className="size-2 rounded-full" style={{ backgroundColor: accent }} />
           {title}
         </button>
-        {summary}
+        <div className="flex items-center gap-2">
+          {summary}
+          {onAdd && (
+            <button
+              type="button"
+              onClick={onAdd}
+              aria-label={t("common.add")}
+              title={t("common.add")}
+              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Plus className="size-4" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="px-2 pb-2 pt-1">{children}</div>
     </div>

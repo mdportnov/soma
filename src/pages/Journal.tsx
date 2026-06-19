@@ -103,6 +103,21 @@ export function Journal() {
   const unitSystem: UnitSystem = profile.unitSystem ?? "metric";
   const goal = readWeightGoal(profile);
 
+  // "Add" intent carried in the URL: the overview's per-panel + opens the right
+  // tab with its log form already open; the tab consumes (clears) the flag.
+  const wantAdd = params.get("add") === "1";
+  const consumeAdd = () => {
+    const p = new URLSearchParams(params);
+    p.delete("add");
+    setParams(p, { replace: true });
+  };
+  const openAdd = (next: Tab) => {
+    const p = new URLSearchParams(params);
+    p.set("tab", next);
+    p.set("add", "1");
+    setParams(p, { replace: true });
+  };
+
   return (
     <>
       <PageHeader
@@ -132,6 +147,7 @@ export function Journal() {
           targetWeightKg={profile.targetWeightKg}
           goal={goal}
           onOpenTab={setTab}
+          onAdd={openAdd}
           onEditGoal={() => setGoalOpen(true)}
         />
       )}
@@ -141,11 +157,15 @@ export function Journal() {
           unitSystem={unitSystem}
           targetWeightKg={profile.targetWeightKg}
           goal={goal}
+          autoAdd={wantAdd}
+          onAddHandled={consumeAdd}
           onEditGoal={() => setGoalOpen(true)}
         />
       )}
-      {tab === "bp" && <BpTab profileId={profileId} />}
-      {tab === "symptoms" && <SymptomsTab profileId={profileId} />}
+      {tab === "bp" && <BpTab profileId={profileId} autoAdd={wantAdd} onAddHandled={consumeAdd} />}
+      {tab === "symptoms" && (
+        <SymptomsTab profileId={profileId} autoAdd={wantAdd} onAddHandled={consumeAdd} />
+      )}
 
       <WeightGoalDialog
         open={goalOpen}
@@ -168,12 +188,16 @@ function WeightTab({
   unitSystem,
   targetWeightKg,
   goal,
+  autoAdd,
+  onAddHandled,
   onEditGoal,
 }: {
   profileId: number;
   unitSystem: UnitSystem;
   targetWeightKg: number | null;
   goal: WeightGoal | null;
+  autoAdd?: boolean;
+  onAddHandled?: () => void;
   onEditGoal: () => void;
 }) {
   const { t } = useI18n();
@@ -182,6 +206,15 @@ function WeightTab({
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<WeightLog | null>(null);
   const [showAll, setShowAll] = React.useState(false);
+  // Open the log form when arriving via the overview's "+".
+  React.useEffect(() => {
+    if (autoAdd) {
+      setEditing(null);
+      setFormOpen(true);
+      onAddHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAdd]);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   // With a dated goal the x-axis runs forward to the deadline; widen the canvas
@@ -209,6 +242,18 @@ function WeightTab({
   const todayTs = tsOf(todayISO());
   const goalTargetDisplay = goal ? toDisplay(goal.targetKg) : null;
   const targetDisplay = targetWeightKg != null ? toDisplay(targetWeightKg) : null;
+  // Span the y-axis over the glide path too, so the projection down to the
+  // target isn't drawn below the visible area.
+  const yValues = chartData.flatMap((p) => [p.value, p.plan]).filter((v): v is number => v != null);
+  const yDomain: [number | string, number | string] =
+    goalActive && yValues.length
+      ? (() => {
+          const lo = Math.min(...yValues);
+          const hi = Math.max(...yValues);
+          const pad = Math.max((hi - lo) * 0.08, 0.5);
+          return [Math.floor(lo - pad), Math.ceil(hi + pad)];
+        })()
+      : ["auto", "auto"];
 
   const visible = showAll ? rows : rows.slice(0, 20);
 
@@ -274,7 +319,8 @@ function WeightTab({
                         axisLine={{ stroke: "var(--border)" }}
                       />
                       <YAxis
-                        domain={["auto", "auto"]}
+                        domain={yDomain}
+                        allowDataOverflow
                         stroke="var(--muted-foreground)"
                         fontSize={11}
                         tickLine={false}
@@ -540,7 +586,15 @@ function WeightForm({
 
 // ── Blood pressure ───────────────────────────────────────────────────────────
 
-function BpTab({ profileId }: { profileId: number }) {
+function BpTab({
+  profileId,
+  autoAdd,
+  onAddHandled,
+}: {
+  profileId: number;
+  autoAdd?: boolean;
+  onAddHandled?: () => void;
+}) {
   const { t } = useI18n();
   const toast = useToast();
   const { data: rows, loading, reload } = useQuery(() => listBpLog(profileId), [profileId]);
@@ -548,6 +602,14 @@ function BpTab({ profileId }: { profileId: number }) {
   const [editing, setEditing] = React.useState<BpLog | null>(null);
   const [showAll, setShowAll] = React.useState(false);
   const [now] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (autoAdd) {
+      setEditing(null);
+      setFormOpen(true);
+      onAddHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAdd]);
 
   if (loading || !rows) return <Loading />;
 
@@ -913,7 +975,15 @@ function severityColor(s: number): string {
   return "#16a34a";
 }
 
-function SymptomsTab({ profileId }: { profileId: number }) {
+function SymptomsTab({
+  profileId,
+  autoAdd,
+  onAddHandled,
+}: {
+  profileId: number;
+  autoAdd?: boolean;
+  onAddHandled?: () => void;
+}) {
   const { t } = useI18n();
   const toast = useToast();
   const { data, loading, reload } = useQuery(async () => {
@@ -927,6 +997,14 @@ function SymptomsTab({ profileId }: { profileId: number }) {
   const [editing, setEditing] = React.useState<SymptomLog | null>(null);
   const [severeOnly, setSevereOnly] = React.useState(false);
   const [showAll, setShowAll] = React.useState(false);
+  React.useEffect(() => {
+    if (autoAdd) {
+      setEditing(null);
+      setFormOpen(true);
+      onAddHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAdd]);
 
   if (loading || !data) return <Loading />;
   const { rows, names } = data;

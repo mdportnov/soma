@@ -215,17 +215,9 @@ function WeightTab({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoAdd]);
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-
-  // With a dated goal the x-axis runs forward to the deadline; widen the canvas
-  // (~px per day) and scroll to the right edge so "now → target" is in view,
-  // leaving the past reachable by scrolling left.
+  // With a dated goal the x-axis runs forward to the deadline so the glide path
+  // and target are in view; the whole span (history → target) fits one width.
   const goalActive = goal != null;
-  React.useEffect(() => {
-    if (goalActive && scrollRef.current) {
-      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
-    }
-  }, [goalActive, rows]);
 
   if (loading || !rows) return <Loading />;
 
@@ -237,8 +229,6 @@ function WeightTab({
   const tsList = chartData.map((p) => p.t);
   const minTs = tsList.length ? Math.min(...tsList) : tsOf(todayISO());
   const maxTs = tsList.length ? Math.max(...tsList) : minTs;
-  const spanDays = Math.max(1, (maxTs - minTs) / DAY);
-  const chartWidth = goalActive ? Math.round(spanDays * 2.5) : null;
   const todayTs = tsOf(todayISO());
   const goalTargetDisplay = goal ? toDisplay(goal.targetKg) : null;
   const targetDisplay = targetWeightKg != null ? toDisplay(targetWeightKg) : null;
@@ -294,11 +284,7 @@ function WeightTab({
               />
             </CardHeader>
             <CardContent>
-              <div ref={scrollRef} className="overflow-x-auto">
-                <div
-                  className="h-60"
-                  style={chartWidth != null ? { width: chartWidth, minWidth: "100%" } : undefined}
-                >
+              <div className="h-60">
                   <ResponsiveContainer>
                     <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
                       <CartesianGrid
@@ -418,7 +404,6 @@ function WeightTab({
                       />
                     </LineChart>
                   </ResponsiveContainer>
-                </div>
               </div>
             </CardContent>
           </Card>

@@ -5,6 +5,7 @@ import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import {
   createPrescription,
+  createVisit,
   deleteVisit,
   getVisit,
   listDiagnosesForVisit,
@@ -23,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VisitForm } from "./Visits";
 import { DiagnosisForm } from "./Diagnoses";
 import { formatDate } from "@/lib/utils";
+import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
 export function VisitDetail() {
@@ -30,6 +32,7 @@ export function VisitDetail() {
   const visitId = Number(id);
   const { profileId } = useApp();
   const { t } = useI18n();
+  const toast = useToast();
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = React.useState(false);
   const [diagnosisOpen, setDiagnosisOpen] = React.useState(false);
@@ -223,8 +226,17 @@ export function VisitDetail() {
           <Button
             variant="destructive"
             onClick={async () => {
+              const { id: _id, ...visitData } = visit;
+              const label = visit.doctorName || visit.clinic || visit.specialty || t("nav.visits");
               await deleteVisit(visitId);
               navigate("/visits");
+              toast.showAction(
+                t("toasts.deleted", { name: label }),
+                t("common.undo"),
+                async () => {
+                  await createVisit(visitData);
+                },
+              );
             }}
           >
             {t("visitDetail.deleteVisit")}
@@ -247,6 +259,7 @@ function PrescriptionDialog({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [drugName, setDrugName] = React.useState("");
   const [doseAmount, setDoseAmount] = React.useState("");
   const [doseUnit, setDoseUnit] = React.useState("");
@@ -281,6 +294,7 @@ function PrescriptionDialog({
         notes: notes.trim() || null,
       });
       onSaved();
+      toast.show(t("toasts.added", { name: drugName.trim() || t("visitDetail.fields.prescription") }));
     } finally {
       setSaving(false);
     }

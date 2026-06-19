@@ -4,6 +4,7 @@ import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createAllergy, deleteAllergy, listAllergies, updateAllergy } from "@/db/repos";
 import type { Allergy } from "@/db/schema";
+import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -30,6 +31,7 @@ function severityVariant(severity: Allergy["severity"]): SeverityVariant {
 export function Allergies() {
   const { profileId } = useApp();
   const { t } = useI18n();
+  const toast = useToast();
   const {
     data: allergies,
     loading,
@@ -96,10 +98,27 @@ export function Allergies() {
                       onResolve={async () => {
                         await updateAllergy(a.id, { status: "resolved" });
                         void reload();
+                        toast.showAction(
+                          t("toasts.allergyResolved", { name: a.allergen }),
+                          t("common.undo"),
+                          async () => {
+                            await updateAllergy(a.id, { status: "active" });
+                            void reload();
+                          },
+                        );
                       }}
                       onDelete={async () => {
+                        const { id: _id, createdAt: _c, ...data } = a;
                         await deleteAllergy(a.id);
                         void reload();
+                        toast.showAction(
+                          t("toasts.deleted", { name: a.allergen }),
+                          t("common.undo"),
+                          async () => {
+                            await createAllergy(data);
+                            void reload();
+                          },
+                        );
                       }}
                     />
                   ))}
@@ -222,6 +241,7 @@ function AllergyForm({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [allergen, setAllergen] = React.useState("");
   const [category, setCategory] = React.useState<Allergy["category"]>("other");
   const [severity, setSeverity] = React.useState<Allergy["severity"]>("mild");
@@ -258,6 +278,7 @@ function AllergyForm({
       };
       if (editing) await updateAllergy(editing.id, data);
       else await createAllergy(data);
+      toast.show(t(editing ? "toasts.updated" : "toasts.added", { name: data.allergen }));
       onSaved();
     } finally {
       setSaving(false);

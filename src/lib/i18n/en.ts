@@ -41,6 +41,9 @@ export const en = {
     close: "Close",
     select: "Select",
     undo: "Undo",
+    resume: "Resume",
+    expand: "Expand",
+    collapse: "Collapse",
     selectModel: "Select model…",
     noMatches: "No matches",
     useCustomValue: 'Use "{{value}}"',
@@ -90,6 +93,23 @@ export const en = {
     weekly: "Weekly",
     asNeeded: "As needed",
     custom: "Custom",
+  },
+
+  // Toast notifications (success feedback for mutations)
+  toasts: {
+    added: "Added: {{name}}",
+    updated: "Updated: {{name}}",
+    deleted: "Deleted: {{name}}",
+    saved: "Saved",
+    profileSaved: "Profile saved",
+    apiKeyRemoved: "API key removed",
+    medStopped: "Stopped: {{name}}",
+    medResumed: "Resumed: {{name}}",
+    dxRemission: "Moved to remission: {{name}}",
+    dxResolved: "Marked resolved: {{name}}",
+    allergyResolved: "Marked resolved: {{name}}",
+    panelSaved: "Lab panel saved",
+    importSaved: "Import saved",
   },
 
   // Settings
@@ -535,6 +555,10 @@ export const en = {
     addFirst: "Add first item",
     currentlyTaking: "Currently taking",
     past: "Past",
+    timeline: {
+      title: "Intake timeline",
+      now: "now",
+    },
     addDialog: {
       titleAdd: "Add medication or supplement",
       titleEdit: "Edit medication",
@@ -555,6 +579,7 @@ export const en = {
     },
     actions: {
       stopToday: "Stop today",
+      resume: "Resume",
     },
   },
 
@@ -584,6 +609,9 @@ export const en = {
     emptyTitle: "No diagnoses recorded",
     emptyDescription: "Track conditions with status: active, in remission or resolved.",
     addFirst: "Add first diagnosis",
+    timeline: {
+      title: "Condition timeline",
+    },
     addDialog: {
       titleAdd: "Add diagnosis",
       titleEdit: "Edit diagnosis",
@@ -697,6 +725,9 @@ export const en = {
       suggest: "Suggested validity: {{date}} — tap to use",
     },
     recordsTitle: "Recorded vaccines",
+    timeline: {
+      title: "Vaccination timeline",
+    },
     calendar: {
       title: "Vaccine calendar",
       subtitle: "WHO reference schedule",
@@ -841,6 +872,24 @@ export const en = {
     emptyDescription: "Add a lab panel containing this biomarker to see the trend.",
     trendTitle: "Trend",
     allResultsTitle: "All results",
+    allBiomarkers: "All biomarkers",
+    reference: "Reference",
+    optimal: "Optimal",
+    higherBetter: "higher is better",
+    lowerBetter: "lower is better",
+    trendDescription:
+      "Shaded bands: reference and optimal ranges. Toggle medications below to overlay intake periods and correlate them with shifts.",
+  },
+
+  // Trend chart (biomarker line + overlays)
+  trendChart: {
+    unitsNotRecognized:
+      "Units not recognized — values shown in their raw units and not range-checked.",
+    pointsHidden: "{{count}} point(s) hidden: unit not recognized, can't be plotted on this scale.",
+    outOfRange: "out of range ({{flag}})",
+    severityShort: "severity {{value}}/10",
+    symptomLegend:
+      "Vertical marks are logged symptoms; the number is severity on a 1–10 scale (color = intensity). Hover a mark for details.",
   },
 
   // "About this marker" reference card
@@ -933,6 +982,7 @@ export const en = {
   dashboard: {
     noRecordsTitle: "No records yet",
     recentActivityTitle: "Recent activity",
+    fullTimeline: "Full timeline",
     addLabResults: "Add lab results",
     stats: {
       labPanels: "Lab panels",
@@ -1108,9 +1158,25 @@ export const en = {
     title: "Journal",
     description: "Track weight, blood pressure and symptoms over time.",
     tabs: {
+      overview: "Overview",
       weight: "Weight",
       bp: "Blood pressure",
       symptoms: "Symptoms",
+    },
+    overview: {
+      activity: "Activity log",
+      noData: "No entries in this range",
+      emptyTitle: "Nothing logged yet",
+      emptyDescription:
+        "Log weight, blood pressure or symptoms and they will appear here together.",
+      entries: "{{n}} logged",
+      pulse: "{{n}} bpm",
+      ranges: {
+        "3m": "3M",
+        "6m": "6M",
+        "1y": "1Y",
+        all: "All",
+      },
     },
   },
 
@@ -1134,6 +1200,23 @@ export const en = {
       weight: "Weight",
       notesOptional: "Notes (optional)",
     },
+  },
+
+  weightGoal: {
+    set: "Set goal",
+    titleAdd: "Set a weight goal",
+    titleEdit: "Edit weight goal",
+    description:
+      "Draws a glide path from your starting weight to the target, so you can see whether you are tracking ahead or behind.",
+    startWeight: "Starting weight",
+    startDate: "Start date",
+    targetWeight: "Target weight",
+    targetDate: "Target date",
+    save: "Set goal",
+    remove: "Remove goal",
+    removedToast: "Weight goal removed",
+    today: "Today",
+    planLabel: "Plan",
   },
 
   bp: {

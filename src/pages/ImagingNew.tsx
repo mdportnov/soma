@@ -23,6 +23,7 @@ import { Combobox } from "@/components/ui/combobox";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, todayISO } from "@/lib/utils";
+import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
 const MODALITIES = ["xray", "ct", "mri", "ultrasound", "pet", "other"] as const;
@@ -32,6 +33,8 @@ export function ImagingNew() {
   const { profileId } = useApp();
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useI18n();
+  const toast = useToast();
   const editing = id != null;
   const recordId = id ? Number(id) : null;
 
@@ -55,8 +58,17 @@ export function ImagingNew() {
       onSaved={() => navigate("/imaging")}
       onCancel={() => navigate("/imaging")}
       onDeleted={async () => {
-        if (recordId != null) await deleteImagingRecord(recordId);
+        if (recordId == null) return;
+        const rec = data.record;
+        await deleteImagingRecord(recordId);
         navigate("/imaging");
+        if (rec) {
+          const { id: _id, createdAt: _c, ...recData } = rec;
+          const label = `${t(`imagingModality.${rec.modalityType}`)} ${rec.bodyArea}`.trim();
+          toast.showAction(t("toasts.deleted", { name: label }), t("common.undo"), async () => {
+            await createImagingRecord(recData);
+          });
+        }
       }}
     />
   );
@@ -80,6 +92,7 @@ function ImagingForm({
   onDeleted: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [date, setDate] = React.useState(record?.date ?? todayISO());
   const [modality, setModality] = React.useState<Modality>(
     (record?.modalityType as Modality) ?? "xray",
@@ -120,6 +133,11 @@ function ImagingForm({
       if (record) await updateImagingRecord(record.id, data);
       else await createImagingRecord(data);
       onSaved();
+      toast.show(
+        t(record ? "toasts.updated" : "toasts.added", {
+          name: `${t(`imagingModality.${modality}`)} ${data.bodyArea}`.trim(),
+        }),
+      );
     } finally {
       setSaving(false);
     }

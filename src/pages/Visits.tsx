@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, todayISO } from "@/lib/utils";
+import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
 export function Visits() {
@@ -118,6 +119,7 @@ export function VisitForm({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [date, setDate] = React.useState(todayISO());
   const [doctorName, setDoctorName] = React.useState("");
   const [specialty, setSpecialty] = React.useState("");
@@ -155,6 +157,11 @@ export function VisitForm({
       if (editing) await updateVisit(editing.id, data);
       else await createVisit(data);
       onSaved();
+      toast.show(
+        t(editing ? "toasts.updated" : "toasts.added", {
+          name: data.doctorName || data.clinic || data.specialty || t("nav.visits"),
+        }),
+      );
     } finally {
       setSaving(false);
     }

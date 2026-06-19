@@ -1,11 +1,21 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertTriangle, HeartPulse, Pencil, Plus, Scale, Stethoscope, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  HeartPulse,
+  Pencil,
+  Plus,
+  Scale,
+  Stethoscope,
+  Target,
+  Trash2,
+} from "lucide-react";
 import {
   CartesianGrid,
   Line,
   LineChart,
   ReferenceArea,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -43,6 +53,9 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { JournalOverview } from "@/components/charts/JournalOverview";
+import { WeightGoalDialog } from "@/components/app/WeightGoalDialog";
+import { buildWeightSeries, readWeightGoal, type WeightGoal } from "@/lib/weightGoal";
 import {
   Table,
   TableBody,
@@ -54,10 +67,11 @@ import {
 import { cn, formatDate, formatValue, todayISO } from "@/lib/utils";
 import { kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
 import { isCrisis, isStage2 } from "@/lib/vitals";
+import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
-type Tab = "weight" | "bp" | "symptoms";
-const TABS: Tab[] = ["weight", "bp", "symptoms"];
+type Tab = "overview" | "weight" | "bp" | "symptoms";
+const TABS: Tab[] = ["overview", "weight", "bp", "symptoms"];
 const DAY = 86400000;
 const SYS_C = "#dc2626";
 const DIA_C = "#2563eb";
@@ -71,7 +85,7 @@ export function Journal() {
   const { t } = useI18n();
   const [params, setParams] = useSearchParams();
   const tabParam = params.get("tab");
-  const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : "weight";
+  const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : "overview";
 
   const setTab = (next: Tab) => {
     const p = new URLSearchParams(params);
@@ -79,9 +93,14 @@ export function Journal() {
     setParams(p, { replace: true });
   };
 
-  const { data: profile, loading } = useQuery(() => getProfile(profileId), [profileId]);
+  const { data: profile, loading, reload: reloadProfile } = useQuery(
+    () => getProfile(profileId),
+    [profileId],
+  );
+  const [goalOpen, setGoalOpen] = React.useState(false);
   if (loading || !profile) return <Loading />;
   const unitSystem: UnitSystem = profile.unitSystem ?? "metric";
+  const goal = readWeightGoal(profile);
 
   return (
     <>
@@ -105,15 +124,38 @@ export function Journal() {
         }
       />
 
+      {tab === "overview" && (
+        <JournalOverview
+          profileId={profileId}
+          unitSystem={unitSystem}
+          targetWeightKg={profile.targetWeightKg}
+          goal={goal}
+          onOpenTab={setTab}
+          onEditGoal={() => setGoalOpen(true)}
+        />
+      )}
       {tab === "weight" && (
         <WeightTab
           profileId={profileId}
           unitSystem={unitSystem}
           targetWeightKg={profile.targetWeightKg}
+          goal={goal}
+          onEditGoal={() => setGoalOpen(true)}
         />
       )}
       {tab === "bp" && <BpTab profileId={profileId} />}
       {tab === "symptoms" && <SymptomsTab profileId={profileId} />}
+
+      <WeightGoalDialog
+        open={goalOpen}
+        profileId={profileId}
+        unitSystem={unitSystem}
+        onClose={() => setGoalOpen(false)}
+        onSaved={() => {
+          setGoalOpen(false);
+          void reloadProfile();
+        }}
+      />
     </>
   );
 }
@@ -124,16 +166,32 @@ function WeightTab({
   profileId,
   unitSystem,
   targetWeightKg,
+  goal,
+  onEditGoal,
 }: {
   profileId: number;
   unitSystem: UnitSystem;
   targetWeightKg: number | null;
+  goal: WeightGoal | null;
+  onEditGoal: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const { data: rows, loading, reload } = useQuery(() => listWeightLog(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<WeightLog | null>(null);
   const [showAll, setShowAll] = React.useState(false);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  // With a dated goal the x-axis runs forward to the deadline; widen the canvas
+  // (~px per day) and scroll to the right edge so "now → target" is in view,
+  // leaving the past reachable by scrolling left.
+  const goalActive = goal != null;
+  React.useEffect(() => {
+    if (goalActive && scrollRef.current) {
+      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    }
+  }, [goalActive, rows]);
 
   if (loading || !rows) return <Loading />;
 
@@ -141,9 +199,14 @@ function WeightTab({
   const unitLabel = imperial ? "lb" : "kg";
   const toDisplay = (kg: number) => (imperial ? kgToLb(kg) : kg);
 
-  const chartData = [...rows]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((r) => ({ t: tsOf(r.date), date: r.date, value: toDisplay(r.weightKg) }));
+  const chartData = buildWeightSeries({ actual: rows, goal, toDisplay });
+  const tsList = chartData.map((p) => p.t);
+  const minTs = tsList.length ? Math.min(...tsList) : tsOf(todayISO());
+  const maxTs = tsList.length ? Math.max(...tsList) : minTs;
+  const spanDays = Math.max(1, (maxTs - minTs) / DAY);
+  const chartWidth = goalActive ? Math.round(spanDays * 2.5) : null;
+  const todayTs = tsOf(todayISO());
+  const goalTargetDisplay = goal ? toDisplay(goal.targetKg) : null;
   const targetDisplay = targetWeightKg != null ? toDisplay(targetWeightKg) : null;
 
   const visible = showAll ? rows : rows.slice(0, 20);
@@ -175,71 +238,139 @@ function WeightTab({
       ) : (
         <>
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle>{t("weight.chartTitle")}</CardTitle>
+              <GoalButton
+                goal={goal}
+                unitLabel={unitLabel}
+                toDisplay={toDisplay}
+                onClick={onEditGoal}
+              />
             </CardHeader>
             <CardContent>
-              <div className="h-60 w-full">
-                <ResponsiveContainer>
-                  <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis
-                      dataKey="t"
-                      type="number"
-                      domain={["dataMin", "dataMax"]}
-                      scale="time"
-                      tickFormatter={(v) => formatDate(new Date(v).toISOString())}
-                      stroke="var(--muted-foreground)"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={{ stroke: "var(--border)" }}
-                    />
-                    <YAxis
-                      domain={["auto", "auto"]}
-                      stroke="var(--muted-foreground)"
-                      fontSize={11}
-                      tickLine={false}
-                      axisLine={false}
-                      width={48}
-                      tickFormatter={(v) => formatValue(v)}
-                    />
-                    {targetDisplay != null && (
-                      <ReferenceLine
-                        y={targetDisplay}
-                        stroke="var(--success)"
-                        strokeDasharray="5 4"
-                        label={{
-                          value: t("weight.targetLabel"),
-                          position: "right",
-                          fill: "var(--success)",
-                          fontSize: 10,
+              <div ref={scrollRef} className="overflow-x-auto">
+                <div
+                  className="h-60"
+                  style={chartWidth != null ? { width: chartWidth, minWidth: "100%" } : undefined}
+                >
+                  <ResponsiveContainer>
+                    <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--border)"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="t"
+                        type="number"
+                        domain={goalActive ? [minTs, maxTs] : ["dataMin", "dataMax"]}
+                        scale="time"
+                        allowDataOverflow
+                        tickFormatter={(v) => formatDate(new Date(v).toISOString())}
+                        stroke="var(--muted-foreground)"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={{ stroke: "var(--border)" }}
+                      />
+                      <YAxis
+                        domain={["auto", "auto"]}
+                        stroke="var(--muted-foreground)"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        width={48}
+                        tickFormatter={(v) => formatValue(v)}
+                      />
+                      {goal && goalTargetDisplay != null ? (
+                        <>
+                          {todayTs >= minTs && todayTs <= maxTs && (
+                            <ReferenceLine
+                              x={todayTs}
+                              stroke="var(--muted-foreground)"
+                              strokeDasharray="2 3"
+                              label={{
+                                value: t("weightGoal.today"),
+                                position: "insideTopRight",
+                                fill: "var(--muted-foreground)",
+                                fontSize: 10,
+                              }}
+                            />
+                          )}
+                          <Line
+                            type="linear"
+                            dataKey="plan"
+                            stroke="var(--success)"
+                            strokeWidth={1.5}
+                            strokeDasharray="5 4"
+                            dot={false}
+                            connectNulls
+                            isAnimationActive={false}
+                          />
+                          <ReferenceDot
+                            x={tsOf(goal.targetDate)}
+                            y={goalTargetDisplay}
+                            r={4}
+                            fill="var(--success)"
+                            stroke="var(--card)"
+                            strokeWidth={2}
+                            label={{
+                              value: `${formatValue(goalTargetDisplay, 1)} ${unitLabel}`,
+                              position: "top",
+                              fill: "var(--success)",
+                              fontSize: 11,
+                            }}
+                          />
+                        </>
+                      ) : (
+                        targetDisplay != null && (
+                          <ReferenceLine
+                            y={targetDisplay}
+                            stroke="var(--success)"
+                            strokeDasharray="5 4"
+                            label={{
+                              value: t("weight.targetLabel"),
+                              position: "right",
+                              fill: "var(--success)",
+                              fontSize: 10,
+                            }}
+                          />
+                        )
+                      )}
+                      <Tooltip
+                        cursor={{ stroke: "var(--muted-foreground)", strokeDasharray: "3 3" }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const p = payload[0].payload as (typeof chartData)[number];
+                          if (p.value == null && p.plan == null) return null;
+                          return (
+                            <div className="rounded-lg border bg-card px-3 py-2 text-xs shadow-md">
+                              {p.value != null && (
+                                <p className="font-medium tabular-nums">
+                                  {formatValue(p.value, 1)} {unitLabel}
+                                </p>
+                              )}
+                              {p.plan != null && (
+                                <p className="tabular-nums" style={{ color: "var(--success)" }}>
+                                  {t("weightGoal.planLabel")}: {formatValue(p.plan, 1)} {unitLabel}
+                                </p>
+                              )}
+                              <p className="text-muted-foreground">{formatDate(p.date)}</p>
+                            </div>
+                          );
                         }}
                       />
-                    )}
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        const p = payload[0].payload as (typeof chartData)[number];
-                        return (
-                          <div className="rounded-lg border bg-card px-3 py-2 text-xs shadow-md">
-                            <p className="font-medium">
-                              {formatValue(p.value)} {unitLabel}
-                            </p>
-                            <p className="text-muted-foreground">{formatDate(p.date)}</p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="var(--primary)"
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      isAnimationActive={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="var(--primary)"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        connectNulls
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -270,8 +401,17 @@ function WeightTab({
                             setFormOpen(true);
                           }}
                           onDelete={async () => {
+                            const { id: _id, ...data } = r;
                             await deleteWeightEntry(r.id);
                             void reload();
+                            toast.showAction(
+                              t("toasts.deleted", { name: t("journal.tabs.weight") }),
+                              t("common.undo"),
+                              async () => {
+                                await createWeightEntry(data);
+                                void reload();
+                              },
+                            );
                           }}
                         />
                       </TableCell>
@@ -322,6 +462,7 @@ function WeightForm({
 }) {
   const { t } = useI18n();
   const [date, setDate] = React.useState(todayISO());
+  const toast = useToast();
   const [weight, setWeight] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -353,6 +494,7 @@ function WeightForm({
       if (editing) await updateWeightEntry(editing.id, data);
       else await createWeightEntry(data);
       onSaved();
+      toast.show(t("toasts.saved"));
     } finally {
       setSaving(false);
     }
@@ -399,6 +541,7 @@ function WeightForm({
 
 function BpTab({ profileId }: { profileId: number }) {
   const { t } = useI18n();
+  const toast = useToast();
   const { data: rows, loading, reload } = useQuery(() => listBpLog(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<BpLog | null>(null);
@@ -561,8 +704,17 @@ function BpTab({ profileId }: { profileId: number }) {
                             setFormOpen(true);
                           }}
                           onDelete={async () => {
+                            const { id: _id, ...data } = r;
                             await deleteBpEntry(r.id);
                             void reload();
+                            toast.showAction(
+                              t("toasts.deleted", { name: t("journal.tabs.bp") }),
+                              t("common.undo"),
+                              async () => {
+                                await createBpEntry(data);
+                                void reload();
+                              },
+                            );
                           }}
                         />
                       </TableCell>
@@ -608,6 +760,7 @@ function BpForm({
   const { t } = useI18n();
   const [date, setDate] = React.useState(todayISO());
   const [time, setTime] = React.useState("");
+  const toast = useToast();
   const [systolic, setSystolic] = React.useState("");
   const [diastolic, setDiastolic] = React.useState("");
   const [heartRate, setHeartRate] = React.useState("");
@@ -661,6 +814,7 @@ function BpForm({
       if (editing) await updateBpEntry(editing.id, data);
       else await createBpEntry(data);
       onSaved();
+      toast.show(t("toasts.saved"));
     } finally {
       setSaving(false);
     }
@@ -760,6 +914,7 @@ function severityColor(s: number): string {
 
 function SymptomsTab({ profileId }: { profileId: number }) {
   const { t } = useI18n();
+  const toast = useToast();
   const { data, loading, reload } = useQuery(async () => {
     const [rows, names] = await Promise.all([
       listSymptomLog(profileId),
@@ -852,8 +1007,17 @@ function SymptomsTab({ profileId }: { profileId: number }) {
                             setFormOpen(true);
                           }}
                           onDelete={async () => {
+                            const { id: _id, createdAt: _c, ...data } = r;
                             await deleteSymptomEntry(r.id);
                             void reload();
+                            toast.showAction(
+                              t("toasts.deleted", { name: r.symptomName }),
+                              t("common.undo"),
+                              async () => {
+                                await createSymptomEntry(data);
+                                void reload();
+                              },
+                            );
                           }}
                         />
                       </TableCell>
@@ -946,6 +1110,7 @@ function SymptomForm({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [symptomName, setSymptomName] = React.useState("");
   const [date, setDate] = React.useState(todayISO());
   const [time, setTime] = React.useState("");
@@ -979,6 +1144,7 @@ function SymptomForm({
       if (editing) await updateSymptomEntry(editing.id, data);
       else await createSymptomEntry(data);
       onSaved();
+      toast.show(t(editing ? "toasts.updated" : "toasts.added", { name: data.symptomName }));
     } finally {
       setSaving(false);
     }
@@ -1042,6 +1208,32 @@ function SymptomForm({
 }
 
 // ── shared bits ──────────────────────────────────────────────────────────────
+
+function GoalButton({
+  goal,
+  unitLabel,
+  toDisplay,
+  onClick,
+}: {
+  goal: WeightGoal | null;
+  unitLabel: string;
+  toDisplay: (kg: number) => number;
+  onClick: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs" onClick={onClick}>
+      <Target className="size-3.5" />
+      {goal ? (
+        <span className="tabular-nums">
+          {formatValue(toDisplay(goal.targetKg), 1)} {unitLabel} · {formatDate(goal.targetDate)}
+        </span>
+      ) : (
+        t("weightGoal.set")
+      )}
+    </Button>
+  );
+}
 
 function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   const { t } = useI18n();

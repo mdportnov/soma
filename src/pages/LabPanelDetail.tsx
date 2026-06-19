@@ -68,7 +68,9 @@ export function LabPanelDetail() {
         description={[
           [panel.city, panel.country].filter(Boolean).join(", "),
           `${results.length} ${t("labs.tableColumns.results").toLowerCase()}`,
-          outOfRange ? `${outOfRange} ${t("labPanelDetail.outOfRange")}` : t("labPanelDetail.allInRange"),
+          outOfRange
+            ? `${outOfRange} ${t("labPanelDetail.outOfRange")}`
+            : t("labPanelDetail.allInRange"),
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -79,7 +81,7 @@ export function LabPanelDetail() {
                 <Sparkles className="size-3" /> {t("labPanelDetail.aiImported")}
               </Badge>
             )}
-            <Badge variant="secondary">{panel.panelType}</Badge>
+            <Badge variant="secondary">{t(`types.${panel.panelType}`)}</Badge>
             <Button
               variant="outline"
               size="icon"
@@ -179,7 +181,10 @@ export function LabPanelDetail() {
                       : "—"}
                   </TableCell>
                   <TableCell>
-                    <FlagBadge flag={r.outOfRange ? r.flag : null} evaluated={r.valueNormalized != null} />
+                    <FlagBadge
+                      flag={r.outOfRange ? r.flag : null}
+                      evaluated={r.valueNormalized != null}
+                    />
                   </TableCell>
                   <TableCell
                     className="max-w-44 truncate text-xs text-muted-foreground"

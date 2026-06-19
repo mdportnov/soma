@@ -86,7 +86,7 @@ export function Labs() {
                     {[p.city, p.country].filter(Boolean).join(", ") || "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{p.panelType}</Badge>
+                    <Badge variant="secondary">{t(`types.${p.panelType}`)}</Badge>
                   </TableCell>
                   <TableCell className="tabular-nums">{p.resultCount}</TableCell>
                   <TableCell>

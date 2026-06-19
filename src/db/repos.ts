@@ -246,13 +246,28 @@ export async function getPanel(panelId: number) {
 }
 
 export async function getPanelResults(panelId: number): Promise<ResultWithBiomarker[]> {
-  const rows = await db
-    .select({ result: labResult, bio: biomarker })
-    .from(labResult)
-    .innerJoin(biomarker, eq(labResult.biomarkerId, biomarker.id))
-    .where(eq(labResult.panelId, panelId))
-    .orderBy(asc(biomarker.category), asc(biomarker.canonicalName));
-  return rows.map((r) => ({ ...r.result, biomarker: r.bio }));
+  // NB: don't `select({ result: labResult, bio: biomarker })` across a join —
+  // both tables expose an `id` column, and the sqlite-proxy driver maps rows
+  // positionally from a name-keyed object, so the duplicate name collapses and
+  // shifts every later value (corrupting the JSON `aliases` mapping). Fetch each
+  // table separately and stitch them in JS, where names can't collide.
+  const results = await db.select().from(labResult).where(eq(labResult.panelId, panelId));
+  if (!results.length) return [];
+
+  const bioIds = [...new Set(results.map((r) => r.biomarkerId))];
+  const bios = await db.select().from(biomarker).where(inArray(biomarker.id, bioIds));
+  const byId = new Map(bios.map((b) => [b.id, b]));
+
+  return results
+    .flatMap((r) => {
+      const bio = byId.get(r.biomarkerId);
+      return bio ? [{ ...r, biomarker: bio }] : [];
+    })
+    .sort(
+      (a, b) =>
+        a.biomarker.category.localeCompare(b.biomarker.category) ||
+        a.biomarker.canonicalName.localeCompare(b.biomarker.canonicalName),
+    );
 }
 
 export type ResultInput = {

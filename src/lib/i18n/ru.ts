@@ -41,6 +41,9 @@ export const ru = {
     close: "Закрыть",
     select: "Выбрать",
     undo: "Отменить",
+    resume: "Возобновить",
+    expand: "Развернуть",
+    collapse: "Свернуть",
     selectModel: "Выберите модель…",
     noMatches: "Нет совпадений",
     useCustomValue: "Использовать «{{value}}»",
@@ -90,6 +93,23 @@ export const ru = {
     weekly: "Еженедельно",
     asNeeded: "По необходимости",
     custom: "Индивидуально",
+  },
+
+  // Тосты-уведомления (подтверждение успешных действий)
+  toasts: {
+    added: "Добавлено: {{name}}",
+    updated: "Обновлено: {{name}}",
+    deleted: "Удалено: {{name}}",
+    saved: "Сохранено",
+    profileSaved: "Профиль сохранён",
+    apiKeyRemoved: "API-ключ удалён",
+    medStopped: "Приём прекращён: {{name}}",
+    medResumed: "Приём возобновлён: {{name}}",
+    dxRemission: "Переведено в ремиссию: {{name}}",
+    dxResolved: "Отмечено разрешённым: {{name}}",
+    allergyResolved: "Отмечено разрешённым: {{name}}",
+    panelSaved: "Панель анализов сохранена",
+    importSaved: "Импорт сохранён",
   },
 
   // Settings
@@ -537,6 +557,10 @@ export const ru = {
     addFirst: "Добавить первый элемент",
     currentlyTaking: "Принимаю сейчас",
     past: "Прошлое",
+    timeline: {
+      title: "Таймлайн приёма",
+      now: "сейчас",
+    },
     addDialog: {
       titleAdd: "Добавить лекарство или добавку",
       titleEdit: "Редактировать лекарство",
@@ -557,6 +581,7 @@ export const ru = {
     },
     actions: {
       stopToday: "Прекратить сегодня",
+      resume: "Возобновить",
     },
   },
 
@@ -586,6 +611,9 @@ export const ru = {
     emptyTitle: "Диагнозы не записаны",
     emptyDescription: "Отслеживайте состояния со статусом: активно, в ремиссии или разрешено.",
     addFirst: "Добавить первый диагноз",
+    timeline: {
+      title: "Таймлайн состояний",
+    },
     addDialog: {
       titleAdd: "Добавить диагноз",
       titleEdit: "Редактировать диагноз",
@@ -700,6 +728,9 @@ export const ru = {
       suggest: "Рекомендуемый срок: {{date}} — нажмите, чтобы подставить",
     },
     recordsTitle: "Записанные прививки",
+    timeline: {
+      title: "Таймлайн прививок",
+    },
     calendar: {
       title: "Календарь прививок",
       subtitle: "Справочное расписание ВОЗ",
@@ -846,6 +877,25 @@ export const ru = {
     emptyDescription: "Добавьте панель анализов, содержащую этот биомаркер, чтобы увидеть тренд.",
     trendTitle: "Тренд",
     allResultsTitle: "Все результаты",
+    allBiomarkers: "Все биомаркеры",
+    reference: "Референс",
+    optimal: "Оптимум",
+    higherBetter: "выше — лучше",
+    lowerBetter: "ниже — лучше",
+    trendDescription:
+      "Затенённые полосы — референсный и оптимальный диапазоны. Включайте лекарства ниже, чтобы наложить периоды приёма и сопоставить их со сдвигами.",
+  },
+
+  // График тренда (линия биомаркера + наложения)
+  trendChart: {
+    unitsNotRecognized:
+      "Единицы не распознаны — значения показаны в исходных единицах и не проверены по диапазону.",
+    pointsHidden:
+      "Скрыто точек: {{count}} — единица не распознана, нельзя отобразить в этой шкале.",
+    outOfRange: "вне нормы ({{flag}})",
+    severityShort: "тяжесть {{value}}/10",
+    symptomLegend:
+      "Вертикальные метки — отмеченные симптомы; число — тяжесть по шкале 1–10 (цвет = интенсивность). Наведите на метку для деталей.",
   },
 
   // Справочная карточка «О показателе»
@@ -938,6 +988,7 @@ export const ru = {
   dashboard: {
     noRecordsTitle: "Пока нет записей",
     recentActivityTitle: "Последняя активность",
+    fullTimeline: "Вся шкала",
     addLabResults: "Добавить анализы",
     stats: {
       labPanels: "Панели анализов",
@@ -1115,9 +1166,25 @@ export const ru = {
     title: "Дневник",
     description: "Отслеживайте вес, давление и симптомы во времени.",
     tabs: {
+      overview: "Обзор",
       weight: "Вес",
       bp: "Давление",
       symptoms: "Симптомы",
+    },
+    overview: {
+      activity: "Журнал событий",
+      noData: "Нет записей за период",
+      emptyTitle: "Пока ничего не записано",
+      emptyDescription:
+        "Записывайте вес, давление или симптомы — здесь они появятся вместе.",
+      entries: "записей: {{n}}",
+      pulse: "пульс {{n}}",
+      ranges: {
+        "3m": "3 мес",
+        "6m": "6 мес",
+        "1y": "1 год",
+        all: "Всё",
+      },
     },
   },
 
@@ -1141,6 +1208,23 @@ export const ru = {
       weight: "Вес",
       notesOptional: "Заметки (необязательно)",
     },
+  },
+
+  weightGoal: {
+    set: "Поставить цель",
+    titleAdd: "Цель по весу",
+    titleEdit: "Изменить цель по весу",
+    description:
+      "Строит линию-план от стартового веса к цели, чтобы видеть, идёте ли вы с опережением или отстаёте.",
+    startWeight: "Стартовый вес",
+    startDate: "Дата старта",
+    targetWeight: "Целевой вес",
+    targetDate: "Дата цели",
+    save: "Поставить цель",
+    remove: "Удалить цель",
+    removedToast: "Цель по весу удалена",
+    today: "Сегодня",
+    planLabel: "План",
   },
 
   bp: {

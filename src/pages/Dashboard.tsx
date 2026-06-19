@@ -113,7 +113,7 @@ export function Dashboard() {
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>{t("dashboard.recentActivityTitle")}</CardTitle>
           <Link to="/timeline" className="text-xs font-medium text-primary hover:underline">
-            Full timeline →
+            {t("dashboard.fullTimeline")} →
           </Link>
         </CardHeader>
         <CardContent>
@@ -146,7 +146,9 @@ export function Dashboard() {
                             : "secondary"
                     }
                   >
-                    {e.kind === "lab_panel" ? "labs" : e.kind}
+                    {e.kind === "lab_panel"
+                      ? t("timeline.eventKinds.labs")
+                      : t(`timeline.eventKinds.${e.kind}`)}
                   </Badge>
                   <span className="min-w-0 flex-1 truncate text-sm">{e.title}</span>
                   {e.subtitle && (

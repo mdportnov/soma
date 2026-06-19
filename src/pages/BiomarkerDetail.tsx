@@ -94,7 +94,7 @@ export function BiomarkerDetail() {
         to="/biomarkers"
         className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="size-3.5" /> All biomarkers
+        <ArrowLeft className="size-3.5" /> {t("biomarkerDetail.allBiomarkers")}
       </Link>
       <PageHeader
         title={bio.canonicalName}
@@ -105,17 +105,21 @@ export function BiomarkerDetail() {
       <div className="mb-4 flex flex-wrap gap-2 text-xs">
         {bio.refLow != null && bio.refHigh != null && (
           <Badge variant="outline">
-            Reference: {formatValue(bio.refLow)}–{formatValue(bio.refHigh)} {bio.defaultUnit}
+            {t("biomarkerDetail.reference")}: {formatValue(bio.refLow)}–{formatValue(bio.refHigh)}{" "}
+            {bio.defaultUnit}
           </Badge>
         )}
         {bio.optimalLow != null && bio.optimalHigh != null && (
           <Badge variant="success">
-            Optimal: {formatValue(bio.optimalLow)}–{formatValue(bio.optimalHigh)} {bio.defaultUnit}
+            {t("biomarkerDetail.optimal")}: {formatValue(bio.optimalLow)}–
+            {formatValue(bio.optimalHigh)} {bio.defaultUnit}
           </Badge>
         )}
         {bio.direction !== "range" && (
           <Badge variant="secondary">
-            {bio.direction === "higher_better" ? "higher is better" : "lower is better"}
+            {bio.direction === "higher_better"
+              ? t("biomarkerDetail.higherBetter")
+              : t("biomarkerDetail.lowerBetter")}
           </Badge>
         )}
       </div>
@@ -154,10 +158,7 @@ export function BiomarkerDetail() {
           <Card>
             <CardHeader>
               <CardTitle>{t("biomarkerDetail.trendTitle")}</CardTitle>
-              <CardDescription>
-                Shaded bands: reference and optimal ranges. Toggle medications below to overlay
-                intake periods and correlate them with shifts.
-              </CardDescription>
+              <CardDescription>{t("biomarkerDetail.trendDescription")}</CardDescription>
             </CardHeader>
             <CardContent>
               <TrendChart

@@ -4,6 +4,7 @@ import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createDiagnosis, deleteDiagnosis, listDiagnoses, updateDiagnosis } from "@/db/repos";
 import type { Diagnosis } from "@/db/schema";
+import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -16,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
+import { DurationTimeline, type DurationItem } from "@/components/charts/DurationTimeline";
 import {
   Table,
   TableBody,
@@ -27,9 +29,17 @@ import {
 import { formatDate, todayISO } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
+/** Bar fill per diagnosis status, aligned with the status badge semantics. */
+const STATUS_COLOR: Record<Diagnosis["status"], string> = {
+  active: "#d97706",
+  remission: "#0ea5e9",
+  resolved: "#64748b",
+};
+
 export function Diagnoses() {
   const { profileId } = useApp();
   const { t } = useI18n();
+  const toast = useToast();
   const {
     data: diagnoses,
     loading,
@@ -45,6 +55,27 @@ export function Diagnoses() {
   const active = diagnoses.filter((d) => d.status === "active");
   const remission = diagnoses.filter((d) => d.status === "remission");
   const resolved = diagnoses.filter((d) => d.status === "resolved");
+
+  const timelineItems: DurationItem[] = diagnoses.map((d) => ({
+    id: d.id,
+    label: d.name,
+    start: d.date,
+    // Active conditions run to "now"; closed ones end at their resolved date
+    // (falling back to the onset date when none was recorded).
+    end: d.status === "active" ? null : (d.resolvedDate ?? d.date),
+    color: STATUS_COLOR[d.status],
+    tooltip: (
+      <>
+        <span className="font-medium">{d.name}</span>
+        {d.icdCode && <div className="text-muted-foreground">{d.icdCode}</div>}
+        <div className="text-muted-foreground">
+          {t(`status.${d.status}`)} · {formatDate(d.date)}
+          {d.status !== "active" && d.resolvedDate ? ` → ${formatDate(d.resolvedDate)}` : ""}
+        </div>
+        {d.notes && <div className="text-muted-foreground">{d.notes}</div>}
+      </>
+    ),
+  }));
 
   const openNew = () => {
     setEditing(null);
@@ -76,6 +107,23 @@ export function Diagnoses() {
         />
       ) : (
         <div className="space-y-6">
+          <DurationTimeline
+            title={t("diagnoses.timeline.title")}
+            storageKey="soma.timeline.diagnoses"
+            items={timelineItems}
+            legend={[
+              { color: STATUS_COLOR.active, label: t("status.active") },
+              { color: STATUS_COLOR.remission, label: t("status.remission") },
+              { color: STATUS_COLOR.resolved, label: t("status.resolved") },
+            ]}
+            onSelect={(id) => {
+              const d = diagnoses.find((x) => x.id === id);
+              if (d) {
+                setEditing(d);
+                setFormOpen(true);
+              }
+            }}
+          />
           {active.length > 0 && (
             <section>
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -121,6 +169,14 @@ export function Diagnoses() {
                           onClick={async () => {
                             await updateDiagnosis(d.id, { status: "remission" });
                             void reload();
+                            toast.showAction(
+                              t("toasts.dxRemission", { name: d.name }),
+                              t("common.undo"),
+                              async () => {
+                                await updateDiagnosis(d.id, { status: "active" });
+                                void reload();
+                              },
+                            );
                           }}
                         >
                           {t("diagnoses.actions.moveToRemission")}
@@ -137,6 +193,17 @@ export function Diagnoses() {
                                 });
                                 setResolvingId(null);
                                 void reload();
+                                toast.showAction(
+                                  t("toasts.dxResolved", { name: d.name }),
+                                  t("common.undo"),
+                                  async () => {
+                                    await updateDiagnosis(d.id, {
+                                      status: "active",
+                                      resolvedDate: null,
+                                    });
+                                    void reload();
+                                  },
+                                );
                               }}
                             >
                               {t("diagnoses.actions.confirmResolve")}
@@ -162,8 +229,17 @@ export function Diagnoses() {
                           size="sm"
                           className="ml-auto text-destructive"
                           onClick={async () => {
+                            const { id: _id, ...data } = d;
                             await deleteDiagnosis(d.id);
                             void reload();
+                            toast.showAction(
+                              t("toasts.deleted", { name: d.name }),
+                              t("common.undo"),
+                              async () => {
+                                await createDiagnosis(data);
+                                void reload();
+                              },
+                            );
                           }}
                         >
                           <Trash2 />
@@ -188,8 +264,17 @@ export function Diagnoses() {
                   setFormOpen(true);
                 }}
                 onDelete={async (d) => {
+                  const { id: _id, ...data } = d;
                   await deleteDiagnosis(d.id);
                   void reload();
+                  toast.showAction(
+                    t("toasts.deleted", { name: d.name }),
+                    t("common.undo"),
+                    async () => {
+                      await createDiagnosis(data);
+                      void reload();
+                    },
+                  );
                 }}
               />
             </section>
@@ -207,8 +292,17 @@ export function Diagnoses() {
                   setFormOpen(true);
                 }}
                 onDelete={async (d) => {
+                  const { id: _id, ...data } = d;
                   await deleteDiagnosis(d.id);
                   void reload();
+                  toast.showAction(
+                    t("toasts.deleted", { name: d.name }),
+                    t("common.undo"),
+                    async () => {
+                      await createDiagnosis(data);
+                      void reload();
+                    },
+                  );
                 }}
               />
             </section>
@@ -311,6 +405,7 @@ export function DiagnosisForm({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [name, setName] = React.useState("");
   const [icdCode, setIcdCode] = React.useState("");
   const [date, setDate] = React.useState(todayISO());
@@ -350,6 +445,7 @@ export function DiagnosisForm({
       };
       if (editing) await updateDiagnosis(editing.id, data);
       else await createDiagnosis(data);
+      toast.show(t(editing ? "toasts.updated" : "toasts.added", { name: data.name }));
       onSaved();
     } finally {
       setSaving(false);

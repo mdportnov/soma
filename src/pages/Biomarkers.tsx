@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { formatDate, formatValue } from "@/lib/utils";
 import { normalizeLabel } from "@/lib/fuzzy";
+import { useToast } from "@/components/app/Toast";
 import { allKnownUnits } from "@/lib/units";
 import { useI18n } from "@/lib/i18n";
 
@@ -173,6 +174,7 @@ export function CreateBiomarkerDialog({
   initialRefHigh?: string;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [name, setName] = React.useState(initialName);
   const [category, setCategory] = React.useState("Custom");
   const [unit, setUnit] = React.useState(initialUnit);
@@ -212,6 +214,7 @@ export function CreateBiomarkerDialog({
         isCustom: true,
       });
       onCreated(id);
+      toast.show(t("toasts.added", { name: name.trim() }));
     } finally {
       setSaving(false);
     }

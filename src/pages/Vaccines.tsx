@@ -6,6 +6,7 @@ import { createVaccine, getProfile, listVaccines, updateVaccine } from "@/db/rep
 import type { Vaccine } from "@/db/schema";
 import { PageHeader } from "@/components/app/PageHeader";
 import { VaccineCalendar } from "@/components/app/VaccineCalendar";
+import { VaccineTimeline } from "@/components/charts/VaccineTimeline";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
@@ -26,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, todayISO } from "@/lib/utils";
+import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
 export function Vaccines() {
@@ -82,6 +84,14 @@ export function Vaccines() {
           />
         ) : (
           <section className="space-y-4">
+            <VaccineTimeline
+              vaccines={vaccines}
+              storageKey="soma.timeline.vaccines"
+              onSelect={(v) => {
+                setEditing(v);
+                setFormOpen(true);
+              }}
+            />
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("vaccines.recordsTitle")}
             </h2>
@@ -189,6 +199,7 @@ function VaccineForm({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [vaccineName, setVaccineName] = React.useState("");
   const [date, setDate] = React.useState(todayISO());
   const [dose, setDose] = React.useState("");
@@ -232,6 +243,7 @@ function VaccineForm({
       if (editing) await updateVaccine(editing.id, data);
       else await createVaccine(data);
       onSaved();
+      toast.show(t(editing ? "toasts.updated" : "toasts.added", { name: data.vaccineName }));
     } finally {
       setSaving(false);
     }

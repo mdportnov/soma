@@ -1,9 +1,10 @@
 import * as React from "react";
-import { CircleStop, Pencil, Pill, Plus, Trash2 } from "lucide-react";
+import { CircleStop, Pencil, Pill, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createMedication, deleteMedication, listMedications, updateMedication } from "@/db/repos";
 import type { Medication } from "@/db/schema";
+import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -16,12 +17,20 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
+import { DurationTimeline, type DurationItem } from "@/components/charts/DurationTimeline";
 import { formatDate, formatValue, todayISO } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+
+/** Bar fill per medication type — distinct, both legible under white text. */
+const MED_TYPE_COLOR: Record<Medication["type"], string> = {
+  drug: "#0ea5e9",
+  supplement: "#0d9488",
+};
 
 export function Medications() {
   const { profileId } = useApp();
   const { t } = useI18n();
+  const toast = useToast();
   const { data: meds, loading, reload } = useQuery(() => listMedications(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Medication | null>(null);
@@ -30,6 +39,33 @@ export function Medications() {
 
   const active = meds.filter((m) => !m.endDate);
   const past = meds.filter((m) => m.endDate);
+
+  const timelineItems: DurationItem[] = meds.map((m) => {
+    const dose = [
+      m.doseAmount != null ? `${formatValue(m.doseAmount)} ${m.doseUnit ?? ""}`.trim() : null,
+      m.schedule?.frequency?.replaceAll("_", " "),
+      m.schedule?.notes,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return {
+      id: m.id,
+      label: m.name,
+      start: m.startDate,
+      end: m.endDate,
+      color: MED_TYPE_COLOR[m.type],
+      tooltip: (
+        <>
+          <span className="font-medium">{m.name}</span>
+          <div className="text-muted-foreground">{dose || t(`types.${m.type}`)}</div>
+          <div className="text-muted-foreground">
+            {formatDate(m.startDate)} → {m.endDate ? formatDate(m.endDate) : t("timeline.now")}
+          </div>
+          {m.purpose && <div className="text-muted-foreground">{m.purpose}</div>}
+        </>
+      ),
+    };
+  });
 
   const openNew = () => {
     setEditing(null);
@@ -61,6 +97,22 @@ export function Medications() {
         />
       ) : (
         <div className="space-y-6">
+          <DurationTimeline
+            title={t("medications.timeline.title")}
+            storageKey="soma.timeline.medications"
+            items={timelineItems}
+            legend={[
+              { color: MED_TYPE_COLOR.drug, label: t("types.drug") },
+              { color: MED_TYPE_COLOR.supplement, label: t("types.supplement") },
+            ]}
+            onSelect={(id) => {
+              const m = meds.find((x) => x.id === id);
+              if (m) {
+                setEditing(m);
+                setFormOpen(true);
+              }
+            }}
+          />
           {[
             { label: t("medications.currentlyTaking"), items: active },
             { label: t("medications.past"), items: past },
@@ -95,7 +147,8 @@ export function Medications() {
                           </Badge>
                         </div>
                         <p className="mt-2 text-xs text-muted-foreground">
-                          {formatDate(m.startDate)} → {m.endDate ? formatDate(m.endDate) : "now"}
+                          {formatDate(m.startDate)} →{" "}
+                          {m.endDate ? formatDate(m.endDate) : t("timeline.now")}
                           {m.purpose && <span> · {m.purpose}</span>}
                         </p>
                         <div className="mt-3 flex gap-1.5 border-t pt-3">
@@ -109,16 +162,39 @@ export function Medications() {
                           >
                             <Pencil /> {t("common.edit")}
                           </Button>
-                          {!m.endDate && (
+                          {!m.endDate ? (
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={async () => {
+                                // Stop is reversible: an Undo (and the permanent
+                                // Resume below) restores the open-ended period —
+                                // resuming the same day leaves no gap recorded.
                                 await updateMedication(m.id, { endDate: todayISO() });
                                 void reload();
+                                toast.showAction(
+                                  t("toasts.medStopped", { name: m.name }),
+                                  t("common.resume"),
+                                  async () => {
+                                    await updateMedication(m.id, { endDate: null });
+                                    void reload();
+                                  },
+                                );
                               }}
                             >
                               <CircleStop /> {t("medications.actions.stopToday")}
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                await updateMedication(m.id, { endDate: null });
+                                void reload();
+                                toast.show(t("toasts.medResumed", { name: m.name }));
+                              }}
+                            >
+                              <RotateCcw /> {t("medications.actions.resume")}
                             </Button>
                           )}
                           <Button
@@ -126,8 +202,17 @@ export function Medications() {
                             size="sm"
                             className="ml-auto text-destructive"
                             onClick={async () => {
+                              const { id: _id, ...data } = m;
                               await deleteMedication(m.id);
                               void reload();
+                              toast.showAction(
+                                t("toasts.deleted", { name: m.name }),
+                                t("common.undo"),
+                                async () => {
+                                  await createMedication(data);
+                                  void reload();
+                                },
+                              );
                             }}
                           >
                             <Trash2 />
@@ -146,9 +231,10 @@ export function Medications() {
         open={formOpen}
         editing={editing}
         onClose={() => setFormOpen(false)}
-        onSaved={() => {
+        onSaved={(name, wasEdit) => {
           setFormOpen(false);
           void reload();
+          toast.show(t(wasEdit ? "toasts.updated" : "toasts.added", { name }));
         }}
         profileId={profileId}
       />
@@ -166,7 +252,7 @@ function MedicationForm({
   open: boolean;
   editing: Medication | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (name: string, wasEdit: boolean) => void;
   profileId: number;
 }) {
   const { t } = useI18n();
@@ -212,7 +298,7 @@ function MedicationForm({
       };
       if (editing) await updateMedication(editing.id, data);
       else await createMedication(data);
-      onSaved();
+      onSaved(data.name, !!editing);
     } finally {
       setSaving(false);
     }

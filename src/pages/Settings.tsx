@@ -29,6 +29,7 @@ import {
   type AiSettings,
 } from "@/ai";
 import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
+import { useToast } from "@/components/app/Toast";
 import { appLogDir, join } from "@tauri-apps/api/path";
 import { applyThemePreference, loadThemePreference, type ThemePreference } from "@/lib/theme";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
@@ -148,6 +149,7 @@ function AppearanceCard() {
 
 function AiSettingsCard() {
   const { t } = useI18n();
+  const toast = useToast();
   const [settings, setSettings] = React.useState<AiSettings>(() => loadAiSettings());
   const [keyInput, setKeyInput] = React.useState("");
   const [hasStoredKey, setHasStoredKey] = React.useState<boolean | null>(null);
@@ -192,6 +194,7 @@ function AiSettingsCard() {
     await deleteApiKey(settings.providerId);
     setHasStoredKey(false);
     setTestState({ kind: "idle" });
+    toast.show(t("toasts.apiKeyRemoved"));
   };
 
   const testKey = async () => {
@@ -335,6 +338,7 @@ function AiSettingsCard() {
 
 function ProfileCard() {
   const { t } = useI18n();
+  const toast = useToast();
   const { profileId } = useApp();
   const { data: prof, loading } = useQuery(() => getProfile(profileId), [profileId]);
   const { draft, setDraft, patch } = useProfileDraft();
@@ -361,6 +365,7 @@ function ProfileCard() {
               await updateProfile(profileId, draftToUpdate(draft));
               setSaved(true);
               setTimeout(() => setSaved(false), 2000);
+              toast.show(t("toasts.profileSaved"));
             }}
           >
             {saved ? t("settings.profile.saved") : t("settings.profile.saveProfile")}
@@ -375,6 +380,7 @@ function ProfileCard() {
 
 function EmergencyContactCard() {
   const { t } = useI18n();
+  const toast = useToast();
   const { profileId } = useApp();
   const { data: prof, loading } = useQuery(() => getProfile(profileId), [profileId]);
   const [name, setName] = React.useState("");
@@ -546,6 +552,7 @@ function EmergencyContactCard() {
               });
               setSaved(true);
               setTimeout(() => setSaved(false), 2000);
+              toast.show(t("toasts.profileSaved"));
             }}
           >
             {saved ? t("emergency.settings.saved") : t("emergency.settings.save")}

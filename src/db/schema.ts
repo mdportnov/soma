@@ -23,6 +23,12 @@ export const profile = sqliteTable("profile", {
   heightCm: real("height_cm"),
   weightKg: real("weight_kg"),
   targetWeightKg: real("target_weight_kg"),
+  /** Weight goal: deadline plus the plan's fixed start anchor (date + weight),
+   *  so the journal can draw a glide-path projection and show progress against
+   *  it. All null unless the user sets a dated goal. */
+  targetWeightDate: text("target_weight_date"),
+  targetWeightStartDate: text("target_weight_start_date"),
+  targetWeightStartKg: real("target_weight_start_kg"),
   /** ABO blood group + Rh, kept as separate optional fields. */
   bloodType: text("blood_type", { enum: ["A", "B", "AB", "O"] }),
   rhFactor: text("rh_factor", { enum: ["positive", "negative"] }),

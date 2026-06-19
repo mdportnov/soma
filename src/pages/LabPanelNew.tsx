@@ -15,6 +15,7 @@ import { Combobox } from "@/components/ui/combobox";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { todayISO } from "@/lib/utils";
+import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 import { allKnownUnits, convertibleUnits, convertToDefaultUnit, normalizeUnit } from "@/lib/units";
 import type { Biomarker } from "@/db/schema";
@@ -24,6 +25,7 @@ type Row = { key: number; biomarkerId: number | ""; value: string; unit: string 
 export function LabPanelNew() {
   const { profileId } = useApp();
   const { t } = useI18n();
+  const toast = useToast();
   const navigate = useNavigate();
   const { data: biomarkers, loading } = useQuery(() => listBiomarkers(), []);
   const { data: profile } = useQuery(() => getProfile(profileId), [profileId]);
@@ -108,6 +110,7 @@ export function LabPanelNew() {
         })),
         byId,
       );
+      toast.show(t("toasts.panelSaved"));
       navigate(`/labs/${panelId}`);
     } finally {
       setSaving(false);

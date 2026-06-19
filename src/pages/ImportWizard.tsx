@@ -40,6 +40,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
+import { useToast } from "@/components/app/Toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -86,6 +87,7 @@ type DischargeRow =
 export function ImportWizard() {
   const { profileId } = useApp();
   const { t } = useI18n();
+  const toast = useToast();
   const navigate = useNavigate();
 
   const {
@@ -259,6 +261,7 @@ export function ImportWizard() {
           attachmentId,
         });
       }
+      toast.show(t("toasts.importSaved"));
       navigate("/vaccines");
     } catch (e) {
       console.error(e);
@@ -314,6 +317,7 @@ export function ImportWizard() {
           });
         }
       }
+      toast.show(t("toasts.importSaved"));
       navigate(visitId != null ? `/visits/${visitId}` : "/visits");
     } catch (e) {
       console.error(e);
@@ -387,6 +391,7 @@ export function ImportWizard() {
       if (sourceFileId != null) {
         await updateAttachment(sourceFileId, { linkedEntityId: panelId });
       }
+      toast.show(t("toasts.importSaved"));
       navigate(`/labs/${panelId}`);
     } catch (e) {
       console.error(e);

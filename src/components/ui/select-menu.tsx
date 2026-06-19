@@ -20,7 +20,8 @@ type SelectMenuProps = {
 };
 
 type PanelStyle = {
-  top: number;
+  top?: number;
+  bottom?: number;
   left: number;
   width: number;
   maxHeight: number;
@@ -51,13 +52,17 @@ export function SelectMenu({
     const rect = triggerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom - 8;
     const spaceAbove = rect.top - 8;
-    const panelHeight = Math.min(320, Math.max(spaceBelow, spaceAbove));
     const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
     setPanelStyle({
-      top: openUp ? rect.top - panelHeight - 4 : rect.bottom + 4,
+      // Anchor the edge nearest the trigger so the panel hugs it and grows
+      // toward the available space, sizing to its content rather than a
+      // guessed height (which would leave a gap above the trigger).
+      ...(openUp
+        ? { bottom: window.innerHeight - rect.top + 4 }
+        : { top: rect.bottom + 4 }),
       left: rect.left,
       width: rect.width,
-      maxHeight: panelHeight,
+      maxHeight: Math.min(320, openUp ? spaceAbove : spaceBelow),
       transformOrigin: openUp ? "bottom center" : "top center",
     });
   }, []);
@@ -189,6 +194,7 @@ export function SelectMenu({
             style={{
               position: "fixed",
               top: panelStyle.top,
+              bottom: panelStyle.bottom,
               left: panelStyle.left,
               width: panelStyle.width,
               maxHeight: panelStyle.maxHeight,

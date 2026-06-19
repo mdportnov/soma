@@ -14,6 +14,8 @@ type DateInputProps = {
   /** Show a clear button when a value is set (for optional dates). */
   clearable?: boolean;
   disabled?: boolean;
+  /** Prevent picking any date after today (e.g. birth dates). */
+  disableFuture?: boolean;
   className?: string;
 };
 
@@ -41,6 +43,7 @@ function DatePopover({
   panelRef,
   selected,
   defaultMonth,
+  disableFuture,
   onSelect,
   onClose,
 }: {
@@ -49,6 +52,7 @@ function DatePopover({
   panelRef: React.RefObject<HTMLDivElement | null>;
   selected: Date | undefined;
   defaultMonth: Date | undefined;
+  disableFuture?: boolean;
   onSelect: (date: Date) => void;
   onClose: () => void;
 }) {
@@ -133,6 +137,7 @@ function DatePopover({
         captionLayout="dropdown"
         startMonth={new Date(1900, 0)}
         endMonth={new Date(new Date().getFullYear() + 1, 11)}
+        disabled={disableFuture ? { after: new Date() } : undefined}
         onSelect={(date) => {
           if (date) onSelect(date);
           else onClose();
@@ -156,6 +161,7 @@ export function DateInput({
   defaultMonth,
   clearable = false,
   disabled,
+  disableFuture,
   className,
 }: DateInputProps) {
   const [open, setOpen] = React.useState(false);
@@ -235,6 +241,7 @@ export function DateInput({
         panelRef={panelRef}
         selected={selected}
         defaultMonth={defaultMonth}
+        disableFuture={disableFuture}
         onSelect={(date) => {
           onChange(toISO(date));
           setOpen(false);

@@ -612,7 +612,18 @@ export function ImportWizard() {
             }
             onCreateCustom={(key) => setCustomForKey(key)}
             meta={{ date, labName, city, country, panelType }}
-            setMeta={{ setDate, setLabName, setCity, setCountry, setPanelType }}
+            setMeta={{
+              // Editing the date clears the "guessed/today" warning so it can't
+              // linger over a value the user has since corrected.
+              setDate: (v: string) => {
+                setDate(v);
+                setDateGuessed(false);
+              },
+              setLabName,
+              setCity,
+              setCountry,
+              setPanelType,
+            }}
             skipped={skipped}
             onDismissSkipped={() => setSkipped([])}
             dateGuessed={dateGuessed}
@@ -983,7 +994,7 @@ function ReviewStep({
             {duplicates > 1 ? "s" : ""} selected
           </p>
         )}
-        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date}>
+        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date || duplicates > 0}>
           Confirm & save {includedCount} result{includedCount === 1 ? "" : "s"}
         </Button>
       </div>

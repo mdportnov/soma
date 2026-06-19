@@ -217,7 +217,7 @@ export function LabPanelDetail() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {r.biomarker.refLow != null || r.biomarker.refHigh != null
-                      ? `${formatValue(r.biomarker.refLow) ?? ""}–${formatValue(r.biomarker.refHigh) ?? ""} ${r.biomarker.defaultUnit}`
+                      ? `${r.biomarker.refLow != null ? formatValue(r.biomarker.refLow) : ""}–${r.biomarker.refHigh != null ? formatValue(r.biomarker.refHigh) : ""} ${r.biomarker.defaultUnit}`
                       : "—"}
                   </TableCell>
                   <TableCell>

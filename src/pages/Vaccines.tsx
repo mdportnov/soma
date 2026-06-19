@@ -240,15 +240,21 @@ function VaccineForm({
     setNotes(editing?.notes ?? "");
   }, [open, editing]);
 
+  // Validity can't end before the shot was given (ISO strings sort lexically).
+  const expiryBeforeDose = !!expiresAt && !!date && expiresAt < date;
+  const canSave = !!vaccineName.trim() && !!date && !expiryBeforeDose;
+
   const save = async () => {
-    if (!vaccineName.trim() || !date) return;
+    if (!canSave) return;
     setSaving(true);
     try {
+      // Dose is a positive whole number within a series; ignore 0/negative/fractional.
+      const doseNum = dose ? Math.trunc(Number(dose)) : NaN;
       const data = {
         profileId,
         vaccineName: vaccineName.trim(),
         date,
-        dose: dose ? Number(dose) : null,
+        dose: Number.isFinite(doseNum) && doseNum >= 1 ? doseNum : null,
         manufacturer: manufacturer.trim() || null,
         batchNumber: batchNumber.trim() || null,
         expiresAt: expiresAt || null,
@@ -274,7 +280,7 @@ function VaccineForm({
       onClose={onClose}
       title={editing ? t("vaccines.addDialog.titleEdit") : t("vaccines.addDialog.titleAdd")}
       onSubmit={save}
-      submitDisabled={saving || !vaccineName.trim() || !date}
+      submitDisabled={saving || !canSave}
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-[1fr_9rem] gap-3">
@@ -342,6 +348,11 @@ function VaccineForm({
               placeholder="e.g. Germany"
             />
           </Field>
+          {expiryBeforeDose && (
+            <p className="col-span-3 text-[11px] text-amber-600 dark:text-amber-500">
+              {t("common.validation.expiryBeforeDose")}
+            </p>
+          )}
           <Field label={t("vaccines.fields.administeredByOptional")}>
             <Input
               value={administeredBy}

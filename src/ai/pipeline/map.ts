@@ -1,5 +1,5 @@
 import type { Biomarker } from "@/db/schema";
-import type { AIProvider, RawExtraction } from "../types";
+import { AIProviderError, type AIProvider, type RawExtraction } from "../types";
 import { normalizeLabel, similarity } from "@/lib/fuzzy";
 import { convertToDefaultUnit, type ConversionResult } from "@/lib/units";
 
@@ -220,6 +220,10 @@ export async function mapExtractions(
           row.conversion = conversionFor(row.raw, picked, index);
         }
       } catch (e) {
+        // A bad/revoked key fails identically on every remaining row: abort the
+        // loop and surface it, rather than firing N doomed requests and handing
+        // back a review screen full of silently-unmapped rows with no banner.
+        if (e instanceof AIProviderError && e.kind === "auth") throw e;
         console.warn("AI mapping fallback failed; leaving row unmapped", e);
       }
     }

@@ -429,8 +429,14 @@ export function DiagnosisForm({
     if (next === "resolved" && !resolvedDate) setResolvedDate(todayISO());
   };
 
+  // A resolved/remission diagnosis can't resolve before it began; ISO strings
+  // compare lexicographically.
+  const resolvedBeforeStart =
+    status !== "active" && !!resolvedDate && !!date && resolvedDate < date;
+  const canSave = !!name.trim() && !!date && !resolvedBeforeStart;
+
   const save = async () => {
-    if (!name.trim() || !date) return;
+    if (!canSave) return;
     setSaving(true);
     try {
       const data = {
@@ -440,7 +446,9 @@ export function DiagnosisForm({
         date,
         status,
         notes: notes.trim() || null,
-        resolvedDate: status === "active" ? null : resolvedDate || null,
+        // Non-active needs an end anchor for the timeline; fall back to the
+        // onset date rather than leaving a resolved condition with no span.
+        resolvedDate: status === "active" ? null : resolvedDate || date,
         visitId: editing ? editing.visitId : (defaultVisitId ?? null),
       };
       if (editing) await updateDiagnosis(editing.id, data);
@@ -458,7 +466,7 @@ export function DiagnosisForm({
       onClose={onClose}
       title={editing ? t("diagnoses.addDialog.titleEdit") : t("diagnoses.addDialog.titleAdd")}
       onSubmit={save}
-      submitDisabled={saving || !name.trim() || !date}
+      submitDisabled={saving || !canSave}
     >
       <div className="grid gap-3">
         <Field label={t("fields.name")}>
@@ -495,6 +503,11 @@ export function DiagnosisForm({
           <Field label={t("diagnoses.fields.resolvedDate")}>
             <DateInput value={resolvedDate} onChange={setResolvedDate} />
           </Field>
+        )}
+        {resolvedBeforeStart && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-500">
+            {t("common.validation.resolvedBeforeStart")}
+          </p>
         )}
         <Field label={t("diagnoses.fields.notesOptional")}>
           <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />

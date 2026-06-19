@@ -280,8 +280,12 @@ function MedicationForm({
     setPurpose(editing?.purpose ?? "");
   }, [open, editing]);
 
+  // ISO yyyy-mm-dd strings compare lexicographically, so a plain < is correct.
+  const endBeforeStart = !!endDate && !!startDate && endDate < startDate;
+  const canSave = !!name.trim() && !!startDate && !endBeforeStart;
+
   const save = async () => {
-    if (!name.trim() || !startDate) return;
+    if (!canSave) return;
     setSaving(true);
     try {
       const data = {
@@ -310,7 +314,7 @@ function MedicationForm({
       onClose={onClose}
       title={editing ? t("medications.addDialog.titleEdit") : t("medications.addDialog.titleAdd")}
       onSubmit={save}
-      submitDisabled={saving || !name.trim() || !startDate}
+      submitDisabled={saving || !canSave}
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-[1fr_9rem] gap-3">
@@ -392,6 +396,11 @@ function MedicationForm({
             <DateInput value={endDate} onChange={setEndDate} clearable />
           </Field>
         </div>
+        {endBeforeStart && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-500">
+            {t("common.validation.endBeforeStart")}
+          </p>
+        )}
         <Field label={t("medications.fields.purposeOptional")}>
           <Input
             value={purpose}
@@ -403,7 +412,7 @@ function MedicationForm({
           <Button variant="outline" onClick={onClose}>
             {t("common.cancel")}
           </Button>
-          <Button onClick={save} disabled={saving || !name.trim() || !startDate}>
+          <Button onClick={save} disabled={saving || !canSave}>
             {editing ? t("common.saveChanges") : t("common.add")}
           </Button>
         </div>

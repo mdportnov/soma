@@ -1103,6 +1103,25 @@ export const ru = {
       description:
         "Добавьте свою первую панель анализов, лекарство или визит к врачу, чтобы начать.",
     },
+    verdict: {
+      calm: "Всё в норме",
+      attentionOne: "1 показатель требует внимания",
+      attentionMany: "{{count}} показателей требуют внимания",
+    },
+    safety: {
+      label: "Критическая аллергия",
+    },
+    attention: {
+      title: "Требует внимания",
+      biomarkersOne: "1 показатель ухудшился в последней панели",
+      biomarkersMany: "{{count}} показателей ухудшились в последней панели",
+      diagnosesOne: "1 активный диагноз: {{names}}",
+      diagnosesMany: "Активных диагнозов: {{count}} — {{names}}",
+      medsEndingOne: "1 лекарство скоро заканчивается: {{names}}",
+      medsEndingMany: "Скоро заканчиваются лекарства ({{count}}): {{names}}",
+      reviewOne: "1 импорт с непроверенными результатами",
+      reviewMany: "Импортов с непроверенными результатами: {{count}}",
+    },
   },
 
   // VisitDetail page

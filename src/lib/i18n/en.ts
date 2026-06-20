@@ -1095,6 +1095,25 @@ export const en = {
     recentActivity: {
       description: "Add your first lab panel, medication or doctor visit to get started.",
     },
+    verdict: {
+      calm: "Everything looks normal",
+      attentionOne: "1 thing needs your attention",
+      attentionMany: "{{count}} things need your attention",
+    },
+    safety: {
+      label: "Critical allergy",
+    },
+    attention: {
+      title: "Needs attention",
+      biomarkersOne: "1 biomarker worsened in your latest panel",
+      biomarkersMany: "{{count}} biomarkers worsened in your latest panel",
+      diagnosesOne: "1 active diagnosis: {{names}}",
+      diagnosesMany: "{{count}} active diagnoses: {{names}}",
+      medsEndingOne: "1 medication ends soon: {{names}}",
+      medsEndingMany: "{{count}} medications end soon: {{names}}",
+      reviewOne: "1 import has unverified results",
+      reviewMany: "{{count}} imports have unverified results",
+    },
   },
 
   // VisitDetail page

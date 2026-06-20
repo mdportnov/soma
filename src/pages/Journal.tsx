@@ -54,7 +54,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { JournalOverview } from "@/components/charts/JournalOverview";
 import { WeightGoalDialog } from "@/components/app/WeightGoalDialog";
-import { buildWeightSeries, readWeightGoal, type WeightGoal } from "@/lib/weightGoal";
+import { GoalStatusChip } from "@/components/app/GoalStatusChip";
+import { buildWeightSeries, goalStatus, readWeightGoal, type WeightGoal } from "@/lib/weightGoal";
 import {
   Table,
   TableBody,
@@ -231,6 +232,10 @@ function WeightTab({
   const todayTs = tsOf(todayISO());
   const goalTargetDisplay = goal ? toDisplay(goal.targetKg) : null;
   const targetDisplay = targetWeightKg != null ? toDisplay(targetWeightKg) : null;
+  const latestKg = rows.length
+    ? rows.reduce((m, r) => (tsOf(r.date) > tsOf(m.date) ? r : m)).weightKg
+    : null;
+  const weightStatus = goal ? goalStatus(goal, latestKg, todayTs) : null;
   // Span the y-axis over the glide path too, so the projection down to the
   // target isn't drawn below the visible area.
   const yValues = chartData.flatMap((p) => [p.value, p.plan]).filter((v): v is number => v != null);
@@ -259,7 +264,7 @@ function WeightTab({
         </Button>
       </div>
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && !goal ? (
         <EmptyState
           icon={Scale}
           title={t("weight.emptyTitle")}
@@ -275,124 +280,127 @@ function WeightTab({
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle>{t("weight.chartTitle")}</CardTitle>
-              <GoalButton
-                goal={goal}
-                unitLabel={unitLabel}
-                toDisplay={toDisplay}
-                onClick={onEditGoal}
-              />
+              <div className="flex items-center gap-2">
+                <GoalStatusChip
+                  status={weightStatus}
+                  unitLabel={unitLabel}
+                  toDisplay={toDisplay}
+                />
+                <GoalButton
+                  goal={goal}
+                  unitLabel={unitLabel}
+                  toDisplay={toDisplay}
+                  onClick={onEditGoal}
+                />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="h-60">
-                  <ResponsiveContainer>
-                    <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="var(--border)"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="t"
-                        type="number"
-                        domain={goalActive ? [minTs, maxTs] : ["dataMin", "dataMax"]}
-                        scale="time"
-                        allowDataOverflow
-                        tickFormatter={(v) => formatDate(new Date(v).toISOString())}
-                        stroke="var(--muted-foreground)"
-                        fontSize={11}
-                        tickLine={false}
-                        axisLine={{ stroke: "var(--border)" }}
-                      />
-                      <YAxis
-                        domain={yDomain}
-                        allowDataOverflow
-                        stroke="var(--muted-foreground)"
-                        fontSize={11}
-                        tickLine={false}
-                        axisLine={false}
-                        width={48}
-                        tickFormatter={(v) => formatValue(v)}
-                      />
-                      {goal && goalTargetDisplay != null ? (
-                        <>
-                          {todayTs >= minTs && todayTs <= maxTs && (
-                            <ReferenceLine
-                              x={todayTs}
-                              stroke="var(--muted-foreground)"
-                              strokeDasharray="2 3"
-                              label={{
-                                value: t("weightGoal.today"),
-                                position: "insideTopRight",
-                                fill: "var(--muted-foreground)",
-                                fontSize: 10,
-                              }}
-                            />
-                          )}
-                        </>
-                      ) : (
-                        targetDisplay != null && (
+                <ResponsiveContainer>
+                  <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis
+                      dataKey="t"
+                      type="number"
+                      domain={goalActive ? [minTs, maxTs] : ["dataMin", "dataMax"]}
+                      scale="time"
+                      allowDataOverflow
+                      tickFormatter={(v) => formatDate(new Date(v).toISOString())}
+                      stroke="var(--muted-foreground)"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={{ stroke: "var(--border)" }}
+                    />
+                    <YAxis
+                      domain={yDomain}
+                      allowDataOverflow
+                      stroke="var(--muted-foreground)"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      width={48}
+                      tickFormatter={(v) => formatValue(v)}
+                    />
+                    {goal && goalTargetDisplay != null ? (
+                      <>
+                        {todayTs >= minTs && todayTs <= maxTs && (
                           <ReferenceLine
-                            y={targetDisplay}
-                            stroke="var(--success)"
-                            strokeDasharray="5 4"
+                            x={todayTs}
+                            stroke="var(--muted-foreground)"
+                            strokeDasharray="2 3"
                             label={{
-                              value: t("weight.targetLabel"),
-                              position: "right",
-                              fill: "var(--success)",
+                              value: t("weightGoal.today"),
+                              position: "insideTopRight",
+                              fill: "var(--muted-foreground)",
                               fontSize: 10,
                             }}
                           />
-                        )
-                      )}
-                      <Tooltip
-                        cursor={{ stroke: "var(--muted-foreground)", strokeDasharray: "3 3" }}
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const p = payload[0].payload as (typeof chartData)[number];
-                          if (p.value == null && p.plan == null) return null;
-                          return (
-                            <div className="rounded-lg border bg-card px-3 py-2 text-xs shadow-md">
-                              {p.value != null && (
-                                <p className="font-medium tabular-nums">
-                                  {formatValue(p.value, 1)} {unitLabel}
-                                </p>
-                              )}
-                              {p.plan != null && (
-                                <p className="tabular-nums" style={{ color: "var(--success)" }}>
-                                  {t("weightGoal.planLabel")}: {formatValue(p.plan, 1)} {unitLabel}
-                                </p>
-                              )}
-                              <p className="text-muted-foreground">{formatDate(p.date)}</p>
-                            </div>
-                          );
-                        }}
-                      />
+                        )}
+                      </>
+                    ) : (
+                      targetDisplay != null && (
+                        <ReferenceLine
+                          y={targetDisplay}
+                          stroke="var(--success)"
+                          strokeDasharray="5 4"
+                          label={{
+                            value: t("weight.targetLabel"),
+                            position: "right",
+                            fill: "var(--success)",
+                            fontSize: 10,
+                          }}
+                        />
+                      )
+                    )}
+                    <Tooltip
+                      cursor={{ stroke: "var(--muted-foreground)", strokeDasharray: "3 3" }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const p = payload[0].payload as (typeof chartData)[number];
+                        if (p.value == null && p.plan == null) return null;
+                        return (
+                          <div className="rounded-lg border bg-card px-3 py-2 text-xs shadow-md">
+                            {p.value != null && (
+                              <p className="font-medium tabular-nums">
+                                {formatValue(p.value, 1)} {unitLabel}
+                              </p>
+                            )}
+                            {p.plan != null && (
+                              <p className="tabular-nums" style={{ color: "var(--success)" }}>
+                                {t("weightGoal.planLabel")}: {formatValue(p.plan, 1)} {unitLabel}
+                              </p>
+                            )}
+                            <p className="text-muted-foreground">{formatDate(p.date)}</p>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="var(--primary)"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                    {/* Plan glide path MUST be a direct child of LineChart — a
+                          Line series nested in a conditional fragment is silently
+                          dropped by the app's WKWebView (works in Chromium). */}
+                    {goal && goalTargetDisplay != null && (
                       <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke="var(--primary)"
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
+                        type="linear"
+                        dataKey="plan"
+                        stroke="var(--success)"
+                        strokeWidth={1.5}
+                        strokeDasharray="5 4"
+                        dot={false}
                         connectNulls
                         isAnimationActive={false}
                       />
-                      {/* Plan glide path MUST be a direct child of LineChart — a
-                          Line series nested in a conditional fragment is silently
-                          dropped by the app's WKWebView (works in Chromium). */}
-                      {goal && goalTargetDisplay != null && (
-                        <Line
-                          type="linear"
-                          dataKey="plan"
-                          stroke="var(--success)"
-                          strokeWidth={1.5}
-                          strokeDasharray="5 4"
-                          dot={false}
-                          connectNulls
-                          isAnimationActive={false}
-                        />
-                      )}
-                    </LineChart>
-                  </ResponsiveContainer>
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>

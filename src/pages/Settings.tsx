@@ -29,6 +29,8 @@ import {
   type AiSettings,
 } from "@/ai";
 import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
+import { useKeychainStatus } from "@/hooks/useKeychainStatus";
+import { KeychainNotice } from "@/components/app/KeychainNotice";
 import { useToast } from "@/components/app/Toast";
 import { appLogDir, join } from "@tauri-apps/api/path";
 import { applyThemePreference, loadThemePreference, type ThemePreference } from "@/lib/theme";
@@ -150,6 +152,11 @@ function AppearanceCard() {
 function AiSettingsCard() {
   const { t } = useI18n();
   const toast = useToast();
+  const {
+    status: keychain,
+    checking: keychainChecking,
+    recheck: recheckKeychain,
+  } = useKeychainStatus();
   const [settings, setSettings] = React.useState<AiSettings>(() => loadAiSettings());
   const [keyInput, setKeyInput] = React.useState("");
   const [hasStoredKey, setHasStoredKey] = React.useState<boolean | null>(null);
@@ -183,11 +190,20 @@ function AiSettingsCard() {
 
   const saveKey = async () => {
     if (!settings.providerId || !keyInput.trim()) return;
-    await setApiKey(settings.providerId, keyInput.trim());
-    setKeyInput("");
-    setHasStoredKey(true);
-    setTestState({ kind: "idle" });
+    try {
+      await setApiKey(settings.providerId, keyInput.trim());
+      setKeyInput("");
+      setHasStoredKey(true);
+      setTestState({ kind: "idle" });
+    } catch {
+      // Keychain probe passed but the write still failed (e.g. a locked keyring
+      // the user dismissed). Re-probe so the notice + guidance appear.
+      toast.show(t("keychain.saveFailed"));
+      void recheckKeychain();
+    }
   };
+
+  const keychainBlocked = keychain?.available === false;
 
   const removeKey = async () => {
     if (!settings.providerId) return;
@@ -220,6 +236,11 @@ function AiSettingsCard() {
       icon={<Sparkles className="size-4" />}
     >
       <div className="grid gap-4 p-5 pt-0">
+        <KeychainNotice
+          status={keychain}
+          checking={keychainChecking}
+          onRecheck={() => void recheckKeychain()}
+        />
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
           <p className="flex items-center gap-1.5 text-xs font-medium">
             <Lightbulb className="size-3.5 text-primary" /> {t("settings.ai.recommendTitle")}
@@ -290,7 +311,7 @@ function AiSettingsCard() {
                   className="max-w-sm"
                   autoComplete="off"
                 />
-                <Button onClick={saveKey} disabled={!keyInput.trim()}>
+                <Button onClick={saveKey} disabled={!keyInput.trim() || keychainBlocked}>
                   {t("settings.ai.saveKey")}
                 </Button>
                 {provider.keyUrl && (

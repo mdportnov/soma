@@ -36,6 +36,52 @@ fn keychain_delete(provider: String) -> Result<(), String> {
 }
 
 #[derive(serde::Serialize)]
+struct KeychainStatus {
+    /// True when the OS keychain can actually store/read secrets.
+    available: bool,
+    /// Human-readable backend name for the UI.
+    backend: &'static str,
+    /// Error detail when unavailable (Linux without a running Secret Service, etc.).
+    error: Option<String>,
+}
+
+/// Live, never-cached probe of the OS keychain. Read-only: it looks up a
+/// throwaway entry and treats "no such entry" as success (the backend
+/// answered). Any other error — most commonly no Secret Service daemon on
+/// Linux — means API keys and the backup passphrase cannot be stored. The UI
+/// calls this on mount and on an explicit re-check, so installing a keyring
+/// service and re-checking reflects immediately, with no stale state.
+#[tauri::command]
+fn keychain_status() -> KeychainStatus {
+    let backend = if cfg!(target_os = "macos") {
+        "macOS Keychain"
+    } else if cfg!(windows) {
+        "Windows Credential Manager"
+    } else {
+        "Secret Service"
+    };
+    match probe_keychain() {
+        Ok(()) => KeychainStatus {
+            available: true,
+            backend,
+            error: None,
+        },
+        Err(e) => KeychainStatus {
+            available: false,
+            backend,
+            error: Some(e),
+        },
+    }
+}
+
+fn probe_keychain() -> Result<(), String> {
+    match entry_for("__availability_probe__")?.get_password() {
+        Ok(_) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[derive(serde::Serialize)]
 struct McpServerInfo {
     /// Absolute path to the bundled `soma-mcp` stdio binary.
     path: String,
@@ -90,6 +136,7 @@ pub fn run() {
             keychain_set,
             keychain_get,
             keychain_delete,
+            keychain_status,
             mcp_server_path,
             mcp::mcp_clients_status,
             mcp::mcp_install,

@@ -23,7 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn, formatDate, formatValue } from "@/lib/utils";
 import { kgToLb, type UnitSystem } from "@/lib/units";
 import { bpStageColor, isCrisis, isStage2 } from "@/lib/vitals";
-import { buildWeightSeries, goalTs, type WeightGoal } from "@/lib/weightGoal";
+import { buildWeightSeries, goalStatus, goalTs, type WeightGoal } from "@/lib/weightGoal";
+import { GoalStatusChip } from "@/components/app/GoalStatusChip";
 import { useI18n } from "@/lib/i18n";
 
 type FocusTab = "weight" | "bp" | "symptoms";
@@ -144,8 +145,10 @@ export function JournalOverview({
   const todayTs = goalTs(new Date().toISOString());
   // Include the goal's glide path (which descends to the target) in the y-range,
   // otherwise "auto" only spans recent weigh-ins and the projection is drawn
-  // below the visible area.
+  // below the visible area. Only points inside the visible window count, so an
+  // off-screen past start weight can't stretch the axis when a short range is on.
   const weightYValues = weightSeries
+    .filter((p) => p.t >= domain[0] && p.t <= domain[1])
     .flatMap((p) => [p.value, p.plan])
     .filter((v): v is number => v != null);
   const weightYDomain: [number | string, number | string] =
@@ -189,6 +192,12 @@ export function JournalOverview({
   const wLast = weightData[weightData.length - 1];
   const wPrev = weightData[weightData.length - 2];
   const wDelta = wLast && wPrev ? wLast.value - wPrev.value : null;
+  // Are we tracking ahead of / behind the glide path? Uses the latest weigh-in
+  // overall (not just in-range) compared with the plan at today.
+  const latestKg = weight.length
+    ? weight.reduce((m, r) => (tsOf(r.date) > tsOf(m.date) ? r : m)).weightKg
+    : null;
+  const weightStatus = goal ? goalStatus(goal, latestKg, todayTs) : null;
 
   // ── Blood-pressure summary: latest reading + its stage badge ──
   const bpLastRow = bpData[bpData.length - 1];
@@ -304,6 +313,7 @@ export function JournalOverview({
                     ? `${formatValue(toDisplay(goal.targetKg), 1)} ${unitLabel}`
                     : t("weightGoal.set")}
                 </button>
+                <GoalStatusChip status={weightStatus} unitLabel={unitLabel} toDisplay={toDisplay} />
               </span>
             }
           >

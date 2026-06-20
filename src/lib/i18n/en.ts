@@ -763,6 +763,17 @@ export const en = {
     },
   },
 
+  // OS keychain availability (API keys + backup passphrase)
+  keychain: {
+    unavailableTitle: "OS keychain unavailable",
+    unavailableLinux:
+      "Soma keeps API keys and your backup passphrase in the Linux Secret Service, so nothing sensitive is written to disk in the open. No keyring service is responding right now. Install and start one (e.g. gnome-keyring or KWallet), then re-check — everything else in Soma keeps working without it.",
+    unavailableGeneric:
+      "Soma couldn't reach your OS keychain ({{backend}}). Make sure it's available, then re-check.",
+    recheck: "Re-check",
+    saveFailed: "Couldn't save to the OS keychain. See the notice above, then re-check.",
+  },
+
   // Backup card
   backup: {
     title: "Backups",
@@ -1308,6 +1319,11 @@ export const en = {
     removedToast: "Weight goal removed",
     today: "Today",
     planLabel: "Plan",
+    ahead: "{{v}} ahead",
+    behind: "{{v}} behind",
+    onTrack: "on track",
+    expired: "deadline passed",
+    upcoming: "not started yet",
   },
 
   bp: {

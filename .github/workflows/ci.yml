@@ -47,6 +47,39 @@ jobs:
           pnpm db:generate
           git diff --exit-code src/db/migrations
 
+  sidecar:
+    name: MCP sidecar — cross-platform build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # build-sidecar.mjs reads the host triple from `rustc -Vv`.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Compiles src/index.ts into binaries/soma-mcp-<host-triple>[.exe];
+      # the script throws if the expected output is missing. This is the guard
+      # that keeps the sidecar build green on every OS, not just at release time.
+      - name: Build sidecar
+        run: pnpm mcp:sidecar
+
   rust:
     name: Rust — fmt · clippy
     runs-on: ubuntu-latest

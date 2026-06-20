@@ -19,12 +19,16 @@ jobs:
         include:
           - platform: macos-latest # Apple Silicon
             args: --target aarch64-apple-darwin
-          - platform: macos-latest # Intel
+            sidecarTarget: aarch64-apple-darwin
+          - platform: macos-latest # Intel (cross-compiled on an arm64 runner)
             args: --target x86_64-apple-darwin
+            sidecarTarget: x86_64-apple-darwin
           - platform: ubuntu-22.04 # oldest LTS = widest glibc compatibility
             args: ""
+            sidecarTarget: "" # host triple
           - platform: windows-latest
             args: ""
+            sidecarTarget: "" # host triple
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +39,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      # The MCP sidecar (an externalBin) is compiled with Bun.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -62,6 +71,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Consumed by scripts/build-sidecar.mjs (via beforeBuildCommand) so the
+          # macOS Intel slice gets a sidecar named for the *target*, not the host.
+          SOMA_SIDECAR_TARGET: ${{ matrix.sidecarTarget }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseName: "Soma v__VERSION__"

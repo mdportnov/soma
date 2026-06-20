@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useKeychainStatus } from "@/hooks/useKeychainStatus";
+import { KeychainNotice } from "@/components/app/KeychainNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectMenu } from "@/components/ui/select-menu";
@@ -49,6 +51,11 @@ function formatDate(iso: string): string {
 
 export function BackupCard() {
   const { t } = useI18n();
+  const {
+    status: keychain,
+    checking: keychainChecking,
+    recheck: recheckKeychain,
+  } = useKeychainStatus();
   const [settings, setSettings] = React.useState<BackupSettings>(() => loadBackupSettings());
   const [wizardOpen, setWizardOpen] = React.useState(false);
   const [restoreOpen, setRestoreOpen] = React.useState(false);
@@ -83,6 +90,11 @@ export function BackupCard() {
         <CardDescription>{t("backup.description")}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
+        <KeychainNotice
+          status={keychain}
+          checking={keychainChecking}
+          onRecheck={() => void recheckKeychain()}
+        />
         {settings.enabled ? (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -137,7 +149,7 @@ export function BackupCard() {
           </>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setWizardOpen(true)}>
+            <Button onClick={() => setWizardOpen(true)} disabled={keychain?.available === false}>
               <CloudUpload /> {t("backup.setupBackups")}
             </Button>
             <Button variant="outline" onClick={() => setRestoreOpen(true)}>

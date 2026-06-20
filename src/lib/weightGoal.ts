@@ -49,6 +49,41 @@ export function planKgAt(goal: WeightGoal, ts: number): number | null {
   return goal.startKg + (goal.targetKg - goal.startKg) * f;
 }
 
+export type GoalStatus = {
+  /** Where the glide path says you should be right now (kg). */
+  plannedKg: number;
+  /** Latest actual minus planned, in kg (signed). */
+  deltaKg: number;
+  state: "ahead" | "behind" | "onTrack" | "expired" | "upcoming";
+};
+
+/**
+ * Direction-aware comparison of the latest actual weight against the plan at
+ * `nowTs`. For a loss goal, being below plan is "ahead"; for a gain goal, above.
+ * Returns "expired" past the deadline and "upcoming" before the start date.
+ */
+export function goalStatus(
+  goal: WeightGoal,
+  latestKg: number | null,
+  nowTs: number,
+): GoalStatus | null {
+  if (latestKg == null) return null;
+  const a = tsOf(goal.startDate);
+  const b = tsOf(goal.targetDate);
+  if (nowTs > b)
+    return { plannedKg: goal.targetKg, deltaKg: latestKg - goal.targetKg, state: "expired" };
+  if (nowTs < a)
+    return { plannedKg: goal.startKg, deltaKg: latestKg - goal.startKg, state: "upcoming" };
+  const planned = planKgAt(goal, nowTs);
+  if (planned == null) return null;
+  const delta = latestKg - planned;
+  const losing = goal.targetKg < goal.startKg;
+  let state: GoalStatus["state"];
+  if (Math.abs(delta) < 0.3) state = "onTrack";
+  else state = (losing ? delta < 0 : delta > 0) ? "ahead" : "behind";
+  return { plannedKg: planned, deltaKg: delta, state };
+}
+
 export type WeightPoint = {
   t: number;
   date: string;

@@ -78,13 +78,16 @@ Grab the installer for your OS from [**Releases**](https://github.com/mdportnov/
 
 ### Build from source
 
-Prerequisites: **Node 22+**, **pnpm**, **Rust (stable)** and the
+Prerequisites: **Node 22+**, **pnpm**, **Rust (stable)**, **[Bun](https://bun.sh)**
+(used to compile the bundled MCP sidecar), and the
 [Tauri system dependencies](https://tauri.app/start/prerequisites/) for your OS.
+On **Linux**, the OS keychain is the freedesktop **Secret Service** — install/enable
+`gnome-keyring` (or KWallet) so API keys and the backup passphrase can be stored.
 
 ```bash
 git clone https://github.com/mdportnov/soma.git
 cd soma
-pnpm install
+pnpm install                                # also installs the mcp/ sidecar deps (postinstall)
 pnpm tauri icon docs/assets/logo.svg        # regenerate platform icon set from the brand mark
 # macOS .icns uses the padded variant (Apple icon grid), overwrite it after the line above:
 pnpm tauri icon docs/assets/logo-macos.svg -o /tmp/soma-icons && cp /tmp/soma-icons/icon.icns src-tauri/icons/icon.icns
@@ -94,15 +97,16 @@ pnpm tauri build                           # production installers
 
 ## Development
 
-| Command                     | What it does                                                   |
-| --------------------------- | -------------------------------------------------------------- |
-| `pnpm tauri dev`            | Run the desktop app with hot reload                            |
-| `pnpm dev`                  | Frontend only (Vite dev server; DB requires the Tauri shell)   |
-| `pnpm lint` / `pnpm format` | ESLint / Prettier (write mode; `format:check` in CI)           |
-| `pnpm typecheck`            | `tsc --noEmit`                                                 |
-| `pnpm build`                | Typecheck + production frontend build                          |
-| `pnpm db:generate`          | Regenerate Drizzle migrations after editing `src/db/schema.ts` |
-| `cargo fmt && cargo clippy` | Rust formatting / lints (run inside `src-tauri/`)              |
+| Command                     | What it does                                                         |
+| --------------------------- | -------------------------------------------------------------------- |
+| `pnpm tauri dev`            | Run the desktop app with hot reload                                  |
+| `pnpm dev`                  | Frontend only (Vite dev server; DB requires the Tauri shell)         |
+| `pnpm lint` / `pnpm format` | ESLint / Prettier (write mode; `format:check` in CI)                 |
+| `pnpm typecheck`            | `tsc --noEmit`                                                       |
+| `pnpm build`                | Typecheck + production frontend build                                |
+| `pnpm db:generate`          | Regenerate Drizzle migrations after editing `src/db/schema.ts`       |
+| `pnpm mcp:sidecar`          | Compile the MCP sidecar for the host (auto-run by `tauri dev/build`) |
+| `cargo fmt && cargo clippy` | Rust formatting / lints (run inside `src-tauri/`)                    |
 
 CI (`.github/workflows/ci.yml`) runs Prettier, ESLint, TypeScript, the frontend build, a
 migrations-up-to-date check, `rustfmt` and `clippy` on every push and PR.

@@ -14,7 +14,7 @@ import type { ChangeSeverity } from "@/lib/insights";
 export type VerdictStatus = "calm" | "attention";
 
 /** Each attention item knows its kind, how loud it is, and where it links. */
-export type AttentionType = "biomarker" | "diagnosis" | "medication" | "review";
+export type AttentionType = "biomarker" | "diagnosis" | "medication" | "vaccine" | "review";
 
 export type AttentionItem = {
   type: AttentionType;
@@ -43,7 +43,8 @@ const TYPE_RANK: Record<AttentionType, number> = {
   biomarker: 0,
   diagnosis: 1,
   medication: 2,
-  review: 3,
+  vaccine: 3,
+  review: 4,
 };
 
 /** Days between two YYYY-MM-DD dates; positive when `to` is after `from`. */
@@ -59,6 +60,7 @@ export type DigestLabels = {
   biomarkers: (count: number) => string;
   diagnoses: (count: number, names: string) => string;
   medicationsEnding: (count: number, names: string) => string;
+  vaccines: (count: number) => string;
   review: (count: number) => string;
 };
 
@@ -71,6 +73,9 @@ export type DigestInput = {
   reviewCount: number;
   /** Window (in days from today) within which an ending medication is "soon". */
   medsEndingWithinDays?: number;
+  /** Genuinely actionable vaccines (overdue adult boosters + lapsed certificates),
+   *  precomputed by the caller so this module stays free of schedule logic. */
+  vaccineActionable?: number;
 };
 
 const SEVERE_ALLERGY = new Set(["severe", "anaphylactic"]);
@@ -147,7 +152,18 @@ export function buildDashboardDigest(input: DigestInput, labels: DigestLabels): 
     });
   }
 
-  // TODO(orchestrator): add actionable-vaccine digest item after vaccine lane merges
+  // Vaccines genuinely needing action — overdue adult boosters and lapsed
+  // certificates only; unrecorded childhood doses never reach this count.
+  const vaccineActionable = input.vaccineActionable ?? 0;
+  if (vaccineActionable > 0) {
+    attention.push({
+      type: "vaccine",
+      severity: "watch",
+      label: labels.vaccines(vaccineActionable),
+      route: "/vaccines",
+      count: vaccineActionable,
+    });
+  }
 
   attention.sort((a, b) => {
     const byType = TYPE_RANK[a.type] - TYPE_RANK[b.type];

@@ -743,7 +743,8 @@ export const en = {
       subtitle: "WHO reference schedule",
       description:
         "Antigen-based and country-independent. National schedules differ — this is a WHO reference baseline, not medical advice.",
-      addBirthDate: "Add your date of birth in the profile to see personal due / action-needed status.",
+      addBirthDate:
+        "Add your date of birth in the profile to see personal due / action-needed status.",
       summaryClear: "Nothing needs action right now.",
       actionable: "{{n}} need action",
       due: "{{n}} due",
@@ -1122,6 +1123,8 @@ export const en = {
       diagnosesMany: "{{count}} active diagnoses: {{names}}",
       medsEndingOne: "1 medication ends soon: {{names}}",
       medsEndingMany: "{{count}} medications end soon: {{names}}",
+      vaccinesOne: "1 vaccine needs action",
+      vaccinesMany: "{{count}} vaccines need action",
       reviewOne: "1 import has unverified results",
       reviewMany: "{{count}} imports have unverified results",
     },

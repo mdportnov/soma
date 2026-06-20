@@ -9,6 +9,7 @@ import {
   Pill,
   ShieldAlert,
   Stethoscope,
+  Syringe,
   TestTubes,
   TrendingDown,
 } from "lucide-react";
@@ -18,13 +19,21 @@ import { useI18n } from "@/lib/i18n";
 import {
   countPanelsNeedingReview,
   getLatestPanelChanges,
+  getProfile,
   getTimeline,
   listAllergies,
   listDiagnoses,
   listMedications,
   listPanels,
+  listVaccines,
 } from "@/db/repos";
 import { buildDashboardDigest, type AttentionType } from "@/lib/dashboard-digest";
+import {
+  computeAntigen,
+  countActionable,
+  isGradedTier,
+  VACCINE_SCHEDULE,
+} from "@/lib/vaccine-schedule";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -39,6 +48,7 @@ const ATTENTION_ICON: Record<AttentionType, typeof Activity> = {
   biomarker: TrendingDown,
   diagnosis: Stethoscope,
   medication: Pill,
+  vaccine: Syringe,
   review: ClipboardCheck,
 };
 
@@ -47,35 +57,73 @@ export function Dashboard() {
   const { profileId } = useApp();
 
   const { data, loading } = useQuery(async () => {
-    const [panels, meds, diagnoses, allergies, timeline, latestChanges, reviewCount] =
-      await Promise.all([
-        listPanels(profileId),
-        listMedications(profileId),
-        listDiagnoses(profileId),
-        listAllergies(profileId),
-        getTimeline(profileId),
-        getLatestPanelChanges(profileId),
-        countPanelsNeedingReview(profileId),
-      ]);
-    return { panels, meds, diagnoses, allergies, timeline, latestChanges, reviewCount };
+    const [
+      panels,
+      meds,
+      diagnoses,
+      allergies,
+      vaccines,
+      profile,
+      timeline,
+      latestChanges,
+      reviewCount,
+    ] = await Promise.all([
+      listPanels(profileId),
+      listMedications(profileId),
+      listDiagnoses(profileId),
+      listAllergies(profileId),
+      listVaccines(profileId),
+      getProfile(profileId),
+      getTimeline(profileId),
+      getLatestPanelChanges(profileId),
+      countPanelsNeedingReview(profileId),
+    ]);
+    return {
+      panels,
+      meds,
+      diagnoses,
+      allergies,
+      vaccines,
+      profile,
+      timeline,
+      latestChanges,
+      reviewCount,
+    };
   }, [profileId]);
 
   if (loading || !data) return <Loading />;
 
-  const { panels, meds, diagnoses, allergies, timeline, latestChanges, reviewCount } = data;
+  const {
+    panels,
+    meds,
+    diagnoses,
+    allergies,
+    vaccines,
+    profile,
+    timeline,
+    latestChanges,
+    reviewCount,
+  } = data;
   const latestPanel = panels[0] ?? null;
   const activeMeds = meds.filter((m) => !m.endDate);
   const recent = timeline.slice(0, 8);
   const hasComparable = !!latestChanges?.changes.some((c) => c.change != null);
 
+  const today = todayISO();
+  const vaccineViews = VACCINE_SCHEDULE.map((entry) =>
+    computeAntigen(entry, profile?.birthDate ?? null, vaccines, today, isGradedTier(entry.tier)),
+  );
+  const vaccineActionable = countActionable(vaccineViews, vaccines, today);
+
   const digest = buildDashboardDigest(
     {
-      today: todayISO(),
+      today,
       latestChanges,
       diagnoses,
       medications: meds,
       allergies,
       reviewCount,
+      vaccineActionable,
     },
     {
       biomarkers: (count) =>
@@ -90,6 +138,10 @@ export function Dashboard() {
         count === 1
           ? t("dashboard.attention.medsEndingOne", { names })
           : t("dashboard.attention.medsEndingMany", { count: String(count), names }),
+      vaccines: (count) =>
+        count === 1
+          ? t("dashboard.attention.vaccinesOne")
+          : t("dashboard.attention.vaccinesMany", { count: String(count) }),
       review: (count) =>
         count === 1
           ? t("dashboard.attention.reviewOne")

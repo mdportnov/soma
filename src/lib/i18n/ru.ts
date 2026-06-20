@@ -1130,6 +1130,8 @@ export const ru = {
       diagnosesMany: "Активных диагнозов: {{count}} — {{names}}",
       medsEndingOne: "1 лекарство скоро заканчивается: {{names}}",
       medsEndingMany: "Скоро заканчиваются лекарства ({{count}}): {{names}}",
+      vaccinesOne: "1 прививка требует действия",
+      vaccinesMany: "Прививок требует действия: {{count}}",
       reviewOne: "1 импорт с непроверенными результатами",
       reviewMany: "Импортов с непроверенными результатами: {{count}}",
     },

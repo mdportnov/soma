@@ -3,23 +3,51 @@ import { Link } from "react-router-dom";
 import { Activity, AlertTriangle, Plus, Search } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createBiomarker, getLatestResults, listBiomarkers } from "@/db/repos";
+import { createBiomarker, getBiomarkerSeries, getLatestResults, listBiomarkers } from "@/db/repos";
+import type { Biomarker } from "@/db/schema";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { FlagBadge } from "@/components/app/FlagBadge";
+import { Sparkline } from "@/components/charts/Sparkline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import { formatDate, formatValue } from "@/lib/utils";
+import { cn, formatDate, formatValue } from "@/lib/utils";
 import { normalizeLabel } from "@/lib/fuzzy";
 import { useToast } from "@/components/app/Toast";
 import { allKnownUnits } from "@/lib/units";
 import { useI18n } from "@/lib/i18n";
+
+/** Where the latest reading sits relative to the biomarker's two bands. */
+type RangeStatus = "optimal" | "in_range" | "out_of_range" | "not_evaluated";
+
+function rangeStatus(
+  bio: Pick<Biomarker, "optimalLow" | "optimalHigh">,
+  latest: { value: number; outOfRange: boolean; evaluated: boolean },
+): RangeStatus {
+  if (!latest.evaluated) return "not_evaluated";
+  if (latest.outOfRange) return "out_of_range";
+  const { optimalLow, optimalHigh } = bio;
+  const aboveLow = optimalLow == null || latest.value >= optimalLow;
+  const belowHigh = optimalHigh == null || latest.value <= optimalHigh;
+  if ((optimalLow != null || optimalHigh != null) && aboveLow && belowHigh) return "optimal";
+  return "in_range";
+}
+
+// Out-of-range first, then optimal/in-range, then not-evaluated, then no-data —
+// so the markers needing attention rise to the top of each category group.
+const STATUS_RANK: Record<RangeStatus | "no_data", number> = {
+  out_of_range: 0,
+  not_evaluated: 1,
+  optimal: 2,
+  in_range: 2,
+  no_data: 3,
+};
 
 export function Biomarkers() {
   const { profileId } = useApp();
@@ -30,7 +58,12 @@ export function Biomarkers() {
 
   const { data, loading, reload } = useQuery(async () => {
     const [biomarkers, latest] = await Promise.all([listBiomarkers(), getLatestResults(profileId)]);
-    return { biomarkers, latest };
+    // Sparklines only need biomarkers that actually have readings — fetch their
+    // series in parallel and key the trend by id.
+    const trackedIds = [...latest.keys()];
+    const seriesList = await Promise.all(trackedIds.map((id) => getBiomarkerSeries(profileId, id)));
+    const series = new Map(trackedIds.map((id, i) => [id, seriesList[i]]));
+    return { biomarkers, latest, series };
   }, [profileId]);
 
   if (loading || !data) return <Loading />;
@@ -42,11 +75,29 @@ export function Biomarkers() {
     return [b.canonicalName, ...(b.aliases ?? [])].some((n) => normalizeLabel(n).includes(q));
   });
 
+  const statusOf = (b: Biomarker): RangeStatus | "no_data" => {
+    const latest = data.latest.get(b.id);
+    if (!latest) return "no_data";
+    return rangeStatus(b, {
+      value: latest.value,
+      outOfRange: latest.outOfRange,
+      evaluated: !!latest.evaluated,
+    });
+  };
+
   const byCategory = new Map<string, typeof filtered>();
   for (const b of filtered) {
     const list = byCategory.get(b.category) ?? [];
     list.push(b);
     byCategory.set(b.category, list);
+  }
+  // Within each category: attention first, then by name — stable and predictable.
+  for (const list of byCategory.values()) {
+    list.sort(
+      (a, b) =>
+        STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)] ||
+        a.canonicalName.localeCompare(b.canonicalName),
+    );
   }
 
   return (
@@ -96,32 +147,56 @@ export function Biomarkers() {
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((b) => {
                   const latest = data.latest.get(b.id);
+                  const status = statusOf(b);
+                  const trend = data.series.get(b.id);
                   return (
                     <Link
                       key={b.id}
                       to={`/biomarkers/${b.id}`}
-                      className="rounded-lg border bg-card p-3 transition-colors hover:bg-muted/40"
+                      className={cn(
+                        "rounded-lg border bg-card p-3 transition-colors hover:bg-muted/40",
+                        // Cards without data recede so markers with readings lead.
+                        status === "no_data" && "border-dashed bg-transparent opacity-60",
+                      )}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-medium">{b.canonicalName}</p>
                         {b.isCustom && <Badge variant="secondary">{t("biomarkers.custom")}</Badge>}
                       </div>
                       {latest ? (
-                        <div className="mt-1.5 flex items-center justify-between gap-2">
-                          <p className="text-sm tabular-nums">
-                            <span className="font-semibold">{formatValue(latest.value)}</span>{" "}
-                            <span className="text-xs text-muted-foreground">{latest.unit}</span>
-                          </p>
-                          <div className="flex items-center gap-1.5">
-                            <FlagBadge
-                              flag={latest.outOfRange ? latest.flag : null}
-                              evaluated={!!latest.evaluated}
-                            />
+                        <>
+                          <div className="mt-1.5 flex items-center justify-between gap-2">
+                            <p className="text-sm tabular-nums">
+                              <span className="font-semibold">{formatValue(latest.value)}</span>{" "}
+                              <span className="text-xs text-muted-foreground">{latest.unit}</span>
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                              {status === "out_of_range" || status === "not_evaluated" ? (
+                                <FlagBadge
+                                  flag={latest.outOfRange ? latest.flag : null}
+                                  evaluated={!!latest.evaluated}
+                                />
+                              ) : status === "optimal" ? (
+                                <Badge variant="success">{t("biomarkers.optimal")}</Badge>
+                              ) : (
+                                <Badge variant="secondary">{t("biomarkers.inRange")}</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-1.5 flex items-end justify-between gap-2">
                             <span className="text-[10px] text-muted-foreground">
                               {formatDate(latest.date)}
                             </span>
+                            {trend && trend.length >= 2 && (
+                              <Sparkline
+                                values={trend.map((p) => p.value)}
+                                optimalLow={b.optimalLow}
+                                optimalHigh={b.optimalHigh}
+                                lastOutOfRange={status === "out_of_range"}
+                              />
+                            )}
                           </div>
-                        </div>
+                        </>
                       ) : (
                         <p className="mt-1.5 text-xs text-muted-foreground">
                           {t("biomarkers.noData")} · {b.refLow ?? "—"}–{b.refHigh ?? "—"}{" "}

@@ -337,18 +337,96 @@ export function ageYearsFrom(birthDate: string | null | undefined, on = new Date
   return age >= 0 ? age : null;
 }
 
-/** Out-of-range flag computation against the biomarker's reference range. */
+// ── critical-flag policy ─────────────────────────────────────────────────────
+// A "critical" flag claims a value is life-threateningly off — it must be earned,
+// not derived blindly from "< 50% of refLow" / "> 2× refHigh". For most analytes a
+// low value is benign (a differential WBC percentage at 0%, a vitamin near the
+// floor, any "lower is better" marker), so those must never raise a critical-LOW.
+//
+// Critical status is opt-in per side, keyed by LOINC code. Each entry names the
+// sides on which an extreme reading is a genuine red flag and, where the generic
+// multiplier is clinically wrong, an absolute panic threshold in the biomarker's
+// default unit (e.g. K⁺ < 2.5 mmol/L is critical even though it is well above
+// 0.5×refLow). When a side is allowed but no absolute cutoff is given, the
+// multiplier (½×refLow / 2×refHigh) gates the alarm; when neither side is listed
+// (or the marker isn't here at all) the value can never go critical.
+
+type CriticalCutoffs = {
+  /** Critical at or below this value (default unit); omit to use ½×refLow gating. */
+  low?: number;
+  /** Critical at or above this value (default unit); omit to use 2×refHigh gating. */
+  high?: number;
+  /** Allowed sides — a side present here may escalate even without a cutoff. */
+  sides: ("low" | "high")[];
+};
+
+/** Clinically meaningful panic thresholds, by LOINC code. */
+const CRITICAL_BY_CODE: Record<string, CriticalCutoffs> = {
+  "718-7": { sides: ["low"], low: 70 }, // Hemoglobin g/L — severe anemia
+  "777-3": { sides: ["low"], low: 30 }, // Platelets 10^9/L — bleeding risk
+  "6690-2": { sides: ["low", "high"], low: 2, high: 30 }, // WBC 10^9/L
+  "1558-6": { sides: ["low", "high"], low: 2.5, high: 25 }, // Glucose mmol/L
+  "4548-4": { sides: ["high"], high: 10 }, // HbA1c %
+  "2823-3": { sides: ["low", "high"], low: 2.5, high: 6.5 }, // Potassium mmol/L — arrhythmia
+  "2951-2": { sides: ["low", "high"], low: 120, high: 160 }, // Sodium mmol/L
+  "17861-6": { sides: ["low", "high"], low: 1.5, high: 3.4 }, // Calcium mmol/L
+  "1995-0": { sides: ["low", "high"], low: 0.78, high: 1.6 }, // Calcium ionized mmol/L
+  "19123-9": { sides: ["low"], low: 0.4 }, // Magnesium mmol/L
+  "2160-0": { sides: ["high"], high: 442 }, // Creatinine µmol/L — renal failure
+  "62238-1": { sides: ["low"], low: 15 }, // eGFR mL/min — renal failure
+  "1975-2": { sides: ["high"] }, // Bilirubin total µmol/L (2×refHigh)
+  "30341-2": { sides: ["high"] }, // ESR mm/h — only the high side matters
+  "33762-6": { sides: ["high"] }, // NT-proBNP pg/mL
+  "89579-7": { sides: ["high"] }, // hs-Troponin I ng/L
+  "48065-7": { sides: ["high"] }, // D-dimer µg/mL
+  "34714-6": { sides: ["high"], high: 5 }, // INR — bleeding risk
+};
+
+/**
+ * Decides whether an out-of-range value is critical. A marker may go critical
+ * only on a side its policy allows; for listed markers an absolute panic cutoff
+ * (when given) takes precedence over the generic multiplier. Markers with no
+ * code-policy fall back to a conservative default: only the side that matches
+ * the marker's `direction` (the "bad" direction) may escalate, via the
+ * multiplier; direction-less ("range") markers never do.
+ */
+function isCritical(
+  value: number,
+  side: "low" | "high",
+  ref: number,
+  bio: Pick<Biomarker, "code" | "direction">,
+): boolean {
+  const policy = bio.code ? CRITICAL_BY_CODE[bio.code] : undefined;
+  if (policy) {
+    if (!policy.sides.includes(side)) return false;
+    if (side === "low") return policy.low != null ? value <= policy.low : value < ref * 0.5;
+    return policy.high != null ? value >= policy.high : value > ref * 2;
+  }
+  const sideAllowed =
+    (bio.direction === "higher_better" && side === "low") ||
+    (bio.direction === "lower_better" && side === "high");
+  if (!sideAllowed) return false;
+  return side === "low" ? value < ref * 0.5 : value > ref * 2;
+}
+
+/**
+ * Out-of-range flag computation against the biomarker's reference range.
+ * The optional `policy` carries the biomarker's direction/code so a value can be
+ * escalated to "critical" only when that side is clinically dangerous; without it
+ * the function stays backward-compatible and never raises a false critical.
+ */
 export function computeFlag(
   value: number,
   bio: Pick<Biomarker, "refLow" | "refHigh">,
+  policy?: Pick<Biomarker, "code" | "direction">,
 ): { outOfRange: boolean; flag: "low" | "high" | "critical" | null } {
   const { refLow, refHigh } = bio;
   if (refLow != null && value < refLow) {
-    const critical = value < refLow * 0.5;
+    const critical = !!policy && isCritical(value, "low", refLow, policy);
     return { outOfRange: true, flag: critical ? "critical" : "low" };
   }
   if (refHigh != null && value > refHigh) {
-    const critical = value > refHigh * 2;
+    const critical = !!policy && isCritical(value, "high", refHigh, policy);
     return { outOfRange: true, flag: critical ? "critical" : "high" };
   }
   return { outOfRange: false, flag: null };

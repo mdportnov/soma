@@ -42,3 +42,25 @@ export async function runMigrations(conn: Database): Promise<void> {
     await conn.execute("INSERT INTO __migrations (name) VALUES ($1)", [name]);
   }
 }
+
+/**
+ * Runs `task` at most once across app launches, tracked in `__migrations` under
+ * a synthetic `name` (prefixed `task:` so it never collides with a real .sql
+ * file). Use for one-time data backfills that aren't schema changes — e.g.
+ * recomputing stored flags after the flag logic changes. The marker is written
+ * only after the task resolves, so a crash mid-task retries on next launch.
+ */
+export async function runOnceTask(
+  conn: Database,
+  taskName: string,
+  task: () => Promise<void>,
+): Promise<void> {
+  const name = `task:${taskName}`;
+  const done = await conn.select<{ name: string }[]>(
+    "SELECT name FROM __migrations WHERE name = $1",
+    [name],
+  );
+  if (done.length) return;
+  await task();
+  await conn.execute("INSERT INTO __migrations (name) VALUES ($1)", [name]);
+}

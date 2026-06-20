@@ -527,6 +527,8 @@ export const en = {
     emptySearchDescription: "Try another search term.",
     custom: "custom",
     noData: "No data",
+    optimal: "optimal",
+    inRange: "in range",
     createDialog: {
       title: "New custom biomarker",
       description: "For analytes not in the built-in dictionary.",

@@ -3,6 +3,8 @@ import { CalendarCheck, Check, ChevronDown } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import {
   computeAntigen,
+  countActionable,
+  isGradedTier,
   TIER_ORDER,
   VACCINE_SCHEDULE,
   type AntigenView,
@@ -13,7 +15,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDate, todayISO } from "@/lib/utils";
 
-type VaccineRecord = { vaccineName: string; manufacturer?: string | null; date: string };
+type VaccineRecord = {
+  vaccineName: string;
+  manufacturer?: string | null;
+  date: string;
+  expiresAt?: string | null;
+};
 
 const STATUS_TEXT: Record<DoseStatus, string> = {
   done: "text-success",
@@ -21,6 +28,7 @@ const STATUS_TEXT: Record<DoseStatus, string> = {
   overdue: "text-destructive",
   upcoming: "text-muted-foreground",
   contextual: "text-muted-foreground",
+  not_recorded: "text-muted-foreground",
 };
 
 const STATUS_BORDER: Record<DoseStatus, string> = {
@@ -29,6 +37,7 @@ const STATUS_BORDER: Record<DoseStatus, string> = {
   overdue: "border-destructive/50 bg-destructive/10",
   upcoming: "border-border bg-muted/40",
   contextual: "border-border bg-muted/30",
+  not_recorded: "border-dashed border-border bg-muted/20",
 };
 
 function overallBadge(status: DoseStatus, t: ReturnType<typeof useI18n>["t"]) {
@@ -62,8 +71,7 @@ export function VaccineCalendar({
   const byTier = React.useMemo(() => {
     const map = new Map<VaccineTier, AntigenView[]>();
     for (const entry of VACCINE_SCHEDULE) {
-      const graded = entry.tier === "universal" || entry.tier === "special";
-      const view = computeAntigen(entry, birthDate, records, today, graded);
+      const view = computeAntigen(entry, birthDate, records, today, isGradedTier(entry.tier));
       const list = map.get(entry.tier) ?? [];
       list.push(view);
       map.set(entry.tier, list);
@@ -72,7 +80,9 @@ export function VaccineCalendar({
   }, [birthDate, records, today]);
 
   const allViews = React.useMemo(() => [...byTier.values()].flat(), [byTier]);
-  const overdueCount = allViews.filter((v) => v.overall === "overdue").length;
+  // Headline count = genuinely actionable items only (recurring adult boosters
+  // past due + lapsed certificates). Unrecorded childhood doses never count.
+  const actionableCount = countActionable(allViews, records, today);
   const dueCount = allViews.filter((v) => v.overall === "due").length;
 
   return (
@@ -83,15 +93,15 @@ export function VaccineCalendar({
           <CardTitle>{t("vaccines.calendar.title")}</CardTitle>
           <Badge variant="secondary">{t("vaccines.calendar.subtitle")}</Badge>
           <div className="ml-auto flex items-center gap-1.5">
-            {overdueCount > 0 && (
+            {actionableCount > 0 && (
               <Badge variant="destructive">
-                {t("vaccines.calendar.overdue", { n: String(overdueCount) })}
+                {t("vaccines.calendar.actionable", { n: String(actionableCount) })}
               </Badge>
             )}
             {dueCount > 0 && (
               <Badge variant="warning">{t("vaccines.calendar.due", { n: String(dueCount) })}</Badge>
             )}
-            {birthDate && overdueCount === 0 && dueCount === 0 && (
+            {birthDate && actionableCount === 0 && dueCount === 0 && (
               <span className="text-xs text-success">{t("vaccines.calendar.summaryClear")}</span>
             )}
           </div>
@@ -112,7 +122,7 @@ export function VaccineCalendar({
               key={tier}
               tier={tier}
               views={views}
-              defaultOpen={tier === "universal"}
+              defaultOpen={tier === "regional" || tier === "risk"}
               lang={lang}
               t={t}
             />
@@ -137,22 +147,30 @@ function TierSection({
   t: ReturnType<typeof useI18n>["t"];
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
+  // Only genuinely actionable items (overdue/due) get the red dot. A tier full of
+  // unrecorded childhood doses (`not_recorded`) is calm by design.
   const flagged = views.filter((v) => v.overall === "overdue" || v.overall === "due").length;
+  const blurb = t(`vaccines.calendar.tierBlurbs.${tier}`);
 
   return (
     <div className="rounded-lg border">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 p-3 text-left"
+        className="flex w-full items-start gap-2 p-3 text-left"
         aria-expanded={open}
       >
-        <span className="text-sm font-medium">{t(`vaccines.calendar.tiers.${tier}`)}</span>
-        <span className="text-xs text-muted-foreground">({views.length})</span>
-        {flagged > 0 && <span className="size-1.5 rounded-full bg-destructive" />}
+        <span className="min-w-0">
+          <span className="flex items-center gap-2">
+            <span className="text-sm font-medium">{t(`vaccines.calendar.tiers.${tier}`)}</span>
+            <span className="text-xs text-muted-foreground">({views.length})</span>
+            {flagged > 0 && <span className="size-1.5 rounded-full bg-destructive" />}
+          </span>
+          <span className="mt-0.5 block text-[11px] text-muted-foreground">{blurb}</span>
+        </span>
         <ChevronDown
           className={cn(
-            "ml-auto size-4 text-muted-foreground transition-transform",
+            "ml-auto mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
             open && "rotate-180",
           )}
         />

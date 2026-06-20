@@ -565,7 +565,20 @@ export const VACCINE_SCHEDULE: ScheduleEntry[] = [
 
 // ── Status computation ───────────────────────────────────────────────────────
 
-export type DoseStatus = "done" | "due" | "overdue" | "upcoming" | "contextual";
+/**
+ * Dose lifecycle status.
+ *  - `done`       — a matching recorded shot exists.
+ *  - `due`        — recommended right now (within the grace window) and actionable.
+ *  - `overdue`    — a genuinely actionable item lapsed: a recurring adult booster
+ *                   (Td, flu, TBE…) whose `nextDate` is in the past.
+ *  - `upcoming`   — recommended in the future.
+ *  - `contextual` — informational only (travel/risk antigens, no birthDate).
+ *  - `not_recorded` — a childhood primary-series dose whose recommended age is far
+ *                   in the past and was never logged. Neutral, NOT actionable: for
+ *                   an adult these were almost certainly given but never entered, so
+ *                   flagging them red ("overdue") would be false alarm. Render grey.
+ */
+export type DoseStatus = "done" | "due" | "overdue" | "upcoming" | "contextual" | "not_recorded";
 
 export type DoseView = ScheduleDose & {
   status: DoseStatus;
@@ -633,20 +646,39 @@ export function matchRecords(
 const OVERDUE_GRACE_MONTHS = 1;
 
 /**
+ * Age (months) past which an unrecorded primary-series dose is treated as
+ * `not_recorded` rather than `due`/`overdue`. Doses recommended in childhood
+ * (BCG at birth, the 6/10/14-week series, MMR, etc.) sit well below this, so for
+ * any adult they collapse to a neutral "not recorded" instead of a red overdue —
+ * they were almost certainly given, just never entered. 18 years = legal adult.
+ */
+const ADULT_AGE_MONTHS = 216;
+
+/**
  * Personalizes one antigen against the profile birthDate and recorded shots.
- * Done doses are matched in date order; remaining doses are due/overdue/upcoming
- * from the recommended age. `birthDate` null ⇒ informational (no due/overdue).
+ *
+ * Done doses are matched in date order. For remaining doses the status is
+ * deliberately conservative so the calendar never invents false anxiety:
+ *  - A childhood primary-series dose long in the past (recommended below the
+ *    adult cutoff, person already an adult) and unrecorded ⇒ `not_recorded`,
+ *    never `overdue`.
+ *  - A dose recommended around now ⇒ `due`; in the future ⇒ `upcoming`.
+ *  - Genuine actionable lapses live on `recurring` (adult boosters past their
+ *    `nextDate`), which is the only source of an `overdue` status here.
+ *
+ * `birthDate` null ⇒ informational (no due/overdue/not_recorded grading).
  */
 export function computeAntigen(
   entry: ScheduleEntry,
   birthDate: string | null,
   records: VaccineRecordLike[],
   todayISO: string,
-  /** When false (regional/travel antigens) age-based doses are never flagged overdue/due. */
+  /** When false (regional/travel antigens) age-based doses are never graded; they stay contextual. */
   gradeOverdue = true,
 ): AntigenView {
   const matched = matchRecords(entry, records);
   const ageNow = birthDate ? monthsBetween(birthDate, todayISO) : null;
+  const isAdult = ageNow != null && ageNow >= ADULT_AGE_MONTHS;
 
   const doses: DoseView[] = entry.doses.map((dose, i) => {
     const done = matched[i];
@@ -659,8 +691,14 @@ export function computeAntigen(
     if (dose.ageMonths == null) status = "contextual";
     else if (!gradeOverdue) status = "contextual";
     else if (ageNow == null) status = "upcoming";
-    else if (ageNow >= dose.ageMonths + OVERDUE_GRACE_MONTHS) status = "overdue";
-    else if (ageNow >= dose.ageMonths - OVERDUE_GRACE_MONTHS) status = "due";
+    else if (isAdult && dose.ageMonths < ADULT_AGE_MONTHS) {
+      // Childhood dose, long past, never logged — neutral, not actionable.
+      status = "not_recorded";
+    } else if (ageNow >= dose.ageMonths + OVERDUE_GRACE_MONTHS) {
+      // A genuinely missed dose around the person's current age (e.g. a teen
+      // booster that just lapsed) — surface it, but only inside childhood range.
+      status = "overdue";
+    } else if (ageNow >= dose.ageMonths - OVERDUE_GRACE_MONTHS) status = "due";
     else status = "upcoming";
     return { ...dose, status, dueDate };
   });
@@ -670,31 +708,69 @@ export function computeAntigen(
     const r = entry.recurring;
     let nextDate: string | undefined;
     let status: DoseStatus = gradeOverdue ? "upcoming" : "contextual";
-    if (birthDate) {
+    if (birthDate && gradeOverdue) {
       let ageM = r.startAgeMonths;
       while (addMonthsISO(birthDate, ageM) <= todayISO) ageM += r.everyYears * 12;
       nextDate = addMonthsISO(birthDate, ageM);
-    } else {
+      // A recurring adult booster is actionable only once the series was started
+      // (a matching shot exists): an unrecorded lifelong booster cycle is the same
+      // "never entered" situation as a childhood dose, so stays upcoming, not overdue.
+      const started = matched.length > 0;
+      const prevDate = addMonthsISO(birthDate, ageM - r.everyYears * 12);
+      if (started && prevDate < todayISO && ageNow != null && ageNow >= r.startAgeMonths) {
+        status = "overdue";
+      }
+    } else if (!birthDate) {
       status = "contextual";
     }
     recurring = { label: r.label, labelRu: r.labelRu, everyYears: r.everyYears, nextDate, status };
   }
 
   const statuses = doses.map((d) => d.status);
+  const recurringOverdue = recurring?.status === "overdue";
   const hasDone = statuses.includes("done");
   let overall: DoseStatus;
-  if (statuses.includes("overdue")) overall = "overdue";
+  // Only recurring adult boosters past due are actionable "overdue".
+  if (recurringOverdue) overall = "overdue";
+  else if (statuses.includes("overdue")) overall = "overdue";
   else if (statuses.includes("due")) overall = "due";
   else if (statuses.length === 0) overall = recurring ? recurring.status : "contextual";
   else if (statuses.every((s) => s === "done")) overall = "done";
   else if (hasDone && statuses.every((s) => s === "done" || s === "contextual")) overall = "done";
   else if (statuses.every((s) => s === "contextual")) overall = "contextual";
+  else if (statuses.some((s) => s === "not_recorded")) overall = "not_recorded";
   else overall = "upcoming";
 
   return { entry, doses, recurring, overall };
 }
 
 export const TIER_ORDER: VaccineTier[] = ["universal", "special", "regional", "risk"];
+
+/** Tiers whose age-based doses are graded (due/overdue/not_recorded). Travel/risk
+ * antigens (regional/risk) stay purely informational. */
+export function isGradedTier(tier: VaccineTier): boolean {
+  return tier === "universal" || tier === "special";
+}
+
+/**
+ * The actionable headline count — what the big "overdue" badge reflects. This is
+ * deliberately narrow so the count stays trustworthy: it counts only genuinely
+ * actionable lapses, never childhood doses that were simply never entered.
+ *  - Antigens whose `overall === "overdue"` (recurring adult boosters past due).
+ *  - Recorded certificates whose validity has lapsed (`expiresAt` < today).
+ * `not_recorded` and `contextual` items are excluded by design.
+ */
+export function countActionable(
+  views: AntigenView[],
+  records: { expiresAt?: string | null }[],
+  todayISO: string,
+): number {
+  const overdueAntigens = views.filter((v) => v.overall === "overdue").length;
+  const lapsedCerts = records.filter(
+    (r) => r.expiresAt != null && r.expiresAt < todayISO,
+  ).length;
+  return overdueAntigens + lapsedCerts;
+}
 
 /** Schedule entries with a known fixed certificate validity (years). */
 const LIFETIME_IDS = new Set(["yellow-fever"]); // WHO 2016: single dose, lifelong validity

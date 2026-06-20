@@ -160,13 +160,13 @@ export function Biomarkers() {
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-medium">{b.canonicalName}</p>
+                        <p className="truncate text-sm font-medium selectable">{b.canonicalName}</p>
                         {b.isCustom && <Badge variant="secondary">{t("biomarkers.custom")}</Badge>}
                       </div>
                       {latest ? (
                         <>
                           <div className="mt-1.5 flex items-center justify-between gap-2">
-                            <p className="text-sm tabular-nums">
+                            <p className="text-sm tabular-nums selectable">
                               <span className="font-semibold">{formatValue(latest.value)}</span>{" "}
                               <span className="text-xs text-muted-foreground">{latest.unit}</span>
                             </p>

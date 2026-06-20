@@ -102,7 +102,7 @@ export function NotableChanges({
                       {result.biomarker.canonicalName}
                     </Link>
                     <p className="truncate text-xs text-muted-foreground">
-                      <span className="tabular-nums">
+                      <span className="tabular-nums selectable">
                         {formatValue(previous!.value)} → {formatValue(curValue)} {unit}
                       </span>
                       {previous!.date && (

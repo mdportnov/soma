@@ -1,9 +1,29 @@
 import * as React from "react";
-import { CircleStop, Pencil, Pill, Plus, RotateCcw, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CircleStop,
+  FlaskConical,
+  Pencil,
+  Pill,
+  Plus,
+  RotateCcw,
+  Stethoscope,
+  Trash2,
+} from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createMedication, deleteMedication, listMedications, updateMedication } from "@/db/repos";
-import type { Medication } from "@/db/schema";
+import {
+  createMedication,
+  deleteMedication,
+  getMedicationRelations,
+  listAllergies,
+  listMedications,
+  updateMedication,
+  type MedicationRelations,
+} from "@/db/repos";
+import type { Allergy, Medication } from "@/db/schema";
+import { matchDrugAllergies } from "@/lib/drug-allergy";
+import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
 import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
@@ -33,6 +53,12 @@ export function Medications() {
   const { t } = useI18n();
   const toast = useToast();
   const { data: meds, loading, reload } = useQuery(() => listMedications(profileId), [profileId]);
+  const { data: allergies } = useQuery(() => listAllergies(profileId), [profileId]);
+  const { data: relations } = useQuery(async () => {
+    const list = await listMedications(profileId);
+    const resolved = await Promise.all(list.map((m) => getMedicationRelations(m)));
+    return new Map(list.map((m, i) => [m.id, resolved[i]]));
+  }, [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Medication | null>(null);
 
@@ -152,6 +178,7 @@ export function Medications() {
                           {m.endDate ? formatDate(m.endDate) : t("timeline.now")}
                           {m.purpose && <span> · {m.purpose}</span>}
                         </p>
+                        <MedicationRelated relations={relations?.get(m.id)} />
                         <div className="mt-3 flex items-center gap-1.5 border-t pt-3">
                           <IconAction
                             label={t("common.edit")}
@@ -223,6 +250,7 @@ export function Medications() {
       <MedicationForm
         open={formOpen}
         editing={editing}
+        allergies={allergies ?? []}
         onClose={() => setFormOpen(false)}
         onSaved={(name, wasEdit) => {
           setFormOpen(false);
@@ -235,15 +263,43 @@ export function Medications() {
   );
 }
 
+function MedicationRelated({ relations }: { relations?: MedicationRelations }) {
+  const { t } = useI18n();
+  if (!relations) return null;
+  const items: RelatedItem[] = [];
+  if (relations.visit) {
+    const v = relations.visit;
+    items.push({
+      id: `visit-${v.id}`,
+      icon: Stethoscope,
+      label: t("related.prescribedAt"),
+      sublabel: [v.doctorName || v.specialty, formatDate(v.date)].filter(Boolean).join(" · "),
+      to: `/visits/${v.id}`,
+    });
+  }
+  for (const d of relations.diagnoses) {
+    items.push({
+      id: `dx-${d.id}`,
+      icon: FlaskConical,
+      label: d.name,
+      sublabel: t("related.treats"),
+      to: "/diagnoses",
+    });
+  }
+  return <RelatedLinks title={t("related.title")} items={items} />;
+}
+
 function MedicationForm({
   open,
   editing,
+  allergies,
   onClose,
   onSaved,
   profileId,
 }: {
   open: boolean;
   editing: Medication | null;
+  allergies: Allergy[];
   onClose: () => void;
   onSaved: (name: string, wasEdit: boolean) => void;
   profileId: number;
@@ -276,6 +332,13 @@ function MedicationForm({
   // ISO yyyy-mm-dd strings compare lexicographically, so a plain < is correct.
   const endBeforeStart = !!endDate && !!startDate && endDate < startDate;
   const canSave = !!name.trim() && !!startDate && !endBeforeStart;
+
+  // Drug-allergy guard: surface (never block) any active drug allergy the typed
+  // name hits, so a contraindicated drug can't be added unknowingly.
+  const allergyMatches = React.useMemo(
+    () => matchDrugAllergies(name, allergies),
+    [name, allergies],
+  );
 
   const save = async () => {
     if (!canSave) return;
@@ -329,6 +392,7 @@ function MedicationForm({
             />
           </Field>
         </div>
+        {allergyMatches.length > 0 && <AllergyWarning matches={allergyMatches} />}
         <div className="grid grid-cols-3 gap-3">
           <Field label={t("medications.fields.dose")}>
             <Input
@@ -411,5 +475,37 @@ function MedicationForm({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * Inline drug-allergy warning. Severe/anaphylactic matches render in the
+ * destructive tint, milder ones in the warning tint — but every match is shown,
+ * loud and above the fold, so saving a contraindicated drug is a conscious act.
+ */
+function AllergyWarning({ matches }: { matches: Allergy[] }) {
+  const { t } = useI18n();
+  const critical = matches.some((a) => a.severity === "severe" || a.severity === "anaphylactic");
+  return (
+    <div
+      role="alert"
+      className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${
+        critical
+          ? "border-destructive/40 bg-destructive/10 text-destructive"
+          : "border-warning/40 bg-warning/10 text-warning"
+      }`}
+    >
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+      <div className="space-y-0.5">
+        {matches.map((a) => (
+          <p key={a.id} className="font-medium">
+            {t("allergies.drugGuardWarning", {
+              allergen: a.allergen,
+              severity: t(`allergySeverity.${a.severity}`).toLowerCase(),
+            })}
+          </p>
+        ))}
+      </div>
+    </div>
   );
 }

@@ -1,9 +1,26 @@
 import * as React from "react";
-import { CircleCheck, CirclePause, FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  CircleCheck,
+  CirclePause,
+  FlaskConical,
+  Pencil,
+  Pill,
+  Plus,
+  Stethoscope,
+  Trash2,
+} from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createDiagnosis, deleteDiagnosis, listDiagnoses, updateDiagnosis } from "@/db/repos";
+import {
+  createDiagnosis,
+  deleteDiagnosis,
+  getDiagnosisRelations,
+  listDiagnoses,
+  updateDiagnosis,
+  type DiagnosisRelations,
+} from "@/db/repos";
 import type { Diagnosis } from "@/db/schema";
+import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
 import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { IconAction } from "@/components/app/IconAction";
@@ -46,6 +63,12 @@ export function Diagnoses() {
     loading,
     reload,
   } = useQuery(() => listDiagnoses(profileId), [profileId]);
+  const { data: relations } = useQuery(async () => {
+    const list = await listDiagnoses(profileId);
+    const active = list.filter((d) => d.status === "active");
+    const resolved = await Promise.all(active.map((d) => getDiagnosisRelations(d)));
+    return new Map(active.map((d, i) => [d.id, resolved[i]]));
+  }, [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Diagnosis | null>(null);
   const [resolvingId, setResolvingId] = React.useState<number | null>(null);
@@ -153,6 +176,7 @@ export function Diagnoses() {
                           {d.notes}
                         </p>
                       )}
+                      <DiagnosisRelated relations={relations?.get(d.id)} />
                       <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3">
                         <IconAction
                           label={t("common.edit")}
@@ -315,6 +339,32 @@ export function Diagnoses() {
       />
     </>
   );
+}
+
+function DiagnosisRelated({ relations }: { relations?: DiagnosisRelations }) {
+  const { t } = useI18n();
+  if (!relations) return null;
+  const items: RelatedItem[] = [];
+  if (relations.visit) {
+    const v = relations.visit;
+    items.push({
+      id: `visit-${v.id}`,
+      icon: Stethoscope,
+      label: t("related.fromVisit"),
+      sublabel: [v.doctorName || v.specialty, formatDate(v.date)].filter(Boolean).join(" · "),
+      to: `/visits/${v.id}`,
+    });
+  }
+  for (const m of relations.medications) {
+    items.push({
+      id: `med-${m.id}`,
+      icon: Pill,
+      label: m.name,
+      sublabel: t("related.treatedBy"),
+      to: "/medications",
+    });
+  }
+  return <RelatedLinks title={t("related.title")} items={items} />;
 }
 
 function DiagnosisTable({

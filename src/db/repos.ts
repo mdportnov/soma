@@ -650,6 +650,103 @@ export async function listDiagnosesForVisit(visitId: number) {
   return db.select().from(diagnosis).where(eq(diagnosis.visitId, visitId));
 }
 
+/**
+ * Medications whose prescription belongs to this visit — the visit → prescription
+ * → medication edge surfaced as a single read. Empty when the visit produced no
+ * prescriptions or none were promoted to a tracked medication.
+ */
+export async function listMedicationsForVisit(visitId: number): Promise<Medication[]> {
+  const rxIds = await db
+    .select({ id: prescription.id })
+    .from(prescription)
+    .where(eq(prescription.visitId, visitId));
+  if (!rxIds.length) return [];
+  return db
+    .select()
+    .from(medication)
+    .where(
+      inArray(
+        medication.prescriptionId,
+        rxIds.map((r) => r.id),
+      ),
+    );
+}
+
+export type DiagnosisRelations = {
+  /** The visit that produced the diagnosis, if it is linked to one. */
+  visit: Visit | null;
+  /** Medications treating it: prescribed at that visit, or whose purpose names it. */
+  medications: Medication[];
+};
+
+/**
+ * Resolves the graph around a diagnosis: the visit it came from and the
+ * medications treating it. There is no direct medication↔diagnosis foreign key,
+ * so the link is inferred two ways — medications prescribed at the diagnosis's
+ * visit, and medications whose free-text `purpose` mentions the diagnosis name.
+ */
+export async function getDiagnosisRelations(d: Diagnosis): Promise<DiagnosisRelations> {
+  const [visit, viaVisit, byPurpose] = await Promise.all([
+    d.visitId ? getVisit(d.visitId) : Promise.resolve(null),
+    d.visitId ? listMedicationsForVisit(d.visitId) : Promise.resolve<Medication[]>([]),
+    db
+      .select()
+      .from(medication)
+      .where(
+        and(
+          eq(medication.profileId, d.profileId),
+          sql`${medication.purpose} is not null and instr(lower(${medication.purpose}), lower(${d.name})) > 0`,
+        ),
+      ),
+  ]);
+  const byId = new Map<number, Medication>();
+  for (const m of [...viaVisit, ...byPurpose]) byId.set(m.id, m);
+  return { visit, medications: [...byId.values()] };
+}
+
+export type MedicationRelations = {
+  /** The visit that prescribed it (via prescription → visit), if any. */
+  visit: Visit | null;
+  /** Diagnoses it likely treats: diagnoses of its visit, plus name-in-purpose matches. */
+  diagnoses: Diagnosis[];
+};
+
+/**
+ * Resolves the graph around a medication: the prescribing visit and the
+ * diagnoses it treats. The visit is reached through its prescription; diagnoses
+ * are inferred from that visit's diagnoses and from any diagnosis whose name
+ * appears in the medication's `purpose` text.
+ */
+export async function getMedicationRelations(m: Medication): Promise<MedicationRelations> {
+  let visit: Visit | null = null;
+  if (m.prescriptionId != null) {
+    const rx = await db
+      .select({ visitId: prescription.visitId })
+      .from(prescription)
+      .where(eq(prescription.id, m.prescriptionId))
+      .limit(1);
+    const visitId = rx[0]?.visitId ?? null;
+    if (visitId != null) visit = await getVisit(visitId);
+  }
+  const [viaVisit, byPurpose] = await Promise.all([
+    visit ? listDiagnosesForVisit(visit.id) : Promise.resolve<Diagnosis[]>([]),
+    m.purpose
+      ? db
+          .select()
+          .from(diagnosis)
+          .where(
+            and(
+              eq(diagnosis.profileId, m.profileId),
+              sql`instr(lower(${m.purpose}), lower(${diagnosis.name})) > 0`,
+            ),
+          )
+      : Promise.resolve<Diagnosis[]>([]),
+  ]);
+  const byId = new Map<number, Diagnosis>();
+  for (const d of [...viaVisit, ...byPurpose]) byId.set(d.id, d);
+  return { visit, diagnoses: [...byId.values()] };
+}
+
 // ── allergies ──────────────────────────────────────────────────────────────
 
 export async function listAllergies(profileId: number): Promise<Allergy[]> {

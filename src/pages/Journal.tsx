@@ -281,11 +281,7 @@ function WeightTab({
             <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle>{t("weight.chartTitle")}</CardTitle>
               <div className="flex items-center gap-2">
-                <GoalStatusChip
-                  status={weightStatus}
-                  unitLabel={unitLabel}
-                  toDisplay={toDisplay}
-                />
+                <GoalStatusChip status={weightStatus} unitLabel={unitLabel} toDisplay={toDisplay} />
                 <GoalButton
                   goal={goal}
                   unitLabel={unitLabel}

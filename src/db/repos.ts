@@ -573,6 +573,11 @@ export async function listMedications(profileId: number): Promise<Medication[]> 
     .orderBy(desc(isNull(medication.endDate)), desc(medication.startDate));
 }
 
+export async function getMedication(id: number): Promise<Medication | null> {
+  const rows = await db.select().from(medication).where(eq(medication.id, id));
+  return rows[0] ?? null;
+}
+
 export async function createMedication(data: NewMedication): Promise<number> {
   const [row] = await db.insert(medication).values(data).returning({ id: medication.id });
   return row.id;
@@ -622,6 +627,11 @@ export async function listDiagnoses(profileId: number): Promise<Diagnosis[]> {
     .from(diagnosis)
     .where(eq(diagnosis.profileId, profileId))
     .orderBy(desc(diagnosis.date));
+}
+
+export async function getDiagnosis(id: number): Promise<Diagnosis | null> {
+  const rows = await db.select().from(diagnosis).where(eq(diagnosis.id, id));
+  return rows[0] ?? null;
 }
 
 export async function createDiagnosis(data: NewDiagnosis): Promise<number> {

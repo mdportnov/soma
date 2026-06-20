@@ -1157,6 +1157,19 @@ export const ru = {
     noMedications: "К этому визиту не привязаны лекарства.",
   },
 
+  // Страница диагноза
+  diagnosisDetail: {
+    notFound: "Диагноз не найден",
+    detailsTitle: "Детали",
+  },
+
+  // Страница лекарства
+  medicationDetail: {
+    notFound: "Лекарство не найдено",
+    detailsTitle: "Детали",
+    endDate: "Дата окончания",
+  },
+
   // Блоки «Связано» между сущностями (визит ↔ диагноз ↔ лекарство)
   related: {
     title: "Связано",

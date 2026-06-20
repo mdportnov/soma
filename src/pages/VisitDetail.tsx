@@ -122,7 +122,7 @@ export function VisitDetail() {
                 {diagnoses.map((d) => (
                   <li key={d.id}>
                     <Link
-                      to="/diagnoses"
+                      to={`/diagnoses/${d.id}`}
                       className="-mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-2.5 hover:bg-muted"
                     >
                       <div className="min-w-0">
@@ -205,7 +205,7 @@ export function VisitDetail() {
                 {medications.map((m) => (
                   <li key={m.id}>
                     <Link
-                      to="/medications"
+                      to={`/medications/${m.id}`}
                       className="-mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-2.5 hover:bg-muted"
                     >
                       <div className="min-w-0">

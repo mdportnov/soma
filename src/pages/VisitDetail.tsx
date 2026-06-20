@@ -10,6 +10,7 @@ import {
   getLinkedAttachment,
   getVisit,
   listDiagnosesForVisit,
+  listMedicationsForVisit,
   listPrescriptionsForVisit,
 } from "@/db/repos";
 import { SourceFileButton } from "@/components/app/SourceFile";
@@ -26,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VisitForm } from "./Visits";
 import { DiagnosisForm } from "./Diagnoses";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatValue } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
@@ -43,18 +44,19 @@ export function VisitDetail() {
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { data, loading, reload } = useQuery(async () => {
-    const [visit, diagnoses, prescriptions, source] = await Promise.all([
+    const [visit, diagnoses, prescriptions, medications, source] = await Promise.all([
       getVisit(visitId),
       listDiagnosesForVisit(visitId),
       listPrescriptionsForVisit(visitId),
+      listMedicationsForVisit(visitId),
       getLinkedAttachment("visit", visitId),
     ]);
-    return { visit, diagnoses, prescriptions, source };
+    return { visit, diagnoses, prescriptions, medications, source };
   }, [visitId]);
 
   if (loading || !data) return <Loading />;
   if (!data.visit) return <EmptyState icon={Stethoscope} title={t("visitDetail.visitNotFound")} />;
-  const { visit, diagnoses, prescriptions, source } = data;
+  const { visit, diagnoses, prescriptions, medications, source } = data;
 
   return (
     <>
@@ -118,24 +120,30 @@ export function VisitDetail() {
             ) : (
               <ul className="divide-y">
                 {diagnoses.map((d) => (
-                  <li key={d.id} className="flex items-center justify-between gap-2 py-2.5">
-                    <div>
-                      <p className="text-sm font-medium">{d.name}</p>
-                      {d.icdCode && (
-                        <p className="text-[11px] text-muted-foreground">ICD {d.icdCode}</p>
-                      )}
-                    </div>
-                    <Badge
-                      variant={
-                        d.status === "active"
-                          ? "warning"
-                          : d.status === "resolved"
-                            ? "success"
-                            : "secondary"
-                      }
+                  <li key={d.id}>
+                    <Link
+                      to="/diagnoses"
+                      className="-mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-2.5 hover:bg-muted"
                     >
-                      {t(`status.${d.status}`)}
-                    </Badge>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{d.name}</p>
+                        {d.icdCode && (
+                          <p className="text-[11px] text-muted-foreground">ICD {d.icdCode}</p>
+                        )}
+                      </div>
+                      <Badge
+                        variant={
+                          d.status === "active"
+                            ? "warning"
+                            : d.status === "resolved"
+                              ? "success"
+                              : "secondary"
+                        }
+                        className="shrink-0"
+                      >
+                        {t(`status.${d.status}`)}
+                      </Badge>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -176,6 +184,52 @@ export function VisitDetail() {
                       </p>
                     )}
                     {!p.drugName && !p.notes && <p className="text-sm">—</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>{t("visitDetail.medicationsTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {medications.length === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">
+                {t("visitDetail.noMedications")}
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {medications.map((m) => (
+                  <li key={m.id}>
+                    <Link
+                      to="/medications"
+                      className="-mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-2.5 hover:bg-muted"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{m.name}</p>
+                        {(m.doseAmount != null || m.purpose) && (
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {[
+                              m.doseAmount != null
+                                ? `${formatValue(m.doseAmount)} ${m.doseUnit ?? ""}`.trim()
+                                : null,
+                              m.purpose,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                      <Badge
+                        variant={m.type === "drug" ? "default" : "success"}
+                        className="shrink-0"
+                      >
+                        {t(`types.${m.type}`)}
+                      </Badge>
+                    </Link>
                   </li>
                 ))}
               </ul>

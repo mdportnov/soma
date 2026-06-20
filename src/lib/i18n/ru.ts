@@ -674,6 +674,7 @@ export const ru = {
       resolve: "Разрешить",
     },
     deleteAnaphylacticTooltip: "Анафилактическую аллергию нельзя удалить — сначала разрешите её.",
+    drugGuardWarning: "⚠ {{allergen}} — у вас {{severity}} аллергия",
   },
 
   // Allergy category options
@@ -1121,6 +1122,18 @@ export const ru = {
       durationDays: "Длительность (дни)",
       days: "дн.",
     },
+    medicationsTitle: "Лекарства",
+    noMedications: "К этому визиту не привязаны лекарства.",
+  },
+
+  // Блоки «Связано» между сущностями (визит ↔ диагноз ↔ лекарство)
+  related: {
+    title: "Связано",
+    fromVisit: "Из визита",
+    treatedBy: "Лечится",
+    treats: "Лечит",
+    prescribedAt: "Назначено на визите",
+    visit: "Визит",
   },
 
   // Полнотекстовый поиск + командная палитра

@@ -671,6 +671,7 @@ export const en = {
       resolve: "Resolve",
     },
     deleteAnaphylacticTooltip: "Anaphylactic allergy cannot be deleted — resolve it first.",
+    drugGuardWarning: "⚠ {{allergen}} — you have a {{severity}} allergy",
   },
 
   // Allergy category options
@@ -1113,6 +1114,18 @@ export const en = {
       durationDays: "Duration (days)",
       days: "days",
     },
+    medicationsTitle: "Medications",
+    noMedications: "No medications linked to this visit.",
+  },
+
+  // Cross-entity "Related" blocks (visit ↔ diagnosis ↔ medication)
+  related: {
+    title: "Related",
+    fromVisit: "From visit",
+    treatedBy: "Treated by",
+    treats: "Treats",
+    prescribedAt: "Prescribed at",
+    visit: "Visit",
   },
 
   // Full-text search + command palette

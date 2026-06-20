@@ -529,6 +529,8 @@ export const ru = {
     emptySearchDescription: "Попробуйте другой поисковый запрос.",
     custom: "пользовательский",
     noData: "Нет данных",
+    optimal: "оптимально",
+    inRange: "в норме",
     createDialog: {
       title: "Новый пользовательский биомаркер",
       description: "Для аналитов, отсутствующих во встроенном словаре.",

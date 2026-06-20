@@ -145,7 +145,7 @@ export async function recomputeFlagsForProfile(profileId: number): Promise<void>
           ageYears: ageYearsFrom(prof.birthDate, new Date(`${r.date.slice(0, 10)}T00:00:00Z`)),
         };
         const effective = resolveRange(bio, ranges.get(r.biomarkerId), ctx);
-        ({ outOfRange, flag } = computeFlag(conv.value, effective));
+        ({ outOfRange, flag } = computeFlag(conv.value, effective, bio));
       }
     }
     await db
@@ -328,7 +328,7 @@ export async function createPanelWithResults(
           unitNormalized = conv.unit;
           valueNormalized = conv.value;
           const effective = resolveRange(bio, rangesByBiomarker.get(r.biomarkerId), ctx);
-          ({ outOfRange, flag } = computeFlag(conv.value, effective));
+          ({ outOfRange, flag } = computeFlag(conv.value, effective, bio));
         }
       }
       const confidence: ResultConfidence = r.confidence ?? (isAi ? "ai" : "manual");

@@ -1,7 +1,7 @@
 import Database from "@tauri-apps/plugin-sql";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as schema from "./schema";
-import { runMigrations } from "./migrate";
+import { runMigrations, runOnceTask } from "./migrate";
 import { seedBiomarkersIfEmpty, seedReferenceRangesIfEmpty } from "./seed-biomarkers";
 
 const DB_URL = "sqlite:soma.db";
@@ -69,6 +69,14 @@ export function initDatabase(): Promise<void> {
       await runMigrations(conn);
       await seedBiomarkersIfEmpty(conn);
       await seedReferenceRangesIfEmpty(conn);
+      // One-time backfill: the critical-flag logic became clinically aware (no
+      // more "0% eosinophils = critical"), so re-derive stored flags for data
+      // imported under the old rule. Guarded → runs once per database.
+      await runOnceTask(conn, "recompute-flags-clinical-critical-2026-06", async () => {
+        const { recomputeFlagsForProfile } = await import("./repos");
+        const profiles = await conn.select<{ id: number }[]>("SELECT id FROM profile");
+        for (const p of profiles) await recomputeFlagsForProfile(p.id);
+      });
     })();
   }
   return initPromise;

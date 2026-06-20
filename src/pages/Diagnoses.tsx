@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CircleCheck,
   CirclePause,
@@ -58,6 +59,7 @@ export function Diagnoses() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
+  const navigate = useNavigate();
   const {
     data: diagnoses,
     loading,
@@ -158,14 +160,18 @@ export function Diagnoses() {
                   <Card key={d.id}>
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
+                        <button
+                          type="button"
+                          className="min-w-0 text-left"
+                          onClick={() => navigate(`/diagnoses/${d.id}`)}
+                        >
                           <p className="truncate text-sm font-semibold selectable">{d.name}</p>
                           {d.icdCode && (
                             <p className="mt-0.5 text-xs text-muted-foreground selectable">
                               {d.icdCode}
                             </p>
                           )}
-                        </div>
+                        </button>
                         <Badge variant="warning" className="shrink-0">
                           {t("status.active")}
                         </Badge>
@@ -363,7 +369,7 @@ function DiagnosisRelated({ relations }: { relations?: DiagnosisRelations }) {
       icon: Pill,
       label: m.name,
       sublabel: t("related.treatedBy"),
-      to: "/medications",
+      to: `/medications/${m.id}`,
     });
   }
   return <RelatedLinks title={t("related.title")} items={items} />;
@@ -379,6 +385,7 @@ function DiagnosisTable({
   onDelete: (d: Diagnosis) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
 
   return (
     <div className="rounded-xl border bg-card">
@@ -394,7 +401,11 @@ function DiagnosisTable({
         </TableHeader>
         <TableBody>
           {diagnoses.map((d) => (
-            <TableRow key={d.id}>
+            <TableRow
+              key={d.id}
+              className="cursor-pointer"
+              onClick={() => navigate(`/diagnoses/${d.id}`)}
+            >
               <TableCell className="font-medium">{d.name}</TableCell>
               <TableCell className="text-muted-foreground">{d.icdCode ?? "—"}</TableCell>
               <TableCell>{formatDate(d.date)}</TableCell>
@@ -409,7 +420,10 @@ function DiagnosisTable({
                     variant="ghost"
                     size="iconSm"
                     aria-label={t("common.edit")}
-                    onClick={() => onEdit(d)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(d);
+                    }}
                   >
                     <Pencil />
                   </Button>
@@ -418,7 +432,10 @@ function DiagnosisTable({
                     size="iconSm"
                     aria-label={t("common.delete")}
                     className="text-destructive"
-                    onClick={() => onDelete(d)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void onDelete(d);
+                    }}
                   >
                     <Trash2 />
                   </Button>

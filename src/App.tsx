@@ -13,9 +13,11 @@ import { LabPanelDetail } from "@/pages/LabPanelDetail";
 import { VerifyImport } from "@/pages/VerifyImport";
 import { ImportWizard } from "@/pages/ImportWizard";
 import { Medications } from "@/pages/Medications";
+import { MedicationDetail } from "@/pages/MedicationDetail";
 import { Visits } from "@/pages/Visits";
 import { VisitDetail } from "@/pages/VisitDetail";
 import { Diagnoses } from "@/pages/Diagnoses";
+import { DiagnosisDetail } from "@/pages/DiagnosisDetail";
 import { Allergies } from "@/pages/Allergies";
 import { Vaccines } from "@/pages/Vaccines";
 import { EmergencyCard } from "@/pages/EmergencyCard";
@@ -42,9 +44,11 @@ export default function App() {
                 <Route path="labs/:id" element={<LabPanelDetail />} />
                 <Route path="labs/:id/verify" element={<VerifyImport />} />
                 <Route path="medications" element={<Medications />} />
+                <Route path="medications/:id" element={<MedicationDetail />} />
                 <Route path="visits" element={<Visits />} />
                 <Route path="visits/:id" element={<VisitDetail />} />
                 <Route path="diagnoses" element={<Diagnoses />} />
+                <Route path="diagnoses/:id" element={<DiagnosisDetail />} />
                 <Route path="allergies" element={<Allergies />} />
                 <Route path="vaccines" element={<Vaccines />} />
                 <Route path="emergency" element={<EmergencyCard />} />

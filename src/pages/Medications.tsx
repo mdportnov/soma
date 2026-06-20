@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   CircleStop,
@@ -52,6 +53,7 @@ export function Medications() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
+  const navigate = useNavigate();
   const { data: meds, loading, reload } = useQuery(() => listMedications(profileId), [profileId]);
   const { data: allergies } = useQuery(() => listAllergies(profileId), [profileId]);
   const { data: relations } = useQuery(async () => {
@@ -155,7 +157,11 @@ export function Medications() {
                     <Card key={m.id}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
+                          <button
+                            type="button"
+                            className="min-w-0 text-left"
+                            onClick={() => navigate(`/medications/${m.id}`)}
+                          >
                             <p className="truncate text-sm font-semibold selectable">{m.name}</p>
                             <p className="mt-0.5 text-xs text-muted-foreground selectable">
                               {[
@@ -168,7 +174,7 @@ export function Medications() {
                                 .filter(Boolean)
                                 .join(" · ") || "no dose set"}
                             </p>
-                          </div>
+                          </button>
                           <Badge variant={m.type === "drug" ? "default" : "success"}>
                             {t(`types.${m.type}`)}
                           </Badge>
@@ -283,7 +289,7 @@ function MedicationRelated({ relations }: { relations?: MedicationRelations }) {
       icon: FlaskConical,
       label: d.name,
       sublabel: t("related.treats"),
-      to: "/diagnoses",
+      to: `/diagnoses/${d.id}`,
     });
   }
   return <RelatedLinks title={t("related.title")} items={items} />;

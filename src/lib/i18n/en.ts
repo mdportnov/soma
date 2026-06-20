@@ -1150,6 +1150,19 @@ export const en = {
     noMedications: "No medications linked to this visit.",
   },
 
+  // Diagnosis detail page
+  diagnosisDetail: {
+    notFound: "Diagnosis not found",
+    detailsTitle: "Details",
+  },
+
+  // Medication detail page
+  medicationDetail: {
+    notFound: "Medication not found",
+    detailsTitle: "Details",
+    endDate: "End date",
+  },
+
   // Cross-entity "Related" blocks (visit ↔ diagnosis ↔ medication)
   related: {
     title: "Related",

@@ -2,7 +2,6 @@ import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  ArrowLeft,
   FileText,
   Loader2,
   Plus,
@@ -38,6 +37,7 @@ import {
 } from "@/ai/pipeline/map";
 import { mimeFromPath, storeAttachmentFile, toBase64 } from "@/lib/attachments";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
@@ -136,8 +136,14 @@ export function ImportWizard() {
   if (!boot.provider) {
     return (
       <>
-        <BackLink />
-        <PageHeader title={t("importWizard.title")} />
+        <PageHeader
+          back="/labs"
+          breadcrumbs={crumbs(
+            { label: t("nav.labResults"), to: "/labs" },
+            { label: t("breadcrumb.importWizard") },
+          )}
+          title={t("importWizard.title")}
+        />
         <Card className="mx-auto max-w-lg">
           <CardContent className="flex flex-col items-center py-10 text-center">
             <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-secondary">
@@ -470,8 +476,15 @@ export function ImportWizard() {
 
   return (
     <>
-      <BackLink />
-      <PageHeader title={t("importWizard.title")} description={t("importWizard.description")} />
+      <PageHeader
+        back="/labs"
+        breadcrumbs={crumbs(
+          { label: t("nav.labResults"), to: "/labs" },
+          { label: t("breadcrumb.importWizard") },
+        )}
+        title={t("importWizard.title")}
+        description={t("importWizard.description")}
+      />
 
       {error && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -715,17 +728,6 @@ export function ImportWizard() {
         }}
       />
     </>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link
-      to="/labs"
-      className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeft className="size-3.5" /> Lab results
-    </Link>
   );
 }
 

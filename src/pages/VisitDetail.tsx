@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Plus, Stethoscope, Trash2 } from "lucide-react";
+import { Pencil, Plus, Stethoscope, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import {
@@ -16,6 +16,7 @@ import {
 import { SourceFileButton } from "@/components/app/SourceFile";
 import { IconAction } from "@/components/app/IconAction";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
@@ -58,16 +59,17 @@ export function VisitDetail() {
   if (!data.visit) return <EmptyState icon={Stethoscope} title={t("visitDetail.visitNotFound")} />;
   const { visit, diagnoses, prescriptions, medications, source } = data;
 
+  const visitLabel = `${formatDate(visit.date)}${visit.doctorName ? ` — ${visit.doctorName}` : ""}`;
+
   return (
     <>
-      <Link
-        to="/visits"
-        className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> Visits
-      </Link>
       <PageHeader
-        title={`${formatDate(visit.date)}${visit.doctorName ? ` — ${visit.doctorName}` : ""}`}
+        back="/visits"
+        breadcrumbs={crumbs(
+          { label: t("nav.visits"), to: "/visits" },
+          { label: visitLabel, selectable: true },
+        )}
+        title={visitLabel}
         description={[
           visit.specialty,
           visit.clinic,

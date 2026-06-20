@@ -9,6 +9,7 @@ import type { Allergy } from "@/db/schema";
 import { exportEmergencyCardHtml, severityClass } from "@/lib/emergency-export";
 import { exportEmergencyCardPdf } from "@/lib/emergency-pdf";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +85,11 @@ export function EmergencyCard() {
   return (
     <>
       <PageHeader
+        back="/"
+        breadcrumbs={crumbs(
+          { label: t("nav.dashboard"), to: "/" },
+          { label: t("emergency.openCard") },
+        )}
         title={t("emergency.title")}
         description={t("emergency.description")}
         actions={

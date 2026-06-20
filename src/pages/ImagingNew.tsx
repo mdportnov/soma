@@ -1,6 +1,6 @@
 import * as React from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/db/repos";
 import type { ImagingRecord, Visit } from "@/db/schema";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
@@ -143,15 +144,18 @@ function ImagingForm({
     }
   };
 
+  const leafLabel = editing
+    ? `${t(`imagingModality.${modality}`)}${bodyArea.trim() ? ` · ${bodyArea.trim()}` : ""}`
+    : t("breadcrumb.imagingNew");
+
   return (
     <>
-      <Link
-        to="/imaging"
-        className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> {t("imaging.back")}
-      </Link>
       <PageHeader
+        back="/imaging"
+        breadcrumbs={crumbs(
+          { label: t("nav.imaging"), to: "/imaging" },
+          { label: leafLabel, selectable: editing },
+        )}
         title={editing ? t("imaging.editTitle") : t("imaging.newTitle")}
         description={t("imaging.newDescription")}
       />

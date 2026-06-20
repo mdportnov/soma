@@ -1,11 +1,12 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Info, LineChart } from "lucide-react";
+import { AlertTriangle, Info, LineChart } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getBiomarker, getBiomarkerSeries, listMedications, listSymptomLog } from "@/db/repos";
 import { getBiomarkerInfo } from "@/content/biomarker-info";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
@@ -90,13 +91,12 @@ export function BiomarkerDetail() {
 
   return (
     <>
-      <Link
-        to="/biomarkers"
-        className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> {t("biomarkerDetail.allBiomarkers")}
-      </Link>
       <PageHeader
+        back="/biomarkers"
+        breadcrumbs={crumbs(
+          { label: t("nav.biomarkers"), to: "/biomarkers" },
+          { label: bio.canonicalName, selectable: true },
+        )}
         title={bio.canonicalName}
         description={`${bio.category} · ${bio.defaultUnit}${bio.code ? ` · LOINC ${bio.code}` : ""}`}
         actions={bio.isCustom ? <Badge variant="secondary">custom</Badge> : undefined}

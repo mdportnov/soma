@@ -1510,6 +1510,15 @@ export const en = {
   biomarkerSymptoms: {
     toggle: "Symptoms",
   },
+
+  breadcrumb: {
+    back: "Back",
+    labPanelNew: "New panel",
+    importWizard: "AI import",
+    verify: "Verify",
+    imagingNew: "New study",
+    imagingEdit: "Edit study",
+  },
 } as const;
 
 export type TranslationKeys = typeof en;

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Check, TestTubes } from "lucide-react";
+import { Check, TestTubes } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
 import {
   getPanel,
@@ -12,6 +12,7 @@ import {
 } from "@/db/repos";
 import { SourceDocPane } from "@/components/app/SourceFile";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
@@ -85,15 +86,17 @@ export function VerifyImport() {
     toast.show(t("needsReview.confirmedToast"));
   };
 
+  const panelLabel = `${formatDate(panel.date)}${panel.labName ? ` — ${panel.labName}` : ""}`;
+
   return (
     <>
-      <Link
-        to={`/labs/${panelId}`}
-        className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> {t("verify.backToPanel")}
-      </Link>
       <PageHeader
+        back={`/labs/${panelId}`}
+        breadcrumbs={crumbs(
+          { label: t("nav.labResults"), to: "/labs" },
+          { label: panelLabel, to: `/labs/${panelId}`, selectable: true },
+          { label: t("breadcrumb.verify") },
+        )}
         title={t("verify.title")}
         description={`${formatDate(panel.date)}${panel.labName ? ` — ${panel.labName}` : ""} · ${t("verify.description")}`}
         actions={

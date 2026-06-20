@@ -1517,4 +1517,13 @@ export const ru = {
   biomarkerSymptoms: {
     toggle: "Симптомы",
   },
+
+  breadcrumb: {
+    back: "Назад",
+    labPanelNew: "Новая панель",
+    importWizard: "ИИ-импорт",
+    verify: "Проверка",
+    imagingNew: "Новый снимок",
+    imagingEdit: "Изменить снимок",
+  },
 } as const;

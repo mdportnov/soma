@@ -1,5 +1,5 @@
 import * as React from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigationType } from "react-router-dom";
 import {
   Activity,
   CalendarRange,
@@ -46,6 +46,11 @@ export function Shell() {
   const { t } = useI18n();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const location = useLocation();
+  const navType = useNavigationType();
+  const mainRef = React.useRef<HTMLElement>(null);
+  // Per-history-entry scroll offsets, keyed by location.key (unique per entry).
+  const scrollPositions = React.useRef(new Map<string, number>());
+  const lastKey = React.useRef<string>(location.key);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -57,6 +62,30 @@ export function Shell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Continuously record the current entry's scroll offset so it's available
+  // the moment we navigate away (the page DOM is gone by the next render).
+  // WKWebView scrolls the <main> container, not window — bind to it directly.
+  React.useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    const onScroll = () => scrollPositions.current.set(lastKey.current, main.scrollTop);
+    main.addEventListener("scroll", onScroll, { passive: true });
+    return () => main.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Scroll restoration: on POP (browser back/forward) restore the saved offset
+  // for the entry we land on; on PUSH/REPLACE (forward to a new page) go to top.
+  React.useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    lastKey.current = location.key;
+    if (navType === "POP") {
+      main.scrollTop = scrollPositions.current.get(location.key) ?? 0;
+    } else {
+      main.scrollTop = 0;
+    }
+  }, [location.key, navType]);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -127,9 +156,10 @@ export function Shell() {
           </NavLink>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto">
-        {/* key on pathname re-mounts the page so navigation fades in */}
-        <div key={location.pathname} className="animate-step-in mx-auto max-w-6xl p-6 md:p-8">
+      <main ref={mainRef} className="flex-1 overflow-y-auto">
+        {/* key on location.key re-mounts the page so navigation fades in;
+            scroll restoration is handled imperatively on <main> above. */}
+        <div key={location.key} className="animate-step-in mx-auto max-w-6xl p-6 md:p-8">
           <Outlet />
         </div>
       </main>

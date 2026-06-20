@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Sparkles, TestTubes, Trash2 } from "lucide-react";
+import { Sparkles, TestTubes, Trash2 } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
 import {
   createPanelWithResults,
@@ -15,6 +15,7 @@ import {
 import { SourceFileButton, SourcePageLink } from "@/components/app/SourceFile";
 import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
@@ -61,16 +62,17 @@ export function LabPanelDetail() {
   const changeByResult = new Map(changes.map((c) => [c.result.id, c]));
   const needsReview = results.filter((r) => r.reviewedAt == null);
 
+  const panelLabel = `${formatDate(panel.date)}${panel.labName ? ` — ${panel.labName}` : ""}`;
+
   return (
     <>
-      <Link
-        to="/labs"
-        className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> {t("labPanelDetail.backToLabs")}
-      </Link>
       <PageHeader
-        title={`${formatDate(panel.date)}${panel.labName ? ` — ${panel.labName}` : ""}`}
+        back="/labs"
+        breadcrumbs={crumbs(
+          { label: t("nav.labResults"), to: "/labs" },
+          { label: panelLabel, selectable: true },
+        )}
+        title={panelLabel}
         description={[
           [panel.city, panel.country].filter(Boolean).join(", "),
           `${results.length} ${t("labs.tableColumns.results").toLowerCase()}`,

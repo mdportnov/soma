@@ -13,6 +13,7 @@ import {
   listPrescriptionsForVisit,
 } from "@/db/repos";
 import { SourceFileButton } from "@/components/app/SourceFile";
+import { IconAction } from "@/components/app/IconAction";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -75,17 +76,17 @@ export function VisitDetail() {
         actions={
           <>
             <SourceFileButton attachment={source} />
-            <Button variant="outline" onClick={() => setEditOpen(true)}>
-              <Pencil /> Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
+            <IconAction
+              label={t("common.edit")}
+              icon={<Pencil />}
+              onClick={() => setEditOpen(true)}
+            />
+            <IconAction
+              label={t("visitDetail.deleteVisit")}
+              icon={<Trash2 />}
+              destructive
               onClick={() => setConfirmDelete(true)}
-              aria-label={t("visitDetail.deleteVisit")}
-            >
-              <Trash2 className="text-destructive" />
-            </Button>
+            />
           </>
         }
       />

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Lock, Pencil, Plus, ShieldAlert, Trash2 } from "lucide-react";
+import { CircleCheck, Lock, Pencil, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createAllergy, deleteAllergy, listAllergies, updateAllergy } from "@/db/repos";
@@ -7,6 +7,8 @@ import type { Allergy } from "@/db/schema";
 import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
+import { IconAction } from "@/components/app/IconAction";
+import { Tooltip } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
@@ -189,37 +191,39 @@ function AllergyCard({
             {a.onsetDate && <p>Onset: {formatDate(a.onsetDate)}</p>}
           </div>
         )}
-        <div className="mt-3 flex gap-1.5 border-t pt-3">
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            <Pencil /> {t("common.edit")}
-          </Button>
+        <div className="mt-3 flex items-center gap-1.5 border-t pt-3">
+          <IconAction label={t("common.edit")} icon={<Pencil />} onClick={onEdit} />
           {isActive && (
-            <Button variant="outline" size="sm" onClick={onResolve}>
-              {t("allergies.actions.resolve")}
-            </Button>
+            <IconAction
+              label={t("allergies.actions.resolve")}
+              icon={<CircleCheck />}
+              onClick={onResolve}
+            />
           )}
           {isAnaphylactic ? (
-            <span title={t("allergies.deleteAnaphylacticTooltip")} className="ml-auto">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="pointer-events-none text-destructive opacity-40"
-                disabled
-                aria-disabled
-                tabIndex={-1}
-              >
-                <Trash2 />
-              </Button>
-            </span>
+            <Tooltip content={t("allergies.deleteAnaphylacticTooltip")}>
+              <span className="inline-flex">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="text-destructive opacity-40"
+                  disabled
+                  aria-disabled
+                  aria-label={t("common.delete")}
+                  tabIndex={-1}
+                >
+                  <Trash2 />
+                </Button>
+              </span>
+            </Tooltip>
           ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="ml-auto text-destructive"
+            <IconAction
+              label={t("common.delete")}
+              icon={<Trash2 />}
+              destructive
               onClick={onDelete}
-            >
-              <Trash2 />
-            </Button>
+            />
           )}
         </div>
       </CardContent>

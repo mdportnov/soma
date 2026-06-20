@@ -1,11 +1,12 @@
 import * as React from "react";
-import { FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
+import { CircleCheck, CirclePause, FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createDiagnosis, deleteDiagnosis, listDiagnoses, updateDiagnosis } from "@/db/repos";
 import type { Diagnosis } from "@/db/schema";
 import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
+import { IconAction } from "@/components/app/IconAction";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
@@ -152,20 +153,18 @@ export function Diagnoses() {
                           {d.notes}
                         </p>
                       )}
-                      <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3">
+                        <IconAction
+                          label={t("common.edit")}
+                          icon={<Pencil />}
                           onClick={() => {
                             setEditing(d);
                             setFormOpen(true);
                           }}
-                        >
-                          <Pencil /> {t("common.edit")}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
+                        />
+                        <IconAction
+                          label={t("diagnoses.actions.moveToRemission")}
+                          icon={<CirclePause />}
                           onClick={async () => {
                             await updateDiagnosis(d.id, { status: "remission" });
                             void reload();
@@ -178,9 +177,7 @@ export function Diagnoses() {
                               },
                             );
                           }}
-                        >
-                          {t("diagnoses.actions.moveToRemission")}
-                        </Button>
+                        />
                         {resolvingId === d.id ? (
                           <div className="flex w-full items-center gap-1.5 pt-1">
                             <DateInput value={resolveDate} onChange={setResolveDate} />
@@ -213,21 +210,19 @@ export function Diagnoses() {
                             </Button>
                           </div>
                         ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
+                          <IconAction
+                            label={t("diagnoses.actions.resolve")}
+                            icon={<CircleCheck />}
                             onClick={() => {
                               setResolveDate(todayISO());
                               setResolvingId(d.id);
                             }}
-                          >
-                            {t("diagnoses.actions.resolve")}
-                          </Button>
+                          />
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="ml-auto text-destructive"
+                        <IconAction
+                          label={t("common.delete")}
+                          icon={<Trash2 />}
+                          destructive
                           onClick={async () => {
                             const { id: _id, ...data } = d;
                             await deleteDiagnosis(d.id);
@@ -241,9 +236,7 @@ export function Diagnoses() {
                               },
                             );
                           }}
-                        >
-                          <Trash2 />
-                        </Button>
+                        />
                       </div>
                     </CardContent>
                   </Card>

@@ -12,6 +12,7 @@ import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { suggestVaccineExpiry } from "@/lib/vaccine-schedule";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -160,17 +161,19 @@ export function Vaccines() {
                                       attachment={attachmentMap.get(v.attachmentId) ?? null}
                                     />
                                   )}
-                                  <Button
-                                    variant="ghost"
-                                    size="iconSm"
-                                    aria-label={t("common.edit")}
-                                    onClick={() => {
-                                      setEditing(v);
-                                      setFormOpen(true);
-                                    }}
-                                  >
-                                    <Pencil />
-                                  </Button>
+                                  <Tooltip content={t("common.edit")}>
+                                    <Button
+                                      variant="ghost"
+                                      size="iconSm"
+                                      aria-label={t("common.edit")}
+                                      onClick={() => {
+                                        setEditing(v);
+                                        setFormOpen(true);
+                                      }}
+                                    >
+                                      <Pencil />
+                                    </Button>
+                                  </Tooltip>
                                 </div>
                               </TableCell>
                             </TableRow>

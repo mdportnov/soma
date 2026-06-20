@@ -8,6 +8,7 @@ import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
+import { IconAction } from "@/components/app/IconAction";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,21 +152,19 @@ export function Medications() {
                           {m.endDate ? formatDate(m.endDate) : t("timeline.now")}
                           {m.purpose && <span> · {m.purpose}</span>}
                         </p>
-                        <div className="mt-3 flex gap-1.5 border-t pt-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
+                        <div className="mt-3 flex items-center gap-1.5 border-t pt-3">
+                          <IconAction
+                            label={t("common.edit")}
+                            icon={<Pencil />}
                             onClick={() => {
                               setEditing(m);
                               setFormOpen(true);
                             }}
-                          >
-                            <Pencil /> {t("common.edit")}
-                          </Button>
+                          />
                           {!m.endDate ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
+                            <IconAction
+                              label={t("medications.actions.stopToday")}
+                              icon={<CircleStop />}
                               onClick={async () => {
                                 // Stop is reversible: an Undo (and the permanent
                                 // Resume below) restores the open-ended period —
@@ -181,26 +180,22 @@ export function Medications() {
                                   },
                                 );
                               }}
-                            >
-                              <CircleStop /> {t("medications.actions.stopToday")}
-                            </Button>
+                            />
                           ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
+                            <IconAction
+                              label={t("medications.actions.resume")}
+                              icon={<RotateCcw />}
                               onClick={async () => {
                                 await updateMedication(m.id, { endDate: null });
                                 void reload();
                                 toast.show(t("toasts.medResumed", { name: m.name }));
                               }}
-                            >
-                              <RotateCcw /> {t("medications.actions.resume")}
-                            </Button>
+                            />
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="ml-auto text-destructive"
+                          <IconAction
+                            label={t("common.delete")}
+                            icon={<Trash2 />}
+                            destructive
                             onClick={async () => {
                               const { id: _id, ...data } = m;
                               await deleteMedication(m.id);
@@ -214,9 +209,7 @@ export function Medications() {
                                 },
                               );
                             }}
-                          >
-                            <Trash2 />
-                          </Button>
+                          />
                         </div>
                       </CardContent>
                     </Card>

@@ -1,5 +1,5 @@
-import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, FlaskConical, Pill, Stethoscope } from "lucide-react";
+import { useParams } from "react-router-dom";
+import { AlertTriangle, FlaskConical, Pill, Stethoscope } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getMedication, getMedicationRelations, listAllergies } from "@/db/repos";
@@ -7,6 +7,7 @@ import type { Allergy } from "@/db/schema";
 import { matchDrugAllergies } from "@/lib/drug-allergy";
 import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Badge } from "@/components/ui/badge";
@@ -64,13 +65,12 @@ export function MedicationDetail() {
 
   return (
     <>
-      <Link
-        to="/medications"
-        className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> {t("nav.medications")}
-      </Link>
       <PageHeader
+        back="/medications"
+        breadcrumbs={crumbs(
+          { label: t("nav.medications"), to: "/medications" },
+          { label: medication.name, selectable: true },
+        )}
         title={medication.name}
         description={medication.purpose ?? undefined}
         actions={

@@ -1,9 +1,10 @@
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, FlaskConical, Pill, Stethoscope } from "lucide-react";
+import { useParams } from "react-router-dom";
+import { FlaskConical, Pill, Stethoscope } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
 import { getDiagnosis, getDiagnosisRelations } from "@/db/repos";
 import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
 import { PageHeader } from "@/components/app/PageHeader";
+import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Badge } from "@/components/ui/badge";
@@ -51,13 +52,12 @@ export function DiagnosisDetail() {
 
   return (
     <>
-      <Link
-        to="/diagnoses"
-        className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> {t("nav.diagnoses")}
-      </Link>
       <PageHeader
+        back="/diagnoses"
+        breadcrumbs={crumbs(
+          { label: t("nav.diagnoses"), to: "/diagnoses" },
+          { label: diagnosis.name, selectable: true },
+        )}
         title={diagnosis.name}
         description={diagnosis.icdCode ? `ICD ${diagnosis.icdCode}` : undefined}
         actions={

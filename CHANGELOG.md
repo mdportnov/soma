@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Allergies** section: severity-aware allergy records (mild → anaphylactic); anaphylactic
+  entries are protected from hard-deletion (must be resolved). Drug-allergy interaction warnings
+  surfaced on medications.
+- **Vaccines** section: dose series, manufacturer/batch and expiry tracking; a WHO childhood
+  immunization calendar; childhood-vs-actionable split with travel-vaccine guidance.
+- **Imaging** section: X-ray / CT / MRI / ultrasound / … records, entered manually or AI-imported.
+- **Journal**: weight, blood pressure and symptom logs; weight goals with a glide-path projection
+  and an overview chart.
+- **Emergency Card**: a printable/exportable summary of blood type, conditions, medications and
+  allergies for emergencies.
+- **Encrypted backups**: AES-256-GCM snapshots (Argon2id key from a passphrase in the OS keychain)
+  written into a cloud-synced folder (iCloud / Google Drive / Dropbox / OneDrive), with scheduled
+  runs, rotation and restore. The live database never leaves the device.
+- **Search & Command Palette**: SQLite FTS5 full-text search across all records, with a ⌘K palette.
+- **Local MCP server** (`mcp/`): typed stdio tools over `soma.db` for AI assistants, with one-click
+  setup from Settings.
+- **AI import for every document type** via a doc-type registry: lab reports, vaccine certificates,
+  discharge summaries, imaging reports, prescriptions/medication lists and allergy records.
+- **Multilingual lab parsing**: the model returns an English `analyte_en` translation key so
+  non-English reports map against the English dictionary; safer mapping + model guidance.
+- **Reference explanations** for every biomarker (what high/low means, what affects it), EN + RU.
+- **Sex/age-specific reference ranges**; per-result provenance (source page, mapping confidence,
+  review state); source-file linking; persistent "needs review".
+- **Navigation**: route registry, breadcrumbs, hierarchical back and scroll restoration; detail
+  pages for diagnoses and medications with related-entity links.
+- First-run **onboarding** wizard and profile fields; dashboard **attention digest** with a health
+  verdict and safety banner.
+- UI **localization (EN/RU)**, settings information-architecture overhaul, searchable unit
+  comboboxes, attachment viewer.
+- Dev fake-data seeder (`pnpm seed:dev`).
+
+### Changed
+
+- Biomarker dictionary expanded from ~65 to **178 markers**.
+- **Clinically-aware critical flags**: per-analyte panic thresholds replace blind multipliers, so a
+  benign extreme (e.g. 0% eosinophils) is no longer reported as critical; unit-integrity hardening
+  and biomarker sparklines on the labs view.
+- Chrome text is non-selectable by default; data opts in. Migrations consolidated into a single
+  initial schema.
+
+### Fixed
+
+- Domain-logic, data-integrity and memory-leak hardening across the stack.
+- Hardened corner cases across onboarding, import, CRUD and export flows.
+- Vaccines: dropped false "overdue" flags; childhood vs actionable split.
+- Weight glide-path rendering in WKWebView; weight-chart fit; dropdown jitter/positioning.
+- CI: declare `tsx` as a devDependency for the import gates; stub the MCP sidecar binary for the
+  clippy job.
+
+> **Note:** the breadth of work above (new sections, encrypted backups, MCP server, 178-marker
+> dictionary, all-section AI import) warrants cutting a **`0.2.0`** release tag.
+
 ## [0.1.0] — 2026-06-09
 
 ### Added

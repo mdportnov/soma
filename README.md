@@ -45,29 +45,44 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 
 ## Features
 
-- 🧬 **Biomarker dictionary** — ~65 seeded markers (CBC, lipids, hormones, thyroid, vitamins, …)
-  with reference & optimal ranges, multilingual aliases (EN/RU), custom markers supported
-- 📈 **Trend charts** — value over time with shaded norm/optimal bands and out-of-range markers
-- 💊 **Medications & supplements** — dose, schedule, intake periods, purpose; overlay on any chart
-- 🩺 **Visits, diagnoses, prescriptions** — full CRUD, linked together
+- 🧬 **Biomarker dictionary** — ~180 seeded markers (CBC, lipids, hormones, thyroid, vitamins, …)
+  with reference & optimal ranges, **sex/age-specific ranges**, plain-language explanations (EN/RU),
+  multilingual aliases, custom markers supported
+- 📈 **Trend charts** — value over time with shaded norm/optimal bands, **clinically-aware
+  out-of-range & critical flags**, and cross-panel change detection
+- 💊 **Medications & supplements** — dose, schedule, intake periods, purpose; overlay on any chart;
+  **drug-allergy interaction warnings**
+- 🩺 **Visits, diagnoses, prescriptions** — full CRUD, linked together with detail pages
+- 🚑 **Allergies & Emergency Card** — severity-aware allergy records (anaphylactic entries are
+  protected from deletion) and a printable emergency summary (blood type, conditions, meds, allergies)
+- 💉 **Vaccines** — records with dose series & expiry, a WHO childhood-immunization calendar, and
+  travel/actionable vaccine guidance
+- 🩻 **Imaging** — X-ray / CT / MRI / ultrasound / … records, entered manually or AI-imported
+- 📓 **Journal** — weight, blood pressure and symptom logs, with weight-goal projection
 - 🗓️ **Unified timeline** — labs, visits, diagnoses as dots, medication periods as bars, one scale
-- 🤖 **AI import** (bring your own key) — PDF/photo in any language → structured extraction →
+- 🤖 **AI import** (bring your own key) — PDF/photo in any language for **labs, vaccine certificates,
+  discharge summaries, imaging reports, prescriptions and allergy records** → structured extraction →
   deterministic dictionary mapping → **mandatory human review** before anything is saved
+- 🔎 **Search & Command Palette** — full-text search (SQLite FTS5) across every record, ⌘K palette
+- 🔐 **Encrypted backups** — AES-256-GCM snapshots (Argon2id key) into your own cloud-synced folder
+  (iCloud / Drive / Dropbox / OneDrive); the live database never leaves the device
+- 🧰 **Local MCP server** — typed stdio tools over your `soma.db` for AI assistants, one-click setup
 - 🌍 **Cross-country units** — Cyrillic-aware unit normalization + per-analyte molar conversions
   (mg/dL ↔ mmol/L, nmol/L ↔ ng/mL, …); unknown conversions are flagged, never guessed
 - 📤 **No lock-in** — full JSON export, lab results CSV export
-- 🌗 Light/dark theme, responsive, keyboard-friendly desktop UI
+- 🌗 Light/dark theme, **EN/RU localization**, responsive, keyboard-friendly desktop UI
 
 ## Privacy model
 
-| Principle          | Implementation                                                                                                                    |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Local-first        | All data in a local SQLite file; fully functional offline                                                                         |
-| AI is opt-in       | Disabled by default; every AI surface shows a stub until you add a key                                                            |
-| Keys in keychain   | API keys live in the OS keychain (macOS Keychain / Windows Credential Manager / Secret Service) — never in the DB or config files |
-| Explicit egress    | Documents are sent to your chosen AI provider only when you click import; network access is scoped to provider APIs only          |
-| Auditability       | Every imported value keeps its original `raw_label` from the source document                                                      |
-| Not medical advice | Every AI output carries a disclaimer                                                                                              |
+| Principle          | Implementation                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local-first        | All data in a local SQLite file; fully functional offline                                                                                   |
+| AI is opt-in       | Disabled by default; every AI surface shows a stub until you add a key                                                                      |
+| Keys in keychain   | API keys live in the OS keychain (macOS Keychain / Windows Credential Manager / Secret Service) — never in the DB or config files           |
+| Explicit egress    | Documents are sent to your chosen AI provider only when you click import; network access is scoped to provider APIs only                    |
+| Encrypted backups  | Snapshots are AES-256-GCM encrypted with an Argon2id key from your passphrase before reaching a cloud-synced folder — unreadable without it |
+| Auditability       | Every imported value keeps its original `raw_label` from the source document                                                                |
+| Not medical advice | Every AI output carries a disclaimer                                                                                                        |
 
 ## Getting started
 
@@ -121,20 +136,28 @@ src/
 │   ├── schema.ts             # Drizzle schema — single source of truth
 │   ├── migrations/           # generated by drizzle-kit, applied in-app at startup
 │   ├── client.ts             # Drizzle over tauri-plugin-sql (sqlite-proxy driver)
-│   ├── seed-biomarkers.ts    # seeded dictionary with ranges + EN/RU aliases
+│   ├── seed-biomarkers.ts    # seeded dictionary (~180) with ranges + EN/RU aliases
+│   ├── search.ts             # SQLite FTS5 full-text search across records
 │   └── repos.ts              # typed data access + unified timeline selector
 ├── ai/
 │   ├── model-registry.json   # configurable model list (vision/pdf flags), no hardcoded models
-│   ├── types.ts              # AIProvider: extractFromDocument / mapBiomarker / chat
+│   ├── types.ts              # AIProvider: extractStructured / mapBiomarker / chat / testKey
+│   ├── prompts.ts            # all extraction prompts + the mandatory AI disclaimer
 │   ├── providers/            # Anthropic · OpenAI · Gemini · OpenRouter adapters
+│   ├── import/               # doc-type registry: lab · vaccine · discharge · imaging ·
+│   │                         #   prescription · allergy (extract → validate → review → save)
 │   ├── pipeline/map.ts       # deterministic mapping: normalize → exact/alias → fuzzy → AI
 │   └── keystore.ts           # OS keychain bridge (Rust commands)
 ├── pages/                    # Dashboard · Timeline · Biomarkers · Labs · Import wizard ·
-│                             # Medications · Visits · Diagnoses · Settings
+│                             #   Medications · Visits · Diagnoses · Allergies · Vaccines ·
+│                             #   Imaging · Journal · Emergency card · Onboarding · Settings
 └── components/
+    ├── app/CommandPalette.tsx         # ⌘K search/navigation
     ├── charts/TrendChart.tsx          # ref/optimal bands + medication overlay
     └── charts/HorizontalTimeline.tsx  # all events on one horizontal scale
 src-tauri/                    # Rust shell: SQL/dialog/fs/http plugins + keyring commands
+    ├── backup.rs             # encrypted .somabk snapshots (Argon2id + AES-256-GCM)
+    └── mcp.rs                # one-click local MCP server setup
 ```
 
 ### AI import pipeline
@@ -157,7 +180,7 @@ flowchart LR
 
 ## Roadmap
 
-### ✅ v0.1 — MVP core _(current)_
+### ✅ v0.1 — MVP core
 
 - [x] Drizzle/SQLite schema + migrations for all entities
 - [x] Biomarker dictionary with reference/optimal ranges, aliases, custom markers
@@ -169,14 +192,29 @@ flowchart LR
 - [x] AI import: extraction → deterministic mapping → review UI
 - [x] JSON/CSV export, light/dark theme
 
-### 🔜 v0.2 — Quality of life
+### ✅ v0.2 — Sections, safety & polish _(shipped)_
+
+- [x] Allergies (severity-aware, anaphylactic delete guard) + drug-allergy interaction warnings
+- [x] Vaccines: dose series & expiry, WHO childhood-immunization calendar, travel guidance
+- [x] Imaging records (X-ray / CT / MRI / ultrasound), manual + AI import
+- [x] Journal: weight, blood pressure & symptoms, with weight-goal projection
+- [x] Emergency Card (blood type, conditions, medications, allergies)
+- [x] AI import for all doc types: lab · vaccine · discharge · imaging · prescription · allergy
+- [x] Dictionary grown to ~180 markers + plain-language explanations (EN/RU)
+- [x] Sex/age-specific reference ranges + clinically-aware critical flags
+- [x] Cross-panel correlation & notable-change detection
+- [x] Encrypted cloud-folder backups (Argon2id + AES-256-GCM) with scheduled runs & restore
+- [x] Full-text search (FTS5) + ⌘K command palette, attachment viewer
+- [x] Local MCP server with one-click setup
+- [x] Navigation: route registry, breadcrumbs, hierarchical back; entity detail pages & links
+- [x] UI localization (EN/RU), searchable unit comboboxes, custom biomarkers with ranges/aliases
+
+### 🔜 Quality of life — remaining
 
 - [ ] Side-by-side comparison of two lab dates
 - [ ] Medication adherence log UI (`medication_log` is already in the schema)
-- [ ] Attachment viewer (open source PDF/photo from a panel)
-- [ ] Expanded unit conversion table & per-lab unit memory
-- [ ] UI localization (Russian first)
-- [ ] In-app biomarker dictionary editor (ranges, aliases)
+- [ ] Per-lab unit memory & further unit-table coverage
+- [ ] In-app editor for seeded dictionary entries (ranges, aliases)
 
 ### 🧠 v0.3 — AI analysis & research
 
@@ -185,9 +223,8 @@ flowchart LR
 - [ ] Personal research knowledge base — your PDFs as RAG sources with citations
 - [ ] Lifestyle context cards (sleep, training, stress) to enrich AI analysis
 
-### 🚀 v1.0 — Sync & sharing
+### 🚀 v1.0 — Reports, reminders & sharing
 
-- [ ] Encrypted Google Drive backup (`appDataFolder`, E2E via age/libsodium)
 - [ ] PDF report generator for doctors
 - [ ] Reminders: medication intake & scheduled re-testing (every N months)
 - [ ] Multi-profile (family) + viewer-role sharing

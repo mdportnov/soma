@@ -111,6 +111,17 @@ jobs:
       - name: Stub frontend dist for clippy
         run: mkdir -p dist && touch dist/index.html
 
+      # tauri-build validates the externalBin (MCP sidecar) path exists during
+      # codegen. clippy never runs the binary, so an empty stub at the host
+      # target-triple path is enough — the real sidecar is built by the `sidecar`
+      # job and at release time.
+      - name: Stub MCP sidecar binary for clippy
+        run: |
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          mkdir -p src-tauri/binaries
+          touch "src-tauri/binaries/soma-mcp-$triple"
+          chmod +x "src-tauri/binaries/soma-mcp-$triple"
+
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
         working-directory: src-tauri

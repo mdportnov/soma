@@ -408,6 +408,23 @@ export const en = {
     databaseFailed: "Failed to open the local database",
   },
 
+  // Lab comparison (two panels side by side)
+  labCompare: {
+    title: "Compare lab dates",
+    description: "See two panels side by side and what changed between them.",
+    button: "Compare",
+    panelA: "First panel",
+    panelB: "Second panel",
+    selectPrompt: "Pick two lab panels to compare.",
+    samePanel: "Pick two different panels.",
+    needTwoPanels: "You need at least two lab panels to compare.",
+    columns: {
+      biomarker: "Biomarker",
+      change: "Change",
+      status: "Status",
+    },
+  },
+
   // Labs page
   labs: {
     title: "Lab results",

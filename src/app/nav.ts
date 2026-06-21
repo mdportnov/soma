@@ -40,6 +40,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/labs": { titleKey: "nav.labResults" },
   "/labs/new": { titleKey: "breadcrumb.labPanelNew", parent: "/labs" },
   "/labs/import": { titleKey: "breadcrumb.importWizard", parent: "/labs" },
+  "/labs/compare": { titleKey: "labCompare.title", parent: "/labs" },
   "/labs/:id": { titleKey: "nav.labResults", parent: "/labs" },
   "/labs/:id/verify": { titleKey: "breadcrumb.verify", parent: "/labs/:id" },
   "/visits": { titleKey: "nav.visits" },

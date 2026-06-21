@@ -10,6 +10,7 @@ import { Timeline } from "@/pages/Timeline";
 import { Biomarkers } from "@/pages/Biomarkers";
 import { BiomarkerDetail } from "@/pages/BiomarkerDetail";
 import { Labs } from "@/pages/Labs";
+import { LabCompare } from "@/pages/LabCompare";
 import { LabPanelNew } from "@/pages/LabPanelNew";
 import { LabPanelDetail } from "@/pages/LabPanelDetail";
 import { VerifyImport } from "@/pages/VerifyImport";
@@ -48,6 +49,7 @@ export default function App() {
                 <Route path="labs" element={<Labs />} />
                 <Route path="labs/new" element={<LabPanelNew />} />
                 <Route path="labs/import" element={<ImportWizard />} />
+                <Route path="labs/compare" element={<LabCompare />} />
                 <Route path="labs/:id" element={<LabPanelDetail />} />
                 <Route path="labs/:id/verify" element={<VerifyImport />} />
                 <Route path="medications" element={<Medications />} />

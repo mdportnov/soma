@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Paperclip, Plus, Sparkles, TestTubes } from "lucide-react";
+import { ArrowLeftRight, Paperclip, Plus, Sparkles, TestTubes } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { listPanels } from "@/db/repos";
@@ -34,6 +34,13 @@ export function Labs() {
         description={t("labs.description")}
         actions={
           <>
+            {panels.length >= 2 && (
+              <Link to="/labs/compare">
+                <Button variant="outline">
+                  <ArrowLeftRight /> {t("labCompare.button")}
+                </Button>
+              </Link>
+            )}
             <Link to="/labs/import">
               <Button variant="outline">
                 <Sparkles /> {t("labs.aiImport")}

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, integer, text, real, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Drizzle schema — single source of truth for the local SQLite database.
@@ -483,6 +483,82 @@ export const bpLog = sqliteTable(
   (t) => [index("bp_log_profile_date_idx").on(t.profileId, t.date)],
 );
 
+// ── lifestyle_log (daily sleep / training / stress context) ─────────────────
+// One row per (profile, date): the daily lifestyle context that enriches AI
+// analysis and trend interpretation. Every field is optional — the user logs
+// whatever they track. The `source` column is forward-looking: today everything
+// is "manual", but the same rows are the target for a future Apple Health /
+// Google Fit / Health Connect sync (see docs/health-data-integrations.md).
+export const lifestyleLog = sqliteTable(
+  "lifestyle_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    date: text("date").notNull(),
+    /** Total sleep for the night, in hours. */
+    sleepHours: real("sleep_hours"),
+    /** Subjective sleep quality, 1 (poor) – 5 (excellent). */
+    sleepQuality: integer("sleep_quality"),
+    /** Total training/activity minutes for the day. */
+    trainingMinutes: integer("training_minutes"),
+    /** Perceived training intensity; null when no training is logged. */
+    trainingIntensity: text("training_intensity", {
+      enum: ["light", "moderate", "intense"],
+    }),
+    /** Step count (device-friendly; manual entry allowed too). */
+    steps: integer("steps"),
+    /** Resting heart rate, bpm — a recovery/stress proxy mappable from wearables. */
+    restingHeartRate: integer("resting_heart_rate"),
+    /** Subjective stress level, 1 (calm) – 5 (very stressed). */
+    stressLevel: integer("stress_level"),
+    /** Subjective energy level, 1 (drained) – 5 (energetic). */
+    energyLevel: integer("energy_level"),
+    notes: text("notes"),
+    /** Provenance — "manual" today; the rest are reserved for future device sync. */
+    source: text("source", {
+      enum: ["manual", "apple_health", "google_fit", "health_connect"],
+    })
+      .notNull()
+      .default("manual"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [uniqueIndex("lifestyle_log_profile_date_uq").on(t.profileId, t.date)],
+);
+
+// ── retest_schedule (scheduled re-testing cadence → notification feed) ───────
+// A passive re-test reminder: "re-check this every N months". It never fires an
+// OS notification — the derived "due / overdue" state is surfaced only in the
+// in-app notifications feed. `lastTestedDate` is the anchor; next due =
+// lastTestedDate + intervalMonths.
+export const retestSchedule = sqliteTable(
+  "retest_schedule",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    /** What to re-test, free text (e.g. "Lipid panel", "Vitamin D", "TSH"). */
+    label: text("label").notNull(),
+    /** Optional link to a dictionary biomarker for deep-linking/context. */
+    biomarkerId: integer("biomarker_id").references(() => biomarker.id),
+    /** Cadence in months between re-tests. */
+    intervalMonths: integer("interval_months").notNull(),
+    /** Anchor date of the most recent test; next due = this + intervalMonths. */
+    lastTestedDate: text("last_tested_date"),
+    notes: text("notes"),
+    /** Pause a schedule without deleting it (drops out of the feed while paused). */
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("retest_schedule_profile_idx").on(t.profileId)],
+);
+
 // ── Inferred row types ─────────────────────────────────────────────────────
 export type Profile = typeof profile.$inferSelect;
 export type NewProfile = typeof profile.$inferInsert;
@@ -518,3 +594,7 @@ export type WeightLog = typeof weightLog.$inferSelect;
 export type NewWeightLog = typeof weightLog.$inferInsert;
 export type BpLog = typeof bpLog.$inferSelect;
 export type NewBpLog = typeof bpLog.$inferInsert;
+export type LifestyleLog = typeof lifestyleLog.$inferSelect;
+export type NewLifestyleLog = typeof lifestyleLog.$inferInsert;
+export type RetestSchedule = typeof retestSchedule.$inferSelect;
+export type NewRetestSchedule = typeof retestSchedule.$inferInsert;

@@ -15,6 +15,13 @@
       "when": 1782081913287,
       "tag": "0001_bouncy_archangel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782083276178,
+      "tag": "0002_nifty_vapor",
+      "breakpoints": true
     }
   ]
 }

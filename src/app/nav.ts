@@ -54,6 +54,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/imaging/:id": { titleKey: "nav.imaging", parent: "/imaging" },
   "/emergency": { titleKey: "emergency.openCard", parent: "/" },
   "/assistant": { titleKey: "nav.assistant" },
+  "/lifestyle": { titleKey: "nav.lifestyle" },
+  "/notifications": { titleKey: "nav.notifications" },
+  "/report": { titleKey: "nav.report" },
 };
 
 /**

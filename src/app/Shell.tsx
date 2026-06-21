@@ -2,8 +2,11 @@ import * as React from "react";
 import { NavLink, Outlet, useLocation, useNavigationType } from "react-router-dom";
 import {
   Activity,
+  Bell,
   CalendarRange,
+  FileText,
   FlaskConical,
+  HeartPulse,
   LayoutDashboard,
   NotebookPen,
   Pill,
@@ -18,6 +21,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { useApp } from "@/app/AppContext";
+import { useQuery } from "@/hooks/useQuery";
+import { getNotificationFeedData } from "@/db/repos";
+import { buildNotificationFeed, loadDismissedIds, visibleNotifications } from "@/lib/notifications";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/app/CommandPalette";
 import logo from "@/assets/logo.svg";
@@ -42,10 +49,54 @@ const NAV: NavItem[] = [
   { kind: "link", to: "/labs", labelKey: "nav.labResults", icon: TestTubes },
   { kind: "link", to: "/biomarkers", labelKey: "nav.biomarkers", icon: Activity },
   { kind: "link", to: "/journal", labelKey: "nav.journal", icon: NotebookPen },
+  { kind: "link", to: "/lifestyle", labelKey: "nav.lifestyle", icon: HeartPulse },
   { kind: "label", labelKey: "nav.care" },
   { kind: "link", to: "/medications", labelKey: "nav.medications", icon: Pill },
   { kind: "link", to: "/visits", labelKey: "nav.visits", icon: Stethoscope },
+  { kind: "link", to: "/report", labelKey: "nav.report", icon: FileText },
 ];
+
+/**
+ * Bell affordance in the chrome header: a count badge of the live in-app
+ * notifications feed (medication-intake nudges + due re-tests), minus anything
+ * the user dismissed. Re-fetched on every navigation so logging a med or
+ * dismissing an item from the feed page reflects without a manual reload.
+ */
+function NotificationBell() {
+  const { t } = useI18n();
+  const { profileId } = useApp();
+  const location = useLocation();
+  const { data: count } = useQuery(async () => {
+    const data = await getNotificationFeedData(profileId);
+    const items = visibleNotifications(buildNotificationFeed(data), loadDismissedIds());
+    return items.length;
+    // Re-run on navigation so the badge stays fresh across the session.
+  }, [profileId, location.key]);
+
+  const n = count ?? 0;
+  return (
+    <NavLink
+      to="/notifications"
+      title={t("nav.notifications")}
+      aria-label={t("nav.notifications")}
+      className={({ isActive }) =>
+        cn(
+          "relative inline-flex size-8 items-center justify-center rounded-md transition-colors",
+          isActive
+            ? "bg-secondary text-secondary-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        )
+      }
+    >
+      <Bell className="size-4" />
+      {n > 0 && (
+        <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+          {n > 9 ? "9+" : n}
+        </span>
+      )}
+    </NavLink>
+  );
+}
 
 export function Shell() {
   const { t } = useI18n();
@@ -109,16 +160,19 @@ export function Shell() {
         <div className="flex h-14 items-center gap-2.5 border-b px-3 md:px-4">
           <img src={logo} alt="Soma" className="size-7 shrink-0" />
           <span className="hidden text-sm font-semibold tracking-tight md:block">Soma</span>
-          <Button
-            variant="ghost"
-            size="iconSm"
-            className="ml-auto hidden text-muted-foreground md:inline-flex"
-            onClick={() => setSearchOpen(true)}
-            title={`${t("search.open")} (⌘K)`}
-            aria-label={t("search.open")}
-          >
-            <Search className="size-4" />
-          </Button>
+          <div className="ml-auto hidden items-center gap-0.5 md:flex">
+            <Button
+              variant="ghost"
+              size="iconSm"
+              className="text-muted-foreground"
+              onClick={() => setSearchOpen(true)}
+              title={`${t("search.open")} (⌘K)`}
+              aria-label={t("search.open")}
+            >
+              <Search className="size-4" />
+            </Button>
+            <NotificationBell />
+          </div>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
           {NAV.map((item) => {

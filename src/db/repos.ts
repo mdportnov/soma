@@ -11,10 +11,12 @@ import {
   imagingRecord,
   labPanel,
   labResult,
+  lifestyleLog,
   medication,
   medicationLog,
   prescription,
   profile,
+  retestSchedule,
   symptomLog,
   vaccine,
   visit,
@@ -27,6 +29,7 @@ import {
   type ImagingRecord,
   type LabPanel,
   type LabResult,
+  type LifestyleLog,
   type Medication,
   type MedicationLog,
   type NewAllergy,
@@ -37,14 +40,17 @@ import {
   type NewImagingRecord,
   type NewLabPanel,
   type NewLabResult,
+  type NewLifestyleLog,
   type NewMedication,
   type NewPrescription,
   type NewProfile,
+  type NewRetestSchedule,
   type NewSymptomLog,
   type NewVaccine,
   type NewVisit,
   type NewWeightLog,
   type Profile,
+  type RetestSchedule,
   type SymptomLog,
   type Vaccine,
   type Visit,
@@ -1013,6 +1019,125 @@ export async function deleteBpEntry(id: number) {
   await db.delete(bpLog).where(eq(bpLog.id, id));
 }
 
+// ── lifestyle log (daily sleep / training / stress context) ─────────────────
+
+/** All lifestyle entries for a profile, newest day first. */
+export async function listLifestyleLog(profileId: number): Promise<LifestyleLog[]> {
+  return db
+    .select()
+    .from(lifestyleLog)
+    .where(eq(lifestyleLog.profileId, profileId))
+    .orderBy(desc(lifestyleLog.date));
+}
+
+/** The single lifestyle entry for one calendar day, if present. */
+export async function getLifestyleByDate(
+  profileId: number,
+  date: string,
+): Promise<LifestyleLog | null> {
+  const rows = await db
+    .select()
+    .from(lifestyleLog)
+    .where(and(eq(lifestyleLog.profileId, profileId), eq(lifestyleLog.date, date)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Upserts the lifestyle entry for a (profile, date): there is at most one row
+ * per day (enforced by a unique index), so a same-day save updates in place
+ * rather than stacking duplicate rows. Returns the row id.
+ */
+export async function upsertLifestyleLog(data: NewLifestyleLog): Promise<number> {
+  const existing = await getLifestyleByDate(data.profileId, data.date);
+  if (existing) {
+    const { id: _id, profileId: _p, date: _d, createdAt: _c, ...patch } = data;
+    await db.update(lifestyleLog).set(patch).where(eq(lifestyleLog.id, existing.id));
+    return existing.id;
+  }
+  const [row] = await db.insert(lifestyleLog).values(data).returning({ id: lifestyleLog.id });
+  return row.id;
+}
+
+export async function deleteLifestyleLog(id: number): Promise<void> {
+  await db.delete(lifestyleLog).where(eq(lifestyleLog.id, id));
+}
+
+/** Recent lifestyle entries (oldest-first) within the last `days` — AI context + trends. */
+export async function getRecentLifestyle(profileId: number, days = 30): Promise<LifestyleLog[]> {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const rows = await db
+    .select()
+    .from(lifestyleLog)
+    .where(and(eq(lifestyleLog.profileId, profileId), sql`${lifestyleLog.date} >= ${since}`))
+    .orderBy(asc(lifestyleLog.date));
+  return rows;
+}
+
+// ── retest schedules (scheduled re-testing → notifications feed) ─────────────
+
+export async function listRetestSchedules(profileId: number): Promise<RetestSchedule[]> {
+  return db
+    .select()
+    .from(retestSchedule)
+    .where(eq(retestSchedule.profileId, profileId))
+    .orderBy(asc(retestSchedule.label));
+}
+
+export async function createRetestSchedule(data: NewRetestSchedule): Promise<number> {
+  const [row] = await db.insert(retestSchedule).values(data).returning({ id: retestSchedule.id });
+  return row.id;
+}
+
+export async function updateRetestSchedule(id: number, data: Partial<NewRetestSchedule>) {
+  await db.update(retestSchedule).set(data).where(eq(retestSchedule.id, id));
+}
+
+export async function deleteRetestSchedule(id: number) {
+  await db.delete(retestSchedule).where(eq(retestSchedule.id, id));
+}
+
+// ── notification feed (derived, read-only) ──────────────────────────────────
+// The feed is computed, never stored: medication-intake nudges + due/overdue
+// re-tests. It is purely informational — no OS notifications are ever raised.
+// `buildNotificationFeed` (src/lib/notifications.ts) folds this into feed items.
+
+export type NotificationFeedData = {
+  today: string;
+  /** Standing (non-PRN) medications that are active today. */
+  medications: Medication[];
+  /** Ids of medications already logged (taken or skipped) today. */
+  loggedTodayMedIds: number[];
+  /** Active re-test schedules. */
+  retestSchedules: RetestSchedule[];
+};
+
+export async function getNotificationFeedData(profileId: number): Promise<NotificationFeedData> {
+  const today = new Date().toISOString().slice(0, 10);
+  const [meds, schedules, todayLogs] = await Promise.all([
+    listMedications(profileId),
+    db
+      .select()
+      .from(retestSchedule)
+      .where(and(eq(retestSchedule.profileId, profileId), eq(retestSchedule.active, true)))
+      .orderBy(asc(retestSchedule.label)),
+    db
+      .select({ medicationId: medicationLog.medicationId })
+      .from(medicationLog)
+      .innerJoin(medication, eq(medicationLog.medicationId, medication.id))
+      .where(and(eq(medication.profileId, profileId), like(medicationLog.takenAt, `${today}%`))),
+  ]);
+  const standing = meds.filter(
+    (m) => !m.asNeeded && (m.endDate == null || m.endDate >= today) && m.startDate <= today,
+  );
+  return {
+    today,
+    medications: standing,
+    loggedTodayMedIds: [...new Set(todayLogs.map((r) => r.medicationId))],
+    retestSchedules: schedules,
+  };
+}
+
 // ── emergency card (computed aggregate, read-only) ─────────────────────────
 
 export type EmergencyCardData = {
@@ -1048,6 +1173,154 @@ export async function getEmergencyCard(profileId: number): Promise<EmergencyCard
     asNeededMedications: meds.filter((m) => m.endDate == null && m.asNeeded),
     activeDiagnoses: diagnoses.filter((d) => d.status === "active"),
     recentVaccines: [...vaccines].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5),
+  };
+}
+
+// ── doctor report (computed aggregate, read-only) ──────────────────────────
+// A printable clinical summary for a doctor's visit: current problems, meds,
+// allergies, and the lab/visit/imaging history within a chosen window. Composed
+// from the existing repos so the PDF generator (src/lib/doctor-report-pdf.ts)
+// stays a pure renderer over this shape.
+
+export type DoctorReportOptions = {
+  /** Inclusive ISO `YYYY-MM-DD` lower bound for time-bounded sections; null = all. */
+  fromDate?: string | null;
+  /** Inclusive ISO `YYYY-MM-DD` upper bound; null = up to today. */
+  toDate?: string | null;
+  /** Cap on lab panels rendered in full (newest first); the rest are omitted. */
+  maxPanels?: number;
+  /** Section toggles — let the user tailor what the doctor sees. */
+  sections?: Partial<Record<DoctorReportSection, boolean>>;
+};
+
+export type DoctorReportSection =
+  | "diagnoses"
+  | "medications"
+  | "allergies"
+  | "labs"
+  | "visits"
+  | "imaging"
+  | "vaccines"
+  | "lifestyle";
+
+export type DoctorReportPanel = { panel: LabPanel; results: ResultWithBiomarker[] };
+
+export type DoctorReportAbnormal = {
+  biomarker: Biomarker;
+  value: number;
+  unit: string;
+  flag: string | null;
+  date: string;
+};
+
+export type DoctorReportData = {
+  profile: Profile;
+  generatedAt: string;
+  range: { from: string | null; to: string | null };
+  sections: Record<DoctorReportSection, boolean>;
+  activeDiagnoses: Diagnosis[];
+  inactiveDiagnoses: Diagnosis[];
+  activeMedications: Medication[];
+  asNeededMedications: Medication[];
+  pastMedications: Medication[];
+  activeAllergies: Allergy[];
+  resolvedAllergies: Allergy[];
+  /** Latest out-of-range markers across all history — the "abnormal now" snapshot. */
+  abnormalLatest: DoctorReportAbnormal[];
+  /** Lab panels within range, newest first, full results, capped at `maxPanels`. */
+  panels: DoctorReportPanel[];
+  visits: Visit[];
+  imaging: ImagingRecord[];
+  vaccines: Vaccine[];
+  /** Recent lifestyle entries within range (oldest-first) for the context summary. */
+  lifestyle: LifestyleLog[];
+};
+
+const ALL_REPORT_SECTIONS: DoctorReportSection[] = [
+  "diagnoses",
+  "medications",
+  "allergies",
+  "labs",
+  "visits",
+  "imaging",
+  "vaccines",
+  "lifestyle",
+];
+
+/** True when `date` (YYYY-MM-DD) falls within the optional [from, to] bounds. */
+function withinRange(date: string, from: string | null, to: string | null): boolean {
+  const d = date.slice(0, 10);
+  if (from && d < from) return false;
+  if (to && d > to) return false;
+  return true;
+}
+
+export async function getDoctorReportData(
+  profileId: number,
+  opts: DoctorReportOptions = {},
+): Promise<DoctorReportData | null> {
+  const p = await getProfile(profileId);
+  if (!p) return null;
+
+  const from = opts.fromDate ?? null;
+  const to = opts.toDate ?? null;
+  const maxPanels = opts.maxPanels ?? 8;
+  const sections = Object.fromEntries(
+    ALL_REPORT_SECTIONS.map((s) => [s, opts.sections?.[s] ?? true]),
+  ) as Record<DoctorReportSection, boolean>;
+
+  const [allergies, meds, diagnoses, vaccines, visits, imaging, panels, latest, biomarkers, life] =
+    await Promise.all([
+      listAllergies(profileId),
+      listMedications(profileId),
+      listDiagnoses(profileId),
+      listVaccines(profileId),
+      listVisits(profileId),
+      listImagingRecords(profileId),
+      listPanels(profileId),
+      getLatestResults(profileId),
+      listBiomarkers(),
+      listLifestyleLog(profileId),
+    ]);
+
+  const bySeverity = (a: Allergy, b: Allergy) =>
+    SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+
+  // Latest out-of-range snapshot (independent of the date window — "abnormal now").
+  const bioById = new Map(biomarkers.map((b) => [b.id, b]));
+  const abnormalLatest: DoctorReportAbnormal[] = [];
+  for (const [biomarkerId, r] of latest) {
+    if (!r.outOfRange) continue;
+    const bio = bioById.get(biomarkerId);
+    if (!bio) continue;
+    abnormalLatest.push({ biomarker: bio, value: r.value, unit: r.unit, flag: r.flag, date: r.date });
+  }
+  abnormalLatest.sort((a, b) => a.biomarker.canonicalName.localeCompare(b.biomarker.canonicalName));
+
+  // Lab panels in range, newest first, with full results (capped).
+  const panelsInRange = panels.filter((pn) => withinRange(pn.date, from, to)).slice(0, maxPanels);
+  const reportPanels: DoctorReportPanel[] = await Promise.all(
+    panelsInRange.map(async (pn) => ({ panel: pn, results: await getPanelResults(pn.id) })),
+  );
+
+  return {
+    profile: p,
+    generatedAt: new Date().toISOString(),
+    range: { from, to },
+    sections,
+    activeDiagnoses: diagnoses.filter((d) => d.status === "active"),
+    inactiveDiagnoses: diagnoses.filter((d) => d.status !== "active"),
+    activeMedications: meds.filter((m) => m.endDate == null && !m.asNeeded),
+    asNeededMedications: meds.filter((m) => m.endDate == null && m.asNeeded),
+    pastMedications: meds.filter((m) => m.endDate != null),
+    activeAllergies: allergies.filter((a) => a.status === "active").sort(bySeverity),
+    resolvedAllergies: allergies.filter((a) => a.status === "resolved").sort(bySeverity),
+    abnormalLatest,
+    panels: reportPanels,
+    visits: visits.filter((v) => withinRange(v.date, from, to)),
+    imaging: imaging.filter((i) => withinRange(i.date, from, to)),
+    vaccines: [...vaccines].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12),
+    lifestyle: [...life].filter((l) => withinRange(l.date, from, to)).sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
 

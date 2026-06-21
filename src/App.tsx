@@ -28,6 +28,9 @@ import { Journal } from "@/pages/Journal";
 import { Imaging } from "@/pages/Imaging";
 import { ImagingNew } from "@/pages/ImagingNew";
 import { AiAnalysis } from "@/pages/AiAnalysis";
+import { Lifestyle } from "@/pages/Lifestyle";
+import { Notifications } from "@/pages/Notifications";
+import { DoctorReport } from "@/pages/DoctorReport";
 import { Settings } from "@/pages/Settings";
 
 export default function App() {
@@ -62,10 +65,13 @@ export default function App() {
                 <Route path="vaccines" element={<Vaccines />} />
                 <Route path="emergency" element={<EmergencyCard />} />
                 <Route path="journal" element={<Journal />} />
+                <Route path="lifestyle" element={<Lifestyle />} />
                 <Route path="imaging" element={<Imaging />} />
                 <Route path="imaging/new" element={<ImagingNew />} />
                 <Route path="imaging/:id" element={<ImagingNew />} />
                 <Route path="assistant" element={<AiAnalysis />} />
+                <Route path="notifications" element={<Notifications />} />
+                <Route path="report" element={<DoctorReport />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
             </Routes>

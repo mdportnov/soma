@@ -148,6 +148,11 @@ export const TEST_PROMPT = `Reply with exactly the word "ok".`;
 export const AI_DISCLAIMER =
   "AI-generated content. Not medical advice — always consult a qualified clinician.";
 
+/** Removes trailing commas (`,]` / `,}`) a model commonly emits — salvage only. */
+function stripTrailingCommas(s: string): string {
+  return s.replace(/,(\s*[}\]])/g, "$1");
+}
+
 /** Robustly pulls a JSON value out of a model response (fences, preamble). */
 export function extractJson<T>(text: string): T {
   const cleaned = text
@@ -174,7 +179,13 @@ export function extractJson<T>(text: string): T {
       if (ch === '"') inString = true;
       else if (ch === open) depth++;
       else if (ch === close && --depth === 0) {
-        return JSON.parse(cleaned.slice(start, i + 1)) as T;
+        const slice = cleaned.slice(start, i + 1);
+        try {
+          return JSON.parse(slice) as T;
+        } catch {
+          // Otherwise-valid JSON with trailing commas is a very common LLM output.
+          return JSON.parse(stripTrailingCommas(slice)) as T;
+        }
       }
     }
     throw new Error("Malformed JSON in model response");

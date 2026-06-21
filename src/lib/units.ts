@@ -16,27 +16,33 @@ import type { Biomarker } from "@/db/schema";
  * ("ммоль" before "моль" before "мм"/"мг"), single letters last.
  */
 export function normalizeUnit(u: string): string {
-  return u
-    .trim()
-    .toLowerCase()
-    .replace(/μ|µ/g, "µ")
-    .replace(/ме(?=\/|$)/g, "iu") // МЕ (междунар. единицы) = IU
-    .replace(/ед(?=\/|$)/g, "u") // Ед = U
-    .replace(/мк/g, "µ")
-    .replace(/ммоль/g, "mmol")
-    .replace(/нмоль/g, "nmol")
-    .replace(/пмоль/g, "pmol")
-    .replace(/моль/g, "mol")
-    .replace(/мг/g, "mg")
-    .replace(/мл/g, "ml")
-    .replace(/мм/g, "mm")
-    .replace(/нг/g, "ng")
-    .replace(/пг/g, "pg")
-    .replace(/ч(?=$|\b)/g, "h")
-    .replace(/г/g, "g")
-    .replace(/л/g, "l")
-    .replace(/м/g, "m")
-    .replace(/\s+/g, "");
+  return (
+    u
+      .trim()
+      .toLowerCase()
+      .replace(/μ|µ/g, "µ")
+      .replace(/ме(?=\/|$)/g, "iu") // МЕ (междунар. единицы) = IU
+      .replace(/ед(?=\/|$)/g, "u") // Ед = U
+      .replace(/мк/g, "µ")
+      .replace(/ммоль/g, "mmol")
+      .replace(/нмоль/g, "nmol")
+      .replace(/пмоль/g, "pmol")
+      .replace(/моль/g, "mol")
+      .replace(/мг/g, "mg")
+      .replace(/мл/g, "ml")
+      .replace(/мм/g, "mm")
+      .replace(/нг/g, "ng")
+      .replace(/пг/g, "pg")
+      .replace(/ч(?=$|\b)/g, "h")
+      // Cyrillic deciliter: "дл" → "dl" (д→d here, then л→l below). Without this,
+      // "мг/дл" normalized to "mg/дl" and never matched any conversion factor —
+      // breaking the most common molar unit on Russian-language lab reports.
+      .replace(/д/g, "d")
+      .replace(/г/g, "g")
+      .replace(/л/g, "l")
+      .replace(/м/g, "m")
+      .replace(/\s+/g, "")
+  );
 }
 
 export function unitsEquivalent(a: string, b: string): boolean {
@@ -89,7 +95,7 @@ const GENERIC_FACTORS: Record<string, number> = {
   "ng/ml->µg/l": 1,
   "µg/dl->µg/l": 10,
   "µg/l->µg/dl": 0.1,
-  "тыс/мкл->x10^9/l": 1,
+  "тыс/µl->x10^9/l": 1, // key must be the NORMALIZED form (normalizeUnit("тыс/мкл") === "тыс/µl")
   // Mass-concentration (no molar dependence): proteins reported mg/dL vs g/L.
   "mg/dl->g/l": 0.01,
   "g/l->mg/dl": 100,
@@ -153,8 +159,8 @@ const MOLAR_FACTORS: Record<string, Record<string, number>> = {
   "5763-8": { "µg/dl->µmol/l": 0.153, "µmol/l->µg/dl": 6.538 },
   // Insulin
   "20448-7": { "pmol/l->µiu/ml": 0.144, "µiu/ml->pmol/l": 6.945 },
-  // DHEA-S (MW 368.5)
-  "2191-5": { "µg/dl->µmol/l": 0.0271, "µmol/l->µg/dl": 36.85 },
+  // DHEA-S (MW 368.5): forward = 10/368.5 = 0.02714 (round-trips with 36.85)
+  "2191-5": { "µg/dl->µmol/l": 0.02714, "µmol/l->µg/dl": 36.85 },
   // Prolactin (WHO IS 84/500: 1 ng/mL ≈ 21.2 mIU/L)
   "2842-3": { "ng/ml->miu/l": 21.2, "miu/l->ng/ml": 0.0472 },
   // ── Phase-2 additions ──
@@ -193,6 +199,9 @@ export function convertToDefaultUnit(
   fromUnit: string,
   bio: Pick<Biomarker, "code" | "defaultUnit">,
 ): ConversionResult {
+  // A NaN/Infinity reading (OCR misread, blank parsed to NaN) must never be
+  // asserted as a trustworthy normalized value — route it to manual review.
+  if (!Number.isFinite(value)) return { ok: false, reason: "unknown_conversion" };
   const target = bio.defaultUnit;
   if (unitsEquivalent(fromUnit, target)) {
     return { ok: true, value, unit: target };
@@ -201,7 +210,9 @@ export function convertToDefaultUnit(
   const specific = bio.code ? MOLAR_FACTORS[bio.code]?.[key] : undefined;
   const factor = specific ?? GENERIC_FACTORS[key];
   if (factor != null) {
-    return { ok: true, value: round(value * factor), unit: target };
+    const out = round(value * factor);
+    if (!Number.isFinite(out)) return { ok: false, reason: "unknown_conversion" };
+    return { ok: true, value: out, unit: target };
   }
   return { ok: false, reason: "unknown_conversion" };
 }
@@ -230,7 +241,7 @@ const UNIT_DISPLAY: Record<string, string> = {
   "µiu/ml": "µIU/mL",
   "miu/l": "mIU/L",
   "x10^9/l": "10^9/L",
-  "тыс/мкл": "10^9/L",
+  "тыс/µl": "10^9/L",
 };
 
 /**
@@ -414,7 +425,7 @@ const CRITICAL_BY_CODE: Record<string, CriticalCutoffs> = {
   "2951-2": { sides: ["low", "high"], low: 120, high: 160 }, // Sodium mmol/L
   "17861-6": { sides: ["low", "high"], low: 1.5, high: 3.4 }, // Calcium mmol/L
   "1995-0": { sides: ["low", "high"], low: 0.78, high: 1.6 }, // Calcium ionized mmol/L
-  "19123-9": { sides: ["low"], low: 0.4 }, // Magnesium mmol/L
+  "19123-9": { sides: ["low", "high"], low: 0.4, high: 2.0 }, // Magnesium mmol/L — severe hypermagnesemia (renal failure, Mg antacids) is a panic value too
   "2160-0": { sides: ["high"], high: 442 }, // Creatinine µmol/L — renal failure
   "62238-1": { sides: ["low"], low: 15 }, // eGFR mL/min — renal failure
   "1975-2": { sides: ["high"] }, // Bilirubin total µmol/L (2×refHigh)
@@ -463,6 +474,9 @@ export function computeFlag(
   bio: Pick<Biomarker, "refLow" | "refHigh">,
   policy?: Pick<Biomarker, "code" | "direction">,
 ): { outOfRange: boolean; flag: "low" | "high" | "critical" | null } {
+  // Guard non-finite values: NaN/Infinity compare false against both bounds and
+  // would otherwise be silently reported as a clean, in-range reading.
+  if (!Number.isFinite(value)) return { outOfRange: false, flag: null };
   const { refLow, refHigh } = bio;
   if (refLow != null && value < refLow) {
     const critical = !!policy && isCritical(value, "low", refLow, policy);

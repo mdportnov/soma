@@ -625,8 +625,13 @@ function addMonthsISO(fromISO: string, months: number): string {
   // the calendar day for users west of UTC, making every suggested expiry/due
   // date land one day early.
   const d = new Date(fromISO + "T00:00:00Z");
-  const whole = Math.round(months);
+  // Integer months map to calendar months; the fractional part (the 6/10/14-week
+  // infant doses are stored as 1.5/2.5/3.5 months) is added as days. Rounding the
+  // whole thing collapsed those distinct doses onto the same/wrong month.
+  const whole = Math.trunc(months);
+  const fracDays = Math.round((months - whole) * 30.4375);
   d.setUTCMonth(d.getUTCMonth() + whole);
+  if (fracDays) d.setUTCDate(d.getUTCDate() + fracDays);
   return d.toISOString().slice(0, 10);
 }
 

@@ -353,7 +353,16 @@ export async function createPanelWithResults(
         reviewedAt,
       };
     });
-    await db.insert(labResult).values(values);
+    // The sqlite-proxy driver runs each statement on a pooled connection, so a
+    // cross-statement BEGIN/COMMIT isn't reliable. Instead, compensate: if the
+    // results insert fails, roll back the just-created panel so we never leave an
+    // orphaned empty panel that looks like a successful (but data-less) import.
+    try {
+      await db.insert(labResult).values(values);
+    } catch (e) {
+      await db.delete(labPanel).where(eq(labPanel.id, panelRow.id));
+      throw e;
+    }
   }
   return panelRow.id;
 }

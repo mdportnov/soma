@@ -18,6 +18,18 @@ function tsOf(iso: string): number {
   return new Date(`${iso.slice(0, 10)}T00:00:00`).getTime();
 }
 
+/**
+ * YYYY-MM-DD from a local-midnight timestamp using LOCAL date parts. `tsOf`
+ * anchors at local midnight, so deriving the label via `toISOString()` (UTC)
+ * would shift it a day back for users behind UTC.
+ */
+function localISO(ts: number): string {
+  const d = new Date(ts);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 /** Reads a valid, dated weight goal off a profile, or null if not fully set. */
 export function readWeightGoal(p: Profile | null | undefined): WeightGoal | null {
   if (!p) return null;
@@ -112,7 +124,7 @@ export function buildWeightSeries(opts: {
   const ensure = (ts: number): WeightPoint => {
     let row = byTs.get(ts);
     if (!row) {
-      row = { t: ts, date: new Date(ts).toISOString().slice(0, 10), value: null, plan: null };
+      row = { t: ts, date: localISO(ts), value: null, plan: null };
       byTs.set(ts, row);
     }
     return row;

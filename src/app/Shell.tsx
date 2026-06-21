@@ -11,6 +11,7 @@ import {
   ScanLine,
   Settings,
   ShieldAlert,
+  Sparkles,
   Stethoscope,
   Syringe,
   TestTubes,
@@ -31,6 +32,7 @@ const MAX_SCROLL_ENTRIES = 50;
 const NAV: NavItem[] = [
   { kind: "link", to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
   { kind: "link", to: "/timeline", labelKey: "nav.timeline", icon: CalendarRange },
+  { kind: "link", to: "/assistant", labelKey: "nav.assistant", icon: Sparkles },
   { kind: "label", labelKey: "nav.records" },
   { kind: "link", to: "/diagnoses", labelKey: "nav.diagnoses", icon: FlaskConical },
   { kind: "link", to: "/allergies", labelKey: "nav.allergies", icon: ShieldAlert },

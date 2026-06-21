@@ -3,6 +3,7 @@ export const en = {
   nav: {
     dashboard: "Dashboard",
     timeline: "Timeline",
+    assistant: "AI assistant",
     biomarkers: "Biomarkers",
     labResults: "Lab results",
     medications: "Medications",
@@ -16,6 +17,33 @@ export const en = {
     records: "Records",
     labsVitals: "Labs & Vitals",
     care: "Care",
+  },
+
+  // AI analysis (v0.3)
+  aiAnalysis: {
+    title: "AI assistant",
+    description: "Ask about your biomarkers, medications and diagnoses.",
+    stubTitle: "AI is turned off",
+    stubDescription: "Add an API key in Settings to enable AI analysis.",
+    openSettings: "Open settings",
+    empty: "Ask about your trends, medications, or recent lab results.",
+    starter1: "What do my latest lab results say?",
+    starter2: "Which of my markers are out of range, and why does it matter?",
+    starter3: "Are there any interactions between my medications?",
+    placeholder: "Ask about your health…",
+    inputHint: "Enter to send, Shift+Enter for a new line. Not medical advice.",
+    thinking: "Thinking…",
+    retry: "Retry",
+  },
+  aiInterpretation: {
+    title: "AI interpretation",
+    prompt: "Get a plain-language read on this trend, accounting for your medications and ranges.",
+    button: "Interpret trend",
+    loading: "Analyzing…",
+    retry: "Retry",
+    regenerate: "Regenerate",
+    errorAuth: "API key was rejected. Check your AI settings.",
+    errorGeneric: "Couldn't get a response. Please try again.",
   },
 
   // Theme

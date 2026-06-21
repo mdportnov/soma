@@ -144,6 +144,74 @@ Return ONLY this JSON object, nothing else:
 
 export const TEST_PROMPT = `Reply with exactly the word "ok".`;
 
+// ── v0.3 AI analysis (§8) ────────────────────────────────────────────────────
+// All AI-analysis behavior lives here so the pipeline stays vendor-agnostic: the
+// chat and trend-interpretation features run through the shared `AIProvider.chat`
+// with these prompts. A disclaimer is baked into the system prompt AND rendered
+// in the UI under every answer.
+
+const SAFETY_RULES = `- You are NOT a doctor: never diagnose, prescribe, or give definitive medical advice. Explain, contextualize, and suggest what to discuss with a clinician.
+- Ground every statement in the user's data below or well-established physiology. If the data does not say something, say so — never invent values, dates, diagnoses, or history.
+- Always account for the user's active allergies and medications before suggesting anything.
+- Be concise and specific; prefer the user's actual numbers and ranges.
+- End with a one-line reminder that this is not medical advice.`;
+
+/**
+ * System prompt for the health-context chat. `context` is the compact medical
+ * summary built locally by `src/ai/context.ts` (never the raw documents).
+ */
+export function buildHealthChatSystem(context: string): string {
+  return `You are Soma's health assistant. You help the user understand THEIR OWN health data — lab trends, medications, diagnoses and allergies — in plain language.
+
+${SAFETY_RULES}
+
+The user's current health context (everything you know about them):
+${context}`;
+}
+
+/** Short system prompt for the single-biomarker trend interpretation. */
+export const TREND_INTERPRETATION_SYSTEM = `You are Soma's health assistant, explaining ONE biomarker trend to the user in plain language.
+
+${SAFETY_RULES}`;
+
+export type TrendInterpretationInput = {
+  name: string;
+  unit: string;
+  referenceRange: string | null;
+  optimalRange: string | null;
+  /** "higher_better" | "lower_better" | "range". */
+  direction: string;
+  /** Oldest-first readings. */
+  points: { date: string; value: number; flag: string | null }[];
+  /** Names of medications taken during the charted period. */
+  medications: string[];
+};
+
+/** User message describing a biomarker's trend for interpretation. */
+export function buildTrendInterpretationPrompt(input: TrendInterpretationInput): string {
+  const series = input.points
+    .map((p) => `${p.date}: ${p.value} ${input.unit}${p.flag ? ` (${p.flag})` : ""}`)
+    .join("\n");
+  const direction =
+    input.direction === "higher_better"
+      ? "higher is better"
+      : input.direction === "lower_better"
+        ? "lower is better"
+        : "within range is best";
+  return `Interpret the trend of one biomarker for the user, in plain language.
+
+Biomarker: ${input.name} (${input.unit})
+Reference range: ${input.referenceRange ?? "n/a"}
+Optimal range: ${input.optimalRange ?? "n/a"}
+Direction: ${direction}
+Medications taken during this period: ${input.medications.length ? input.medications.join(", ") : "none recorded"}
+
+Readings (oldest first):
+${series}
+
+In 3–5 short sentences: describe the trend and where the latest value sits relative to the ranges; if a medication plausibly relates to a change, note it without overclaiming causation; suggest what to watch or ask a clinician. Do not diagnose. This is not medical advice.`;
+}
+
 /** Mandatory disclaimer attached to user-facing AI output (§8). */
 export const AI_DISCLAIMER =
   "AI-generated content. Not medical advice — always consult a qualified clinician.";

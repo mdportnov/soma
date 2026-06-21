@@ -11,6 +11,7 @@ import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
 import { DeltaBadge } from "@/components/app/DeltaBadge";
+import { AiInterpretation } from "@/components/app/AiInterpretation";
 import { changeBetween, type ValuePoint } from "@/lib/insights";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -217,6 +218,16 @@ export function BiomarkerDetail() {
               )}
             </CardContent>
           </Card>
+
+          <AiInterpretation
+            bio={bio}
+            points={series.map((p) => ({
+              date: p.date,
+              value: p.value,
+              flag: p.outOfRange ? (p.flag ?? null) : null,
+            }))}
+            medications={meds.filter((m) => !m.endDate).map((m) => m.name)}
+          />
 
           <Card className="mt-4">
             <CardHeader>

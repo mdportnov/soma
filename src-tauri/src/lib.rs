@@ -1,5 +1,6 @@
 mod backup;
 mod mcp;
+mod vault;
 
 use keyring::Entry;
 
@@ -149,7 +150,16 @@ pub fn run() {
             backup::create_backup,
             backup::inspect_backup,
             backup::discard_restore_staging,
-            backup::restore_backup
+            backup::restore_backup,
+            vault::vault_state,
+            vault::vault_snapshot_target,
+            vault::vault_enable_keychain,
+            vault::vault_enable_passphrase,
+            vault::vault_unlock_keychain,
+            vault::vault_unlock_passphrase,
+            vault::vault_lock_keychain,
+            vault::vault_lock_passphrase,
+            vault::vault_disable
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

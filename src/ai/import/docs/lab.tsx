@@ -54,6 +54,7 @@ import {
 import { CreateBiomarkerDialog } from "@/pages/Biomarkers";
 import { formatValue, todayISO } from "@/lib/utils";
 import { allKnownUnits } from "@/lib/units";
+import { rememberUnit, recallUnit } from "@/lib/unit-memory";
 import { useI18n } from "@/lib/i18n";
 
 type PanelType = "blood" | "urine" | "other";
@@ -145,6 +146,19 @@ export const labModule: DocTypeModule<LabDraft> = {
     const parsed = await ctx.provider.extractStructured(doc, EXTRACTION_PROMPT, 16384);
     const extraction = validateLabExtraction(parsed);
     const mapped = await mapExtractions(extraction.results, ctx.biomarkers, ctx.provider);
+    // Per-lab unit memory: when this lab's report didn't print a unit for a marker
+    // we've recorded from it before, default to the remembered unit and recompute
+    // the conversion. Only fills an empty unit — never overrides a printed one.
+    const memIndex = buildBiomarkerIndex(ctx.biomarkers);
+    for (const m of mapped) {
+      if (m.biomarkerId != null && !m.raw.unit) {
+        const remembered = recallUnit(extraction.labName, m.biomarkerId);
+        if (remembered) {
+          m.raw.unit = remembered;
+          reconvertRow(m, memIndex);
+        }
+      }
+    }
     return {
       rows: mapped.map((m, i) => ({ ...m, include: m.biomarkerId != null, key: i })),
       meta: {
@@ -181,6 +195,16 @@ export const labModule: DocTypeModule<LabDraft> = {
 
     const byId = new Map<number, Biomarker>(ctx.biomarkers.map((b) => [b.id, b]));
     const included = draft.rows.filter((r) => r.include && r.biomarkerId != null);
+    const results = included.map((r) => ({
+      biomarkerId: r.biomarkerId!,
+      value: r.raw.value,
+      unit: r.raw.unit || byId.get(r.biomarkerId!)?.defaultUnit || "",
+      rawLabel: r.raw.raw_label,
+      sourcePage: r.raw.page,
+      // "none" only survives here when the user hand-picked the biomarker for a
+      // previously-unmatched row, so that selection is author-trusted.
+      confidence: r.confidence === "none" ? ("manual" as const) : r.confidence,
+    }));
     const panelId = await createPanelWithResults(
       {
         profileId: ctx.profileId,
@@ -192,18 +216,12 @@ export const labModule: DocTypeModule<LabDraft> = {
         importMethod: "ai",
         sourceFileId,
       },
-      included.map((r) => ({
-        biomarkerId: r.biomarkerId!,
-        value: r.raw.value,
-        unit: r.raw.unit || byId.get(r.biomarkerId!)?.defaultUnit || "",
-        rawLabel: r.raw.raw_label,
-        sourcePage: r.raw.page,
-        // "none" only survives here when the user hand-picked the biomarker for a
-        // previously-unmatched row, so that selection is author-trusted.
-        confidence: r.confidence === "none" ? ("manual" as const) : r.confidence,
-      })),
+      results,
       byId,
     );
+    // Remember each (lab, biomarker) → unit so the next import from this lab
+    // defaults to the same unit — most useful when the document omits it.
+    for (const res of results) rememberUnit(draft.meta.labName, res.biomarkerId, res.unit);
     if (sourceFileId != null) {
       await updateAttachment(sourceFileId, { linkedEntityId: panelId });
     }

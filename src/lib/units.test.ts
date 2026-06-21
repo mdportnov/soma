@@ -111,6 +111,99 @@ describe("convertToDefaultUnit — molar (analyte-specific)", () => {
   });
 });
 
+describe("convertToDefaultUnit — phase-3 molar additions", () => {
+  // Each case converts INTO the analyte's default unit (the direction the import
+  // pipeline uses); expected values derived from molar mass.
+  const val = (r: ReturnType<typeof convertToDefaultUnit>) => (r.ok ? r.value : NaN);
+
+  it("Total T4 µg/dL → nmol/L", () => {
+    expect(val(convertToDefaultUnit(8, "µg/dL", bio("3026-2", "nmol/L")))).toBeCloseTo(103, 0);
+  });
+  it("Total T4 reverse nmol/L → µg/dL", () => {
+    expect(val(convertToDefaultUnit(100, "nmol/L", bio("3026-2", "µg/dL")))).toBeCloseTo(7.77, 1);
+  });
+  it("Total T3 ng/dL → nmol/L", () => {
+    expect(val(convertToDefaultUnit(120, "ng/dL", bio("3053-6", "nmol/L")))).toBeCloseTo(1.84, 1);
+  });
+  it("Free T3 pg/mL → pmol/L", () => {
+    expect(val(convertToDefaultUnit(3.2, "pg/mL", bio("3051-0", "pmol/L")))).toBeCloseTo(4.92, 1);
+  });
+  it("Progesterone ng/mL → nmol/L", () => {
+    expect(val(convertToDefaultUnit(5, "ng/mL", bio("2839-9", "nmol/L")))).toBeCloseTo(15.9, 1);
+  });
+  it("Free testosterone pg/mL → pmol/L", () => {
+    expect(val(convertToDefaultUnit(15, "pg/mL", bio("2991-8", "pmol/L")))).toBeCloseTo(52.0, 0);
+  });
+  it("Ionized calcium mg/dL → mmol/L", () => {
+    expect(val(convertToDefaultUnit(4.8, "mg/dL", bio("1995-0", "mmol/L")))).toBeCloseTo(1.2, 1);
+  });
+
+  it("BUN mg/dL → mmol/L uses the nitrogen basis, distinct from urea", () => {
+    const bun = val(convertToDefaultUnit(20, "mg/dL", bio("3094-0", "mmol/L")));
+    expect(bun).toBeCloseTo(7.14, 1);
+    // The same printed value as urea must NOT yield the same mmol/L (different basis).
+    const urea = val(convertToDefaultUnit(20, "mg/dL", bio("3091-6", "mmol/L")));
+    expect(Math.abs(bun - urea)).toBeGreaterThan(1);
+  });
+
+  it("C-peptide nmol/L → ng/mL", () => {
+    expect(val(convertToDefaultUnit(1, "nmol/L", bio("1986-9", "ng/mL")))).toBeCloseTo(3.02, 1);
+  });
+  it("PTH pmol/L → pg/mL", () => {
+    expect(val(convertToDefaultUnit(5, "pmol/L", bio("2731-8", "pg/mL")))).toBeCloseTo(47.2, 0);
+  });
+  it("Vitamin A µg/dL → µmol/L", () => {
+    expect(val(convertToDefaultUnit(50, "µg/dL", bio("2923-1", "µmol/L")))).toBeCloseTo(1.745, 2);
+  });
+  it("Vitamin E mg/L → µmol/L", () => {
+    expect(val(convertToDefaultUnit(10, "mg/L", bio("1823-4", "µmol/L")))).toBeCloseTo(23.22, 1);
+  });
+  it("Vitamin C mg/dL → µmol/L", () => {
+    expect(val(convertToDefaultUnit(1, "mg/dL", bio("1992-7", "µmol/L")))).toBeCloseTo(56.78, 1);
+  });
+  it("Copper µg/dL → µmol/L", () => {
+    expect(val(convertToDefaultUnit(100, "µg/dL", bio("5631-7", "µmol/L")))).toBeCloseTo(15.74, 1);
+  });
+  it("Selenium µg/L and µg/dL → µmol/L agree", () => {
+    expect(val(convertToDefaultUnit(100, "µg/L", bio("5697-8", "µmol/L")))).toBeCloseTo(1.266, 2);
+    expect(val(convertToDefaultUnit(10, "µg/dL", bio("5697-8", "µmol/L")))).toBeCloseTo(1.266, 2);
+  });
+  it("Lead µmol/L → µg/dL", () => {
+    expect(val(convertToDefaultUnit(1, "µmol/L", bio("5671-3", "µg/dL")))).toBeCloseTo(20.72, 1);
+  });
+  it("Mercury nmol/L → µg/L", () => {
+    expect(val(convertToDefaultUnit(10, "nmol/L", bio("5683-8", "µg/L")))).toBeCloseTo(2.006, 2);
+  });
+
+  it("every phase-3 analyte round-trips (forward × reverse ≈ identity)", () => {
+    const cases: [string, string, string, number][] = [
+      ["3026-2", "µg/dL", "nmol/L", 8],
+      ["3053-6", "ng/dL", "nmol/L", 120],
+      ["3051-0", "pg/mL", "pmol/L", 3.2],
+      ["2839-9", "ng/mL", "nmol/L", 5],
+      ["2991-8", "pg/mL", "pmol/L", 15],
+      ["1995-0", "mg/dL", "mmol/L", 4.8],
+      ["3094-0", "mg/dL", "mmol/L", 20],
+      ["1986-9", "ng/mL", "nmol/L", 2],
+      ["2731-8", "pg/mL", "pmol/L", 30],
+      ["2923-1", "µg/dL", "µmol/L", 50],
+      ["1823-4", "mg/L", "µmol/L", 10],
+      ["1992-7", "mg/dL", "µmol/L", 1.2],
+      ["5631-7", "µg/dL", "µmol/L", 100],
+      ["5697-8", "µg/L", "µmol/L", 100],
+      ["5671-3", "µg/dL", "µmol/L", 5],
+      ["5683-8", "µg/L", "nmol/L", 5],
+    ];
+    for (const [code, srcUnit, dstUnit, x] of cases) {
+      const fwd = convertToDefaultUnit(x, srcUnit, bio(code, dstUnit));
+      expect(fwd.ok).toBe(true);
+      if (!fwd.ok) continue;
+      const back = convertToDefaultUnit(fwd.value, dstUnit, bio(code, srcUnit));
+      expect(back.ok && back.value).toBeCloseTo(x, 1);
+    }
+  });
+});
+
 describe("convertToDefaultUnit — generic (mass basis)", () => {
   it("mg/dL → g/L for a protein (no molar dependence)", () => {
     const r = convertToDefaultUnit(1200, "mg/dL", bio(null, "g/L"));

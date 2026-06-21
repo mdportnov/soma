@@ -184,6 +184,47 @@ const MOLAR_FACTORS: Record<string, Record<string, number>> = {
   "2188-1": { "ng/ml->nmol/l": 3.47, "nmol/l->ng/ml": 0.288 },
   // Hemoglobin
   "718-7": { "g/dl->g/l": 10, "g/l->g/dl": 0.1 },
+  // ── Phase-3 additions ──
+  // Factors derived from molar mass and cross-checked against published clinical
+  // conversion references; each round-trips (forward × reverse ≈ 1).
+  // Total T4 / thyroxine (MW 776.87): µg/dL ↔ nmol/L (Free T4 is 3024-7 above)
+  "3026-2": { "µg/dl->nmol/l": 12.87, "nmol/l->µg/dl": 0.0777 },
+  // Total T3 / triiodothyronine (MW 650.98): ng/dL ↔ nmol/L
+  "3053-6": { "ng/dl->nmol/l": 0.01536, "nmol/l->ng/dl": 65.1 },
+  // Free T3 (MW 650.98): pg/mL ↔ pmol/L
+  "3051-0": { "pg/ml->pmol/l": 1.536, "pmol/l->pg/ml": 0.651 },
+  // Progesterone (MW 314.46): ng/mL ↔ nmol/L
+  "2839-9": { "ng/ml->nmol/l": 3.18, "nmol/l->ng/ml": 0.3145 },
+  // Free testosterone (MW 288.42): pg/mL ↔ pmol/L
+  "2991-8": { "pg/ml->pmol/l": 3.467, "pmol/l->pg/ml": 0.2884 },
+  // Ionized calcium (MW 40.08): mg/dL ↔ mmol/L (same basis as total calcium)
+  "1995-0": { "mg/dl->mmol/l": 0.2495, "mmol/l->mg/dl": 4.008 },
+  // BUN — blood urea NITROGEN (N₂ basis, MW 28.02), distinct from urea (3091-6):
+  // BUN mg/dL × 0.357 = mmol/L. NOT interchangeable with the urea factor.
+  "3094-0": { "mg/dl->mmol/l": 0.357, "mmol/l->mg/dl": 2.801 },
+  // C-peptide (MW 3020.3): ng/mL ↔ nmol/L
+  "1986-9": { "ng/ml->nmol/l": 0.331, "nmol/l->ng/ml": 3.021 },
+  // Parathyroid hormone (MW ~9425): pg/mL ↔ pmol/L
+  "2731-8": { "pg/ml->pmol/l": 0.106, "pmol/l->pg/ml": 9.434 },
+  // Vitamin A / retinol (MW 286.45): µg/dL ↔ µmol/L
+  "2923-1": { "µg/dl->µmol/l": 0.0349, "µmol/l->µg/dl": 28.65 },
+  // Vitamin E / α-tocopherol (MW 430.71): mg/L ↔ µmol/L
+  "1823-4": { "mg/l->µmol/l": 2.322, "µmol/l->mg/l": 0.4307 },
+  // Vitamin C / ascorbic acid (MW 176.12): mg/dL ↔ µmol/L
+  "1992-7": { "mg/dl->µmol/l": 56.78, "µmol/l->mg/dl": 0.01761 },
+  // Copper (MW 63.55): µg/dL ↔ µmol/L
+  "5631-7": { "µg/dl->µmol/l": 0.1574, "µmol/l->µg/dl": 6.354 },
+  // Selenium (MW 78.97): µg/L and µg/dL ↔ µmol/L
+  "5697-8": {
+    "µg/l->µmol/l": 0.01266,
+    "µmol/l->µg/l": 78.97,
+    "µg/dl->µmol/l": 0.1266,
+    "µmol/l->µg/dl": 7.897,
+  },
+  // Lead (MW 207.2): µg/dL ↔ µmol/L
+  "5671-3": { "µg/dl->µmol/l": 0.04826, "µmol/l->µg/dl": 20.72 },
+  // Mercury (MW 200.59): µg/L ↔ nmol/L
+  "5683-8": { "µg/l->nmol/l": 4.985, "nmol/l->µg/l": 0.2006 },
 };
 
 export type ConversionResult =

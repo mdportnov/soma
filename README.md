@@ -66,9 +66,17 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
   deterministic dictionary mapping → **mandatory human review** before anything is saved
 - ✨ **AI assistant** (bring your own key) — a **health-context chat** and one-tap **trend
   interpretation** on any biomarker; vendor-agnostic, with a not-medical-advice disclaimer on every answer
+- 🌙 **Lifestyle context** — daily **sleep, training and stress/energy** cards that enrich the AI
+  health context; manual entry today, with a designed path to Apple Health / Google Fit sync
+- 🔔 **Reminders feed** — medication-intake nudges and **scheduled re-testing** (every N months) as
+  passive, **in-app** notifications; nothing leaves your device, no OS notifications
+- 🖨️ **Doctor report** — a configurable **PDF summary** (problems, meds, allergies, recent labs) to
+  hand a clinician, generated entirely on-device
 - 🔎 **Search & Command Palette** — full-text search (SQLite FTS5) across every record, ⌘K palette
 - 🔐 **Encrypted backups** — AES-256-GCM snapshots (Argon2id key) into your own cloud-synced folder
   (iCloud / Drive / Dropbox / OneDrive); the live database never leaves the device
+- 🔒 **Optional at-rest encryption** — keep the live database encrypted on disk while the app is
+  closed (Argon2id + AES-256-GCM), unlocked automatically via the OS keychain or with a passphrase
 - 🧰 **Local MCP server** — typed stdio tools over your `soma.db` for AI assistants, one-click setup
 - 🌍 **Cross-country units** — Cyrillic-aware unit normalization + per-analyte molar conversions
   (mg/dL ↔ mmol/L, nmol/L ↔ ng/mL, …); unknown conversions are flagged, never guessed
@@ -84,6 +92,7 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 | Keys in keychain   | API keys live in the OS keychain (macOS Keychain / Windows Credential Manager / Secret Service) — never in the DB or config files           |
 | Explicit egress    | Documents are sent to your chosen AI provider only when you click import; network access is scoped to provider APIs only                    |
 | Encrypted backups  | Snapshots are AES-256-GCM encrypted with an Argon2id key from your passphrase before reaching a cloud-synced folder — unreadable without it |
+| At-rest encryption | Optional: the live database is kept encrypted on disk (Argon2id + AES-256-GCM) whenever the app is closed; in the clear only while the app runs           |
 | Auditability       | Every imported value keeps its original `raw_label` from the source document                                                                |
 | Not medical advice | Every AI output carries a disclaimer                                                                                                        |
 
@@ -153,13 +162,15 @@ src/
 │   └── keystore.ts           # OS keychain bridge (Rust commands)
 ├── pages/                    # Dashboard · Timeline · Biomarkers · Labs · Import wizard ·
 │                             #   Medications · Visits · Diagnoses · Allergies · Vaccines ·
-│                             #   Imaging · Journal · Emergency card · Onboarding · Settings
+│                             #   Imaging · Journal · Lifestyle · Notifications · Doctor report ·
+│                             #   Emergency card · Onboarding · Settings
 └── components/
     ├── app/CommandPalette.tsx         # ⌘K search/navigation
     ├── charts/TrendChart.tsx          # ref/optimal bands + medication overlay
     └── charts/HorizontalTimeline.tsx  # all events on one horizontal scale
 src-tauri/                    # Rust shell: SQL/dialog/fs/http plugins + keyring commands
     ├── backup.rs             # encrypted .somabk snapshots (Argon2id + AES-256-GCM)
+    ├── vault.rs              # optional at-rest DB encryption (encrypt-when-closed vault)
     └── mcp.rs                # one-click local MCP server setup
 ```
 
@@ -219,19 +230,30 @@ flowchart LR
 - [x] Per-lab unit memory & an expanded molar-conversion table
 - [x] In-app editor for seeded dictionary entries (ranges & aliases, edit-safe across seed sync)
 
-### 🧠 v0.3 — AI analysis & research
+### ✅ v0.3 — AI analysis & lifestyle context _(shipped)_
 
 - [x] AI chat with full health context (trends, meds, diagnoses)
 - [x] Trend interpretation summaries with the mandatory disclaimer
-- [ ] Personal research knowledge base — your PDFs as RAG sources with citations
-- [ ] Lifestyle context cards (sleep, training, stress) to enrich AI analysis
+- [x] **Lifestyle context cards** (sleep, training, stress) feeding the AI health
+      context — manual entry today, with a documented design for future
+      Apple Health / Google Fit / Health Connect sync
+      ([`docs/health-data-integrations.md`](docs/health-data-integrations.md))
 
-### 🚀 v1.0 — Reports, reminders & sharing
+> _Descoped:_ a PDF "research knowledge base" (RAG over your own papers) was
+> intentionally dropped — out of scope for a local-first records tool.
 
-- [ ] PDF report generator for doctors
-- [ ] Reminders: medication intake & scheduled re-testing (every N months)
-- [ ] Multi-profile (family) + viewer-role sharing
-- [ ] Optional at-rest database encryption
+### ✅ v1.0 — Reports, reminders & encryption _(shipped)_
+
+- [x] **PDF report generator for doctors** — configurable range & sections, built
+      on-device
+- [x] **In-app reminders feed** — medication-intake nudges & scheduled
+      re-testing (every N months), surfaced as passive notifications only;
+      nothing leaves the device and no OS notifications are raised
+- [x] **Optional at-rest database encryption** — encrypt-when-closed vault
+      (Argon2id + AES-256-GCM), with keychain auto-unlock or passphrase-on-launch
+
+> _Descoped:_ multi-profile (family) and viewer-role sharing — Soma stays a
+> single-profile, local-first record; the doctor PDF covers sharing outward.
 
 ## Tech stack
 

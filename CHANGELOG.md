@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Lifestyle context** (v0.3): a dedicated `/lifestyle` page with daily sleep / training /
+  stress-and-energy cards and a recent-entries table; the rolling-window summary is folded into the
+  AI health context so chat and trend interpretation account for it. Ships with a forward-looking
+  Apple Health / Google Fit / Health Connect integration design (`docs/health-data-integrations.md`,
+  file-import-first); entry is manual for now, but the schema is already shaped for device sync.
+- **Doctor report** (v1.0): an on-device PDF summary (`/report`) of current problems, medications,
+  allergies, out-of-range markers and recent labs / visits / imaging / vaccines / lifestyle, with a
+  configurable time range and per-section toggles. Carries the not-medical-advice disclaimer.
+- **In-app reminders feed** (v1.0): a `/notifications` page plus a header bell surfacing
+  medication-intake nudges and **scheduled re-testing** (every N months) as passive, in-app items —
+  no OS notifications, nothing leaves the device. Re-test cadences are user-managed.
+- **Optional at-rest database encryption** (v1.0): an encrypt-when-closed vault
+  (Argon2id + AES-256-GCM) that keeps the live database encrypted on disk while the app is closed,
+  with two unlock modes — automatic via the OS keychain, or a passphrase typed at launch.
 - **AI assistant** (v0.3, bring-your-own-key): a health-context chat (`/assistant`) and one-tap
   **trend interpretation** on any biomarker, both through the shared vendor-agnostic provider
   interface; every answer carries the not-medical-advice disclaimer.

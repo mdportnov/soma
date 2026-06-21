@@ -59,7 +59,9 @@ function daysBetween(fromISO: string, toISO: string): number {
 
 /** Next-due date for a re-test = anchor + interval months (calendar-correct). */
 export function retestDueDate(lastTestedDate: string, intervalMonths: number): string {
-  return addMonths(parseISO(lastTestedDate.slice(0, 10)), intervalMonths).toISOString().slice(0, 10);
+  return addMonths(parseISO(lastTestedDate.slice(0, 10)), intervalMonths)
+    .toISOString()
+    .slice(0, 10);
 }
 
 export function buildNotificationFeed(data: NotificationFeedData): NotificationItem[] {
@@ -86,9 +88,7 @@ export function buildNotificationFeed(data: NotificationFeedData): NotificationI
   // ── Re-test reminders ──────────────────────────────────────────────────────
   for (const s of data.retestSchedules) {
     const noAnchor = !s.lastTestedDate;
-    const dueDate = s.lastTestedDate
-      ? retestDueDate(s.lastTestedDate, s.intervalMonths)
-      : today; // no baseline yet → surface immediately to record one
+    const dueDate = s.lastTestedDate ? retestDueDate(s.lastTestedDate, s.intervalMonths) : today; // no baseline yet → surface immediately to record one
     const overdueDays = daysBetween(dueDate, today); // >0 overdue, <0 upcoming
     // Skip schedules that aren't due yet and aren't within the "soon" window.
     if (!noAnchor && overdueDays < -RETEST_DUE_SOON_DAYS) continue;

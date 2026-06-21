@@ -1293,7 +1293,13 @@ export async function getDoctorReportData(
     if (!r.outOfRange) continue;
     const bio = bioById.get(biomarkerId);
     if (!bio) continue;
-    abnormalLatest.push({ biomarker: bio, value: r.value, unit: r.unit, flag: r.flag, date: r.date });
+    abnormalLatest.push({
+      biomarker: bio,
+      value: r.value,
+      unit: r.unit,
+      flag: r.flag,
+      date: r.date,
+    });
   }
   abnormalLatest.sort((a, b) => a.biomarker.canonicalName.localeCompare(b.biomarker.canonicalName));
 
@@ -1320,7 +1326,9 @@ export async function getDoctorReportData(
     visits: visits.filter((v) => withinRange(v.date, from, to)),
     imaging: imaging.filter((i) => withinRange(i.date, from, to)),
     vaccines: [...vaccines].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12),
-    lifestyle: [...life].filter((l) => withinRange(l.date, from, to)).sort((a, b) => a.date.localeCompare(b.date)),
+    lifestyle: [...life]
+      .filter((l) => withinRange(l.date, from, to))
+      .sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
 

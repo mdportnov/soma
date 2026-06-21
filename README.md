@@ -85,16 +85,16 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 
 ## Privacy model
 
-| Principle          | Implementation                                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local-first        | All data in a local SQLite file; fully functional offline                                                                                   |
-| AI is opt-in       | Disabled by default; every AI surface shows a stub until you add a key                                                                      |
-| Keys in keychain   | API keys live in the OS keychain (macOS Keychain / Windows Credential Manager / Secret Service) — never in the DB or config files           |
-| Explicit egress    | Documents are sent to your chosen AI provider only when you click import; network access is scoped to provider APIs only                    |
-| Encrypted backups  | Snapshots are AES-256-GCM encrypted with an Argon2id key from your passphrase before reaching a cloud-synced folder — unreadable without it |
-| At-rest encryption | Optional: the live database is kept encrypted on disk (Argon2id + AES-256-GCM) whenever the app is closed; in the clear only while the app runs           |
-| Auditability       | Every imported value keeps its original `raw_label` from the source document                                                                |
-| Not medical advice | Every AI output carries a disclaimer                                                                                                        |
+| Principle          | Implementation                                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local-first        | All data in a local SQLite file; fully functional offline                                                                                       |
+| AI is opt-in       | Disabled by default; every AI surface shows a stub until you add a key                                                                          |
+| Keys in keychain   | API keys live in the OS keychain (macOS Keychain / Windows Credential Manager / Secret Service) — never in the DB or config files               |
+| Explicit egress    | Documents are sent to your chosen AI provider only when you click import; network access is scoped to provider APIs only                        |
+| Encrypted backups  | Snapshots are AES-256-GCM encrypted with an Argon2id key from your passphrase before reaching a cloud-synced folder — unreadable without it     |
+| At-rest encryption | Optional: the live database is kept encrypted on disk (Argon2id + AES-256-GCM) whenever the app is closed; in the clear only while the app runs |
+| Auditability       | Every imported value keeps its original `raw_label` from the source document                                                                    |
+| Not medical advice | Every AI output carries a disclaimer                                                                                                            |
 
 ## Getting started
 

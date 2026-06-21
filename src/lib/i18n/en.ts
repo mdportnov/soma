@@ -1662,14 +1662,16 @@ export const en = {
   // Lifestyle context (sleep / training / stress) — v0.3 AI enrichment
   lifestyle: {
     title: "Lifestyle",
-    description: "Daily sleep, training and stress — context that sharpens your trends and AI analysis.",
+    description:
+      "Daily sleep, training and stress — context that sharpens your trends and AI analysis.",
     logToday: "Log today",
     logEntry: "Log day",
     emptyTitle: "No lifestyle entries yet",
     emptyDescription:
       "Log how you slept, trained and felt. It enriches your trends and the AI assistant.",
     addFirst: "Log your first day",
-    aiNote: "Your logged lifestyle context is included in the AI assistant and trend interpretation.",
+    aiNote:
+      "Your logged lifestyle context is included in the AI assistant and trend interpretation.",
     windowNote: "Averages over the last {{days}} days, from {{count}} logged day(s).",
     noWindowData: "No entries in the last {{days}} days.",
     cards: {
@@ -1741,7 +1743,8 @@ export const en = {
   // Notifications feed (in-app only — never an OS notification)
   notifications: {
     title: "Notifications",
-    description: "Medication nudges and scheduled re-tests — in-app only, nothing leaves your device.",
+    description:
+      "Medication nudges and scheduled re-tests — in-app only, nothing leaves your device.",
     emptyTitle: "You're all caught up",
     emptyDescription: "Medication reminders and due re-tests will appear here.",
     feedTitle: "Feed",
@@ -1941,7 +1944,8 @@ export const en = {
     disabledToast: "Database encryption turned off",
     modeChangedToast: "Unlock mode updated",
     error: "Could not change encryption settings",
-    requiresKeychainNote: "Encryption stores its key in the OS keychain, so a working keychain is required.",
+    requiresKeychainNote:
+      "Encryption stores its key in the OS keychain, so a working keychain is required.",
   },
 
   // Unlock gate (passphrase mode, shown before the app loads)

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { closeDatabase, vacuumInto } from "@/db/client";
+import { beginDatabaseShutdown, closeDatabase, vacuumInto } from "@/db/client";
 
 /**
  * Optional at-rest database encryption (frontend side).
@@ -129,6 +129,9 @@ export async function lockNow(): Promise<void> {
   const settings = loadEncryptionSettings();
   if (!settings.enabled) return;
   const snapshotPath = await freshSnapshot();
+  // Block any reopen (Windows can't delete an open file; every OS would
+  // resurrect a doomed connection), then close so the file can be swapped.
+  beginDatabaseShutdown();
   await closeDatabase();
   if (settings.mode === "passphrase") {
     if (!sessionPassphrase) {
@@ -144,13 +147,29 @@ export async function lockNow(): Promise<void> {
 
 let closeHookRegistered = false;
 
+/** Hard cap on the on-exit lock so a stalled lock can never trap the user. */
+const LOCK_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("lock timed out")), ms)),
+  ]);
+}
+
 /**
  * Intercepts the window close so an encrypted database is re-locked before the
  * process exits. Registered once for the app's lifetime; the handler reads the
  * current settings at close time, so enabling encryption mid-session still locks
  * on exit. When encryption is off the close proceeds normally. If locking fails
- * we still destroy the window (the plaintext is re-locked on the next launch),
- * so the user is never trapped.
+ * or stalls we still destroy the window (the plaintext is re-locked on the next
+ * launch), so the user is never trapped.
+ *
+ * Platform note: this fires on a window-close request (the OS close control) on
+ * macOS, Windows and Linux. Quit paths that bypass it (force-kill, OS shutdown,
+ * and on macOS a Cmd+Q that terminates without a per-window close) leave the
+ * plaintext DB, which is re-encrypted on the next clean launch — the guarantee
+ * is "encrypted at rest after a clean exit", never data loss.
  */
 export async function initVaultCloseHook(): Promise<void> {
   if (closeHookRegistered) return;
@@ -160,7 +179,7 @@ export async function initVaultCloseHook(): Promise<void> {
     if (!loadEncryptionSettings().enabled) return; // normal close
     event.preventDefault();
     try {
-      await lockNow();
+      await withTimeout(lockNow(), LOCK_TIMEOUT_MS);
     } catch (e) {
       console.error("Failed to lock the database on exit:", e);
     } finally {

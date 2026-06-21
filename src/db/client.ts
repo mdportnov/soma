@@ -11,12 +11,23 @@ import {
 const DB_URL = "sqlite:soma.db";
 
 let sqlite: Database | null = null;
+// Set while the database is being locked for at-rest encryption on exit. Blocks
+// any reopen between closeDatabase() and the file being encrypted/removed — on
+// Windows a reopened handle would make the plaintext file undeletable, and on
+// every OS it would resurrect a connection to a file that is about to vanish.
+let shuttingDown = false;
 
 async function getSqlite(): Promise<Database> {
+  if (shuttingDown) throw new Error("Database is closing for encryption");
   if (!sqlite) {
     sqlite = await Database.load(DB_URL);
   }
   return sqlite;
+}
+
+/** Prevents the connection from being reopened — call right before a lock/swap. */
+export function beginDatabaseShutdown(): void {
+  shuttingDown = true;
 }
 
 /** Statements that return rows must go through `select` on tauri-plugin-sql. */

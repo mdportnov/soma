@@ -46,6 +46,20 @@ export const en = {
     errorGeneric: "Couldn't get a response. Please try again.",
   },
 
+  // Medication adherence log
+  adherence: {
+    title: "Adherence",
+    markTaken: "Mark taken today",
+    markSkipped: "Skipped today",
+    loggedToday: "Logged for today",
+    taken: "Taken",
+    skipped: "Skipped",
+    streak: "{{count}}-day streak",
+    windowSummary: "{{pct}}% over the last {{days}} days",
+    noLogs: "No intake logged yet.",
+    delete: "Delete entry",
+  },
+
   // Theme
   theme: {
     lightMode: "Light mode",

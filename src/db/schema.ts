@@ -491,6 +491,7 @@ export type NewLabResult = typeof labResult.$inferInsert;
 export type Medication = typeof medication.$inferSelect;
 export type NewMedication = typeof medication.$inferInsert;
 export type MedicationLog = typeof medicationLog.$inferSelect;
+export type NewMedicationLog = typeof medicationLog.$inferInsert;
 export type Visit = typeof visit.$inferSelect;
 export type NewVisit = typeof visit.$inferInsert;
 export type Diagnosis = typeof diagnosis.$inferSelect;

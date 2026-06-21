@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, like, sql } from "drizzle-orm";
 import { db } from "./client";
 import { assertAllergyDeletable } from "./guards";
 import {
@@ -12,6 +12,7 @@ import {
   labPanel,
   labResult,
   medication,
+  medicationLog,
   prescription,
   profile,
   symptomLog,
@@ -27,6 +28,7 @@ import {
   type LabPanel,
   type LabResult,
   type Medication,
+  type MedicationLog,
   type NewAllergy,
   type NewAttachment,
   type NewBiomarker,
@@ -599,6 +601,38 @@ export async function updateMedication(id: number, data: Partial<NewMedication>)
 
 export async function deleteMedication(id: number) {
   await db.delete(medication).where(eq(medication.id, id));
+}
+
+// ── medication adherence log ───────────────────────────────────────────────
+
+export async function listMedicationLog(medicationId: number): Promise<MedicationLog[]> {
+  return db
+    .select()
+    .from(medicationLog)
+    .where(eq(medicationLog.medicationId, medicationId))
+    .orderBy(desc(medicationLog.takenAt));
+}
+
+/**
+ * Records one intake for today (taken or skipped). At most one entry per calendar
+ * day: a same-day log already present is left untouched, so double-tapping
+ * "Mark taken" can't inflate adherence. Returns true when a row was inserted.
+ */
+export async function logMedicationIntake(medicationId: number, taken = true): Promise<boolean> {
+  const day = new Date().toISOString().slice(0, 10);
+  const existing = await db
+    .select({ id: medicationLog.id })
+    .from(medicationLog)
+    .where(
+      and(eq(medicationLog.medicationId, medicationId), like(medicationLog.takenAt, `${day}%`)),
+    );
+  if (existing.length) return false;
+  await db.insert(medicationLog).values({ medicationId, takenAt: new Date().toISOString(), taken });
+  return true;
+}
+
+export async function deleteMedicationLogEntry(id: number): Promise<void> {
+  await db.delete(medicationLog).where(eq(medicationLog.id, id));
 }
 
 // ── visits / diagnoses / prescriptions ─────────────────────────────────────

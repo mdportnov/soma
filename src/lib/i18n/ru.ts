@@ -47,6 +47,20 @@ export const ru = {
     errorGeneric: "Не удалось получить ответ. Попробуйте ещё раз.",
   },
 
+  // Журнал приёма лекарств
+  adherence: {
+    title: "Приём",
+    markTaken: "Отметить приём сегодня",
+    markSkipped: "Пропущено сегодня",
+    loggedToday: "Отмечено на сегодня",
+    taken: "Принято",
+    skipped: "Пропущено",
+    streak: "Серия: {{count}} дн.",
+    windowSummary: "{{pct}}% за последние {{days}} дн.",
+    noLogs: "Пока нет отметок о приёме.",
+    delete: "Удалить запись",
+  },
+
   // Theme
   theme: {
     lightMode: "Светлая тема",

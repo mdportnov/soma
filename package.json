@@ -14,8 +14,10 @@
     "mcp:install": "pnpm -C mcp install",
     "postinstall": "pnpm -C mcp install",
     "db:generate": "drizzle-kit generate",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
     "check:biomarker-info": "tsx scripts/check-biomarker-info.ts",
-    "check:import": "tsx scripts/check-import.ts",
     "seed:dev": "tsx scripts/seed-fake-data.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -50,6 +52,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.0",
+    "@vitest/coverage-v8": "4.1.9",
     "drizzle-kit": "^0.31.1",
     "eslint": "^10.4.1",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -60,7 +63,8 @@
     "tsx": "4.22.4",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.61.0",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "4.1.9"
   },
   "packageManager": "pnpm@10.33.0"
 }

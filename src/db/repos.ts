@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./client";
+import { assertAllergyDeletable } from "./guards";
 import {
   allergy,
   attachment,
@@ -794,9 +795,7 @@ export async function deleteAllergy(id: number) {
     .select({ severity: allergy.severity })
     .from(allergy)
     .where(eq(allergy.id, id));
-  if (rows[0]?.severity === "anaphylactic") {
-    throw new Error("Anaphylactic allergies cannot be deleted — mark as resolved instead.");
-  }
+  assertAllergyDeletable(rows[0]?.severity);
   await db.delete(allergy).where(eq(allergy.id, id));
 }
 

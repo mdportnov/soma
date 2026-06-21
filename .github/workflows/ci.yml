@@ -39,9 +39,6 @@ jobs:
       - name: Biomarker reference content coverage
         run: pnpm check:biomarker-info
 
-      - name: Import resolution & conversion checks
-        run: pnpm check:import
-
       - name: Build
         run: pnpm build
 
@@ -49,6 +46,29 @@ jobs:
         run: |
           pnpm db:generate
           git diff --exit-code src/db/migrations
+
+  tests:
+    name: Tests — vitest unit + coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Unit tests for the critical pure-logic core: unit/molar conversions,
+      # biomarker mapping, import validation, and repo guards. Coverage
+      # thresholds live in vitest.config.ts — the run fails if that core drops
+      # below them, so the dangerous code can never silently lose coverage.
+      - name: Unit tests + coverage
+        run: pnpm coverage
 
   sidecar:
     name: MCP sidecar — cross-platform build
@@ -84,7 +104,7 @@ jobs:
         run: pnpm mcp:sidecar
 
   rust:
-    name: Rust — fmt · clippy
+    name: Rust — fmt · clippy · test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,14 +128,14 @@ jobs:
         working-directory: src-tauri
 
       # tauri::generate_context! embeds the frontend dist at compile time.
-      - name: Stub frontend dist for clippy
+      - name: Stub frontend dist for clippy & test
         run: mkdir -p dist && touch dist/index.html
 
       # tauri-build validates the externalBin (MCP sidecar) path exists during
-      # codegen. clippy never runs the binary, so an empty stub at the host
-      # target-triple path is enough — the real sidecar is built by the `sidecar`
-      # job and at release time.
-      - name: Stub MCP sidecar binary for clippy
+      # codegen. Neither clippy nor the unit tests run the binary, so an empty
+      # stub at the host target-triple path is enough — the real sidecar is built
+      # by the `sidecar` job and at release time.
+      - name: Stub MCP sidecar binary for clippy & test
         run: |
           triple=$(rustc -vV | sed -n 's/^host: //p')
           mkdir -p src-tauri/binaries
@@ -124,4 +144,10 @@ jobs:
 
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+
+      # Backup round-trip + import-pipeline-adjacent Rust unit tests. Pure logic
+      # (crypto/format), no Tauri runtime — the stubs above are enough to compile.
+      - name: cargo test
+        run: cargo test
         working-directory: src-tauri

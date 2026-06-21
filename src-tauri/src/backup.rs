@@ -51,6 +51,64 @@ fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], String> {
     Ok(key)
 }
 
+/// Packs a plaintext SQLite snapshot into the encrypted `.somabk` byte layout
+/// (`MAGIC | format | schema_version | salt | nonce | AES-256-GCM ciphertext`).
+/// Pure over its inputs apart from the per-call random salt/nonce, so the format
+/// is exercised by `cargo test` without touching the filesystem or keychain.
+fn encrypt_snapshot(
+    plain: &[u8],
+    passphrase: &str,
+    schema_version: u32,
+) -> Result<Vec<u8>, String> {
+    if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
+        return Err("Snapshot is not a valid SQLite database".into());
+    }
+
+    let mut salt = [0u8; 16];
+    let mut nonce = [0u8; 12];
+    OsRng.fill_bytes(&mut salt);
+    OsRng.fill_bytes(&mut nonce);
+    let key = derive_key(passphrase, &salt)?;
+    let cipher = Aes256Gcm::new((&key).into());
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), plain)
+        .map_err(|e| format!("encrypt: {e}"))?;
+
+    let mut out = Vec::with_capacity(HEADER_LEN + ciphertext.len());
+    out.extend_from_slice(MAGIC);
+    out.push(FORMAT_VERSION);
+    out.extend_from_slice(&schema_version.to_le_bytes());
+    out.extend_from_slice(&salt);
+    out.extend_from_slice(&nonce);
+    out.extend_from_slice(&ciphertext);
+    Ok(out)
+}
+
+/// Reverses [`encrypt_snapshot`]: validates the header, decrypts, and asserts the
+/// plaintext is a SQLite database, returning `(schema_version, plaintext)`. A
+/// wrong passphrase or any tampering fails the AES-GCM authentication tag.
+fn decrypt_snapshot(raw: &[u8], passphrase: &str) -> Result<(u32, Vec<u8>), String> {
+    if raw.len() <= HEADER_LEN || &raw[..8] != MAGIC {
+        return Err("Not a Soma backup file".into());
+    }
+    if raw[8] != FORMAT_VERSION {
+        return Err("This backup was created by a newer version of Soma".into());
+    }
+    let schema_version = u32::from_le_bytes(raw[9..13].try_into().unwrap());
+    let salt = &raw[13..29];
+    let nonce = &raw[29..41];
+
+    let key = derive_key(passphrase, salt)?;
+    let cipher = Aes256Gcm::new((&key).into());
+    let plain = cipher
+        .decrypt(Nonce::from_slice(nonce), &raw[HEADER_LEN..])
+        .map_err(|_| "Wrong passphrase, or the file is corrupted".to_string())?;
+    if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
+        return Err("Decrypted data is not a SQLite database".into());
+    }
+    Ok((schema_version, plain))
+}
+
 fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path().app_config_dir().map_err(|e| e.to_string())
 }
@@ -305,27 +363,7 @@ pub fn create_backup(
     };
 
     let plain = fs::read(&snapshot_path).map_err(|e| format!("read snapshot: {e}"))?;
-    if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
-        return Err("Snapshot is not a valid SQLite database".into());
-    }
-
-    let mut salt = [0u8; 16];
-    let mut nonce = [0u8; 12];
-    OsRng.fill_bytes(&mut salt);
-    OsRng.fill_bytes(&mut nonce);
-    let key = derive_key(&passphrase, &salt)?;
-    let cipher = Aes256Gcm::new((&key).into());
-    let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), plain.as_ref())
-        .map_err(|e| format!("encrypt: {e}"))?;
-
-    let mut out = Vec::with_capacity(HEADER_LEN + ciphertext.len());
-    out.extend_from_slice(MAGIC);
-    out.push(FORMAT_VERSION);
-    out.extend_from_slice(&schema_version.to_le_bytes());
-    out.extend_from_slice(&salt);
-    out.extend_from_slice(&nonce);
-    out.extend_from_slice(&ciphertext);
+    let out = encrypt_snapshot(&plain, &passphrase, schema_version)?;
 
     let dir = Path::new(&dest_dir).join(SUBDIR);
     fs::create_dir_all(&dir).map_err(|e| format!("create backup folder: {e}"))?;
@@ -395,24 +433,7 @@ pub fn inspect_backup(
     passphrase: String,
 ) -> Result<RestoreMeta, String> {
     let raw = fs::read(&path).map_err(|e| format!("read file: {e}"))?;
-    if raw.len() <= HEADER_LEN || &raw[..8] != MAGIC {
-        return Err("Not a Soma backup file".into());
-    }
-    if raw[8] != FORMAT_VERSION {
-        return Err("This backup was created by a newer version of Soma".into());
-    }
-    let schema_version = u32::from_le_bytes(raw[9..13].try_into().unwrap());
-    let salt = &raw[13..29];
-    let nonce = &raw[29..41];
-
-    let key = derive_key(&passphrase, salt)?;
-    let cipher = Aes256Gcm::new((&key).into());
-    let plain = cipher
-        .decrypt(Nonce::from_slice(nonce), &raw[HEADER_LEN..])
-        .map_err(|_| "Wrong passphrase, or the file is corrupted".to_string())?;
-    if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
-        return Err("Decrypted data is not a SQLite database".into());
-    }
+    let (schema_version, plain) = decrypt_snapshot(&raw, &passphrase)?;
 
     let staging = config_dir(&app)?.join(RESTORE_STAGING);
     fs::write(&staging, &plain).map_err(|e| format!("write staging: {e}"))?;
@@ -464,4 +485,78 @@ pub fn restore_backup(app: tauri::AppHandle) -> Result<(), String> {
     fs::rename(&staging, &db).map_err(|e| format!("swap database: {e}"))?;
 
     app.restart();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A minimal byte blob that passes the SQLite-magic check — stands in for a
+    /// real database snapshot without needing a live SQLite file.
+    fn fake_snapshot() -> Vec<u8> {
+        let mut v = SQLITE_MAGIC.to_vec();
+        v.extend_from_slice(b"-- soma backup round-trip test payload --");
+        v
+    }
+
+    #[test]
+    fn round_trips_and_preserves_schema_version() {
+        let plain = fake_snapshot();
+        let blob = encrypt_snapshot(&plain, "correct horse battery staple", 42).unwrap();
+        let (schema_version, restored) = decrypt_snapshot(&blob, "correct horse battery staple")
+            .expect("decrypt with the right passphrase");
+        assert_eq!(
+            schema_version, 42,
+            "schema version must survive the round-trip"
+        );
+        assert_eq!(
+            restored, plain,
+            "restored bytes must match the original snapshot"
+        );
+    }
+
+    #[test]
+    fn wrong_passphrase_is_rejected() {
+        let blob = encrypt_snapshot(&fake_snapshot(), "right-passphrase", 1).unwrap();
+        assert!(decrypt_snapshot(&blob, "wrong-passphrase").is_err());
+    }
+
+    #[test]
+    fn tampered_ciphertext_fails_authentication() {
+        let mut blob = encrypt_snapshot(&fake_snapshot(), "pass1234", 1).unwrap();
+        let last = blob.len() - 1;
+        blob[last] ^= 0xFF; // flip a ciphertext/tag byte → AES-GCM auth must fail
+        assert!(decrypt_snapshot(&blob, "pass1234").is_err());
+    }
+
+    #[test]
+    fn refuses_to_encrypt_non_sqlite_input() {
+        let err = encrypt_snapshot(b"this is not a database", "pass1234", 1).unwrap_err();
+        assert!(err.contains("SQLite"));
+    }
+
+    #[test]
+    fn rejects_a_file_without_the_soma_magic() {
+        let not_a_backup =
+            b"definitely not a soma backup file, just some random bytes here".to_vec();
+        let err = decrypt_snapshot(&not_a_backup, "pass1234").unwrap_err();
+        assert!(err.contains("Soma"));
+    }
+
+    #[test]
+    fn rejects_a_newer_format_version() {
+        let mut blob = encrypt_snapshot(&fake_snapshot(), "pass1234", 1).unwrap();
+        blob[8] = FORMAT_VERSION + 1; // pretend a future Soma wrote it
+        assert!(decrypt_snapshot(&blob, "pass1234").is_err());
+    }
+
+    #[test]
+    fn each_backup_uses_a_fresh_salt_and_nonce() {
+        let a = encrypt_snapshot(&fake_snapshot(), "pass1234", 1).unwrap();
+        let b = encrypt_snapshot(&fake_snapshot(), "pass1234", 1).unwrap();
+        // salt(16) + nonce(12) occupy bytes 13..41 and are random per backup,
+        // so identical plaintext never produces identical ciphertext.
+        assert_ne!(a[13..HEADER_LEN], b[13..HEADER_LEN]);
+        assert_ne!(a[HEADER_LEN..], b[HEADER_LEN..]);
+    }
 }

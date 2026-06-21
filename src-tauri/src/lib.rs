@@ -157,6 +157,7 @@ pub fn run() {
             vault::vault_enable_passphrase,
             vault::vault_unlock_keychain,
             vault::vault_unlock_passphrase,
+            vault::vault_verify_passphrase,
             vault::vault_lock_keychain,
             vault::vault_lock_passphrase,
             vault::vault_disable

@@ -344,6 +344,20 @@ pub fn vault_unlock_passphrase(app: tauri::AppHandle, passphrase: String) -> Res
     write_plaintext_db(&app, &plain)
 }
 
+/// Verifies a passphrase against the vault WITHOUT writing `soma.db`. Used on an
+/// unclean-exit relaunch where a newer plaintext database already exists (a
+/// crash left it behind): the user re-enters the passphrase so the session can
+/// re-lock on the next clean exit, but the stale vault must NOT overwrite the
+/// newer live data. A wrong passphrase fails the AES-GCM auth tag.
+#[tauri::command]
+pub fn vault_verify_passphrase(app: tauri::AppHandle, passphrase: String) -> Result<(), String> {
+    let raw = fs::read(vault_path(&app)?).map_err(|e| format!("read vault: {e}"))?;
+    let header = parse_header(&raw)?;
+    let key = derive_key_passphrase(&passphrase, &header.salt)?;
+    decrypt_snapshot(&raw, &header, &key)?;
+    Ok(())
+}
+
 // ── lock (clean exit) ─────────────────────────────────────────────────────────
 
 fn remove_plaintext(app: &tauri::AppHandle) -> Result<(), String> {

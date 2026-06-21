@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **AI assistant** (v0.3, bring-your-own-key): a health-context chat (`/assistant`) and one-tap
+  **trend interpretation** on any biomarker, both through the shared vendor-agnostic provider
+  interface; every answer carries the not-medical-advice disclaimer.
+- **Side-by-side comparison** of two lab dates (`/labs/compare`) with per-marker deltas.
+- **Medication adherence log**: mark a med taken/skipped, with a trailing-window % and a streak.
+- **In-app dictionary editor**: edit any biomarker's reference/optimal ranges and aliases; edits to
+  seeded entries survive the on-launch dictionary sync (new `is_user_modified` flag + migration).
+- **Per-lab unit memory** (recall a lab's unit when a report prints none) and **16 added molar
+  conversions** (total/free T3 & T4, BUN vs. urea, PTH, C-peptide, vitamins A/C/E, trace metals…).
+- **Automated tests**: a Vitest suite for the critical pure-logic core (unit conversions, biomarker
+  mapping, import validation, repo guards) plus `cargo test` for the backup round-trip — both in CI.
 - **Allergies** section: severity-aware allergy records (mild → anaphylactic); anaphylactic
   entries are protected from hard-deletion (must be resolved). Drug-allergy interaction warnings
   surfaced on medications.
@@ -42,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- AI-import transport hardened: an explicit request timeout (AbortController), `Retry-After`
+  handling, and a PII-free failure log, on top of the existing retry/backoff.
 - Biomarker dictionary expanded from ~65 to **178 markers**.
 - **Clinically-aware critical flags**: per-analyte panic thresholds replace blind multipliers, so a
   benign extreme (e.g. 0% eosinophils) is no longer reported as critical; unit-integrity hardening

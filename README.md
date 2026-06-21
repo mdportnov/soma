@@ -49,9 +49,10 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
   with reference & optimal ranges, **sex/age-specific ranges**, plain-language explanations (EN/RU),
   multilingual aliases, custom markers supported
 - 📈 **Trend charts** — value over time with shaded norm/optimal bands, **clinically-aware
-  out-of-range & critical flags**, and cross-panel change detection
+  out-of-range & critical flags**, cross-panel change detection, and **side-by-side comparison of
+  two lab dates**
 - 💊 **Medications & supplements** — dose, schedule, intake periods, purpose; overlay on any chart;
-  **drug-allergy interaction warnings**
+  **drug-allergy interaction warnings** and an **adherence log** (mark taken/skipped, % + streak)
 - 🩺 **Visits, diagnoses, prescriptions** — full CRUD, linked together with detail pages
 - 🚑 **Allergies & Emergency Card** — severity-aware allergy records (anaphylactic entries are
   protected from deletion) and a printable emergency summary (blood type, conditions, meds, allergies)
@@ -63,6 +64,8 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 - 🤖 **AI import** (bring your own key) — PDF/photo in any language for **labs, vaccine certificates,
   discharge summaries, imaging reports, prescriptions and allergy records** → structured extraction →
   deterministic dictionary mapping → **mandatory human review** before anything is saved
+- ✨ **AI assistant** (bring your own key) — a **health-context chat** and one-tap **trend
+  interpretation** on any biomarker; vendor-agnostic, with a not-medical-advice disclaimer on every answer
 - 🔎 **Search & Command Palette** — full-text search (SQLite FTS5) across every record, ⌘K palette
 - 🔐 **Encrypted backups** — AES-256-GCM snapshots (Argon2id key) into your own cloud-synced folder
   (iCloud / Drive / Dropbox / OneDrive); the live database never leaves the device
@@ -209,17 +212,17 @@ flowchart LR
 - [x] Navigation: route registry, breadcrumbs, hierarchical back; entity detail pages & links
 - [x] UI localization (EN/RU), searchable unit comboboxes, custom biomarkers with ranges/aliases
 
-### 🔜 Quality of life — remaining
+### ✅ Quality of life _(shipped)_
 
-- [ ] Side-by-side comparison of two lab dates
-- [ ] Medication adherence log UI (`medication_log` is already in the schema)
-- [ ] Per-lab unit memory & further unit-table coverage
-- [ ] In-app editor for seeded dictionary entries (ranges, aliases)
+- [x] Side-by-side comparison of two lab dates
+- [x] Medication adherence log (mark taken/skipped, trailing % + streak)
+- [x] Per-lab unit memory & an expanded molar-conversion table
+- [x] In-app editor for seeded dictionary entries (ranges & aliases, edit-safe across seed sync)
 
 ### 🧠 v0.3 — AI analysis & research
 
-- [ ] AI chat with full health context (trends, meds, diagnoses)
-- [ ] Trend interpretation summaries with the mandatory disclaimer
+- [x] AI chat with full health context (trends, meds, diagnoses)
+- [x] Trend interpretation summaries with the mandatory disclaimer
 - [ ] Personal research knowledge base — your PDFs as RAG sources with citations
 - [ ] Lifestyle context cards (sleep, training, stress) to enrich AI analysis
 

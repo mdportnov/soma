@@ -71,6 +71,8 @@ export type RawDischargeExtraction = {
   doctorName: string | null;
   diagnoses: { name: string; icdCode: string | null }[];
   medications: { name: string; dose: string | null }[];
+  /** Allergies / adverse drug reactions stated in the summary (safety-critical). */
+  allergies: { allergen: string; reaction: string | null; severity: string | null }[];
   notes: string;
 };
 
@@ -89,15 +91,13 @@ export type ChatMessage = { role: "user" | "assistant"; content: string };
  */
 export interface AIProvider {
   readonly id: string;
-  /** Phase 1: strict structured extraction from an image/PDF. */
-  extractFromDocument(doc: DocumentInput): Promise<LabExtraction>;
   /**
-   * Vaccination-certificate extraction. Output is always reviewed manually —
-   * there is no deterministic dictionary fallback for vaccines.
+   * Phase 1: structured extraction from an image/PDF. The caller supplies the
+   * doc-type-specific prompt; the provider returns the model's parsed JSON
+   * (object or array) and the doc-type module validates its shape. One method
+   * serves every document type so adding a section needs no provider changes.
    */
-  extractVaccinesFromDocument(doc: DocumentInput): Promise<RawVaccineExtraction[]>;
-  /** Discharge-summary extraction. Always reviewed manually before saving. */
-  extractDischargeFromDocument(doc: DocumentInput): Promise<RawDischargeExtraction>;
+  extractStructured(doc: DocumentInput, prompt: string, maxTokens?: number): Promise<unknown>;
   /**
    * Phase 2 fallback: pick the most likely biomarker for a raw label from an
    * explicit candidate list, or null. The model never invents biomarkers.

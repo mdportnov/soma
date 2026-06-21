@@ -19,7 +19,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const seedSrc = readFileSync(resolve(here, "../src/db/seed-biomarkers.ts"), "utf8");
 
 const seededNames: string[] = [];
-const nameRe = /name:\s*"([^"]+)",\s*\n\s*category:\s*"[^"]+"/g;
+// `\s*` (not `\s*\n\s*`) so both single-line and multi-line entry styles parse.
+const nameRe = /name:\s*"([^"]+)",\s*category:\s*"[^"]+"/g;
 for (let m = nameRe.exec(seedSrc); m; m = nameRe.exec(seedSrc)) seededNames.push(m[1]);
 
 if (seededNames.length === 0) {

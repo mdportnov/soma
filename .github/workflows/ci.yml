@@ -39,6 +39,9 @@ jobs:
       - name: Biomarker reference content coverage
         run: pnpm check:biomarker-info
 
+      - name: Import resolution & conversion checks
+        run: pnpm check:import
+
       - name: Build
         run: pnpm build
 

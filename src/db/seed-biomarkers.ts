@@ -470,7 +470,17 @@ const SEED: SeedBiomarker[] = [
     category: "Kidney",
     unit: "mmol/L",
     ref: [2.8, 7.2],
-    aliases: ["bun", "blood urea nitrogen", "мочевина"],
+    aliases: ["мочевина"],
+  },
+  {
+    // BUN is the nitrogen-only measure (≈ urea × 0.467); a distinct analyte from
+    // Urea, kept separate so each converts correctly and trends independently.
+    code: "3094-0",
+    name: "BUN",
+    category: "Kidney",
+    unit: "mg/dL",
+    ref: [7, 20],
+    aliases: ["bun", "blood urea nitrogen", "urea nitrogen", "азот мочевины"],
   },
   {
     code: "62238-1",
@@ -648,13 +658,16 @@ const SEED: SeedBiomarker[] = [
     ref: [0, 5],
     optimal: [0, 1],
     direction: "lower_better",
+    // hs-specific only — plain "CRP"/"СРБ" labels belong to the standard CRP
+    // entry; keeping the generic terms here collided and broke both matches.
     aliases: [
-      "crp",
-      "c-reactive protein",
-      "срб",
-      "с-реактивный белок",
-      "c-реактивный белок",
+      "hs-crp",
+      "high sensitivity crp",
+      "high-sensitivity c-reactive protein",
+      "ultrasensitive crp",
       "срб ультрачувствительный",
+      "вчсрб",
+      "высокочувствительный срб",
     ],
   },
   {
@@ -1163,7 +1176,849 @@ const SEED: SeedBiomarker[] = [
     direction: "lower_better",
     aliases: ["alpha-fetoprotein", "afp", "афп", "альфа-фетопротеин"],
   },
+
+  // ── Phase-2: CBC completion + differential absolute counts ──
+  {
+    code: "32623-1",
+    name: "MPV",
+    category: "Complete Blood Count",
+    unit: "fL",
+    ref: [7.5, 11.5],
+    direction: "range",
+    aliases: ["mpv", "mean platelet volume", "platelet mean volume"],
+  },
+  {
+    code: "32207-3",
+    name: "PDW",
+    category: "Complete Blood Count",
+    unit: "fL",
+    ref: [9, 17],
+    direction: "range",
+    aliases: ["pdw", "platelet distribution width"],
+  },
+  {
+    code: "21000-5",
+    name: "RDW-SD",
+    category: "Complete Blood Count",
+    unit: "fL",
+    ref: [37, 54],
+    direction: "range",
+    aliases: ["rdw-sd", "red cell distribution width sd", "rdw standard deviation"],
+  },
+  {
+    name: "Band Neutrophils",
+    category: "Complete Blood Count",
+    unit: "%",
+    ref: [0, 6],
+    direction: "range",
+    aliases: ["bands", "band neutrophils", "band cells", "stab cells", "immature neutrophils"],
+  },
+  {
+    name: "Band Neutrophils (absolute)",
+    category: "Complete Blood Count",
+    unit: "10^9/L",
+    ref: [0, 0.7],
+    direction: "range",
+    aliases: [
+      "band neutrophils absolute",
+      "bands absolute",
+      "absolute band count",
+      "stab cells absolute",
+    ],
+  },
+  {
+    name: "Reticulocytes (%)",
+    category: "Complete Blood Count",
+    unit: "%",
+    ref: [0.5, 2.5],
+    direction: "range",
+    aliases: ["reticulocytes", "reticulocytes %", "retic", "retic %", "reticulocyte percentage"],
+  },
+  {
+    code: "60474-4",
+    name: "Reticulocytes (absolute)",
+    category: "Complete Blood Count",
+    unit: "10^9/L",
+    ref: [25, 100],
+    direction: "range",
+    aliases: ["reticulocytes absolute", "absolute reticulocyte count", "arc", "retic absolute"],
+  },
+  {
+    code: "751-8",
+    name: "Neutrophils (absolute)",
+    category: "Complete Blood Count",
+    unit: "10^9/L",
+    ref: [2, 7],
+    direction: "range",
+    aliases: [
+      "neutrophils absolute",
+      "absolute neutrophil count",
+      "anc",
+      "neut #",
+      "neutrophils #",
+    ],
+  },
+  {
+    code: "731-0",
+    name: "Lymphocytes (absolute)",
+    category: "Complete Blood Count",
+    unit: "10^9/L",
+    ref: [1, 3],
+    direction: "range",
+    aliases: [
+      "lymphocytes absolute",
+      "absolute lymphocyte count",
+      "alc",
+      "lymph #",
+      "lymphocytes #",
+    ],
+  },
+  {
+    code: "742-7",
+    name: "Monocytes (absolute)",
+    category: "Complete Blood Count",
+    unit: "10^9/L",
+    ref: [0.2, 0.8],
+    direction: "range",
+    aliases: ["monocytes absolute", "absolute monocyte count", "amc", "mono #", "monocytes #"],
+  },
+  {
+    code: "711-2",
+    name: "Eosinophils (absolute)",
+    category: "Complete Blood Count",
+    unit: "10^9/L",
+    ref: [0.02, 0.5],
+    direction: "range",
+    aliases: ["eosinophils absolute", "absolute eosinophil count", "aec", "eos #", "eosinophils #"],
+  },
+  {
+    code: "704-7",
+    name: "Basophils (absolute)",
+    category: "Complete Blood Count",
+    unit: "10^9/L",
+    ref: [0, 0.1],
+    direction: "range",
+    aliases: ["basophils absolute", "absolute basophil count", "abc", "baso #", "basophils #"],
+  },
+  {
+    code: "771-6",
+    name: "Nucleated RBC",
+    category: "Complete Blood Count",
+    unit: "%",
+    ref: [0, 0],
+    direction: "range",
+    aliases: ["nrbc", "nucleated rbc", "nucleated red blood cells", "normoblasts"],
+  },
+  {
+    name: "Immature Granulocytes (%)",
+    category: "Complete Blood Count",
+    unit: "%",
+    ref: [0, 0.5],
+    direction: "range",
+    aliases: ["ig %", "immature granulocytes", "immature granulocytes %"],
+  },
+
+  // ── Phase-2: chemistry extras + clinical ratios ──
+  {
+    name: "Globulin",
+    category: "Liver",
+    unit: "g/L",
+    ref: [20, 35],
+    direction: "range",
+    aliases: ["globulin", "total globulin", "glob"],
+  },
+  {
+    name: "Albumin/Globulin Ratio",
+    category: "Liver",
+    unit: "ratio",
+    ref: [1.1, 2.5],
+    direction: "range",
+    aliases: ["a/g ratio", "ag ratio", "albumin/globulin ratio", "albumin globulin ratio"],
+  },
+  {
+    code: "9830-1",
+    name: "Total Cholesterol/HDL Ratio",
+    category: "Lipid Panel",
+    unit: "ratio",
+    ref: [0, 5],
+    optimal: [0, 3.5],
+    direction: "lower_better",
+    aliases: [
+      "chol/hdl ratio",
+      "total cholesterol/hdl ratio",
+      "tc/hdl",
+      "cardiac risk ratio",
+      "atherogenic index",
+    ],
+  },
+  {
+    code: "16616-5",
+    name: "LDL/HDL Ratio",
+    category: "Lipid Panel",
+    unit: "ratio",
+    ref: [0, 3.5],
+    optimal: [0, 2],
+    direction: "lower_better",
+    aliases: ["ldl/hdl ratio", "ldl/hdl"],
+  },
+  {
+    name: "Triglyceride/HDL Ratio",
+    category: "Lipid Panel",
+    unit: "ratio",
+    ref: [0, 3],
+    optimal: [0, 1.5],
+    direction: "lower_better",
+    aliases: ["tg/hdl ratio", "trig/hdl", "triglyceride/hdl ratio"],
+  },
+  {
+    code: "3097-3",
+    name: "BUN/Creatinine Ratio",
+    category: "Kidney",
+    unit: "ratio",
+    ref: [10, 20],
+    direction: "range",
+    aliases: ["bun/creatinine ratio", "bun/cr", "urea/creatinine ratio"],
+  },
+  {
+    code: "33037-3",
+    name: "Anion Gap",
+    category: "Electrolytes & Minerals",
+    unit: "mmol/L",
+    ref: [8, 16],
+    direction: "range",
+    aliases: ["anion gap", "ag"],
+  },
+  {
+    code: "2692-1",
+    name: "Serum Osmolality",
+    category: "Electrolytes & Minerals",
+    unit: "mOsm/kg",
+    ref: [275, 295],
+    direction: "range",
+    aliases: ["osmolality", "serum osmolality", "plasma osmolality", "osm"],
+  },
+  {
+    code: "2524-7",
+    name: "Lactate",
+    category: "Glucose Metabolism",
+    unit: "mmol/L",
+    ref: [0.5, 2.2],
+    direction: "lower_better",
+    aliases: ["lactate", "lactic acid"],
+  },
+  {
+    code: "1841-6",
+    name: "Ammonia",
+    category: "Liver",
+    unit: "µmol/L",
+    ref: [11, 35],
+    direction: "range",
+    aliases: ["ammonia", "nh3"],
+  },
+  {
+    code: "2157-6",
+    name: "CK (Creatine Kinase)",
+    category: "Cardiac Markers",
+    unit: "U/L",
+    ref: [30, 200],
+    direction: "range",
+    aliases: ["ck", "cpk", "creatine kinase", "total ck"],
+  },
+  {
+    code: "13969-1",
+    name: "CK-MB",
+    category: "Cardiac Markers",
+    unit: "ng/mL",
+    ref: [0, 5],
+    direction: "lower_better",
+    aliases: ["ck-mb", "ckmb", "creatine kinase mb"],
+  },
+  {
+    code: "33959-8",
+    name: "Procalcitonin",
+    category: "Inflammation",
+    unit: "ng/mL",
+    ref: [0, 0.1],
+    direction: "lower_better",
+    aliases: ["procalcitonin", "pct"],
+  },
+  {
+    code: "1988-5",
+    name: "CRP",
+    category: "Inflammation",
+    unit: "mg/L",
+    ref: [0, 5],
+    optimal: [0, 1],
+    direction: "lower_better",
+    aliases: ["crp", "c-reactive protein", "standard crp"],
+  },
+
+  // ── Phase-2: Urinalysis ──
+  {
+    code: "5811-5",
+    name: "Urine Specific Gravity",
+    category: "Urinalysis",
+    unit: "SG",
+    ref: [1.005, 1.03],
+    direction: "range",
+    aliases: ["specific gravity", "urine sg", "usg"],
+  },
+  {
+    code: "5803-2",
+    name: "Urine pH",
+    category: "Urinalysis",
+    unit: "pH",
+    ref: [4.5, 8.0],
+    direction: "range",
+    aliases: ["ph", "urine ph", "ph of urine"],
+  },
+  {
+    code: "5804-0",
+    name: "Urine Protein",
+    category: "Urinalysis",
+    unit: "mg/dL",
+    ref: [0, 14],
+    direction: "lower_better",
+    aliases: ["urine protein", "proteinuria", "urine albumin (dipstick)"],
+  },
+  {
+    code: "5792-7",
+    name: "Urine Glucose",
+    category: "Urinalysis",
+    unit: "mg/dL",
+    ref: [0, 15],
+    direction: "lower_better",
+    aliases: ["urine glucose", "glycosuria", "glucosuria"],
+  },
+  {
+    code: "5797-6",
+    name: "Urine Ketones",
+    category: "Urinalysis",
+    unit: "mg/dL",
+    ref: [0, 5],
+    direction: "lower_better",
+    aliases: ["urine ketones", "ketonuria", "acetoacetate"],
+  },
+  {
+    code: "5818-0",
+    name: "Urine Urobilinogen",
+    category: "Urinalysis",
+    unit: "mg/dL",
+    ref: [0.1, 1.0],
+    direction: "range",
+    aliases: ["urobilinogen", "urine urobilinogen"],
+  },
+  {
+    code: "14957-5",
+    name: "Microalbumin (urine)",
+    category: "Urinalysis",
+    unit: "mg/L",
+    ref: [0, 30],
+    direction: "lower_better",
+    aliases: ["microalbumin", "urine microalbumin", "urine albumin", "microalbuminuria"],
+  },
+  {
+    code: "32294-1",
+    name: "Urine Albumin/Creatinine Ratio (ACR)",
+    category: "Urinalysis",
+    unit: "mg/g",
+    ref: [0, 30],
+    direction: "lower_better",
+    aliases: ["acr", "uacr", "albumin/creatinine ratio", "microalbumin/creatinine ratio"],
+  },
+  {
+    code: "2161-8",
+    name: "Urine Creatinine",
+    category: "Urinalysis",
+    unit: "mmol/L",
+    ref: [2.5, 23],
+    direction: "range",
+    aliases: ["urine creatinine", "creatinine urine", "urinary creatinine"],
+  },
+  {
+    code: "13945-1",
+    name: "Urine RBC (microscopy)",
+    category: "Urinalysis",
+    unit: "/hpf",
+    ref: [0, 3],
+    direction: "lower_better",
+    aliases: ["urine rbc", "red blood cells urine", "erythrocytes urine", "hematuria"],
+  },
+  {
+    code: "5821-4",
+    name: "Urine WBC (microscopy)",
+    category: "Urinalysis",
+    unit: "/hpf",
+    ref: [0, 5],
+    direction: "lower_better",
+    aliases: ["urine wbc", "white blood cells urine", "leukocytes urine", "pyuria"],
+  },
+  {
+    code: "5787-7",
+    name: "Urine Epithelial Cells",
+    category: "Urinalysis",
+    unit: "/hpf",
+    ref: [0, 5],
+    direction: "lower_better",
+    aliases: ["epithelial cells", "urine epithelial cells", "squamous epithelial cells"],
+  },
+  {
+    code: "5796-8",
+    name: "Urine Casts (hyaline)",
+    category: "Urinalysis",
+    unit: "/lpf",
+    ref: [0, 2],
+    direction: "lower_better",
+    aliases: ["hyaline casts", "urine casts", "casts"],
+  },
+  {
+    code: "5799-2",
+    name: "Urine Leukocyte Esterase",
+    category: "Urinalysis",
+    unit: "qual",
+    direction: "range",
+    aliases: ["leukocyte esterase", "urine leukocyte esterase", "esterase"],
+  },
+  {
+    code: "5802-4",
+    name: "Urine Nitrite",
+    category: "Urinalysis",
+    unit: "qual",
+    direction: "range",
+    aliases: ["nitrite", "urine nitrite", "nitrites"],
+  },
+  {
+    code: "5794-1",
+    name: "Urine Blood (hemoglobin)",
+    category: "Urinalysis",
+    unit: "qual",
+    direction: "range",
+    aliases: ["urine blood", "hemoglobin urine", "occult blood"],
+  },
+  {
+    code: "5770-3",
+    name: "Urine Bilirubin",
+    category: "Urinalysis",
+    unit: "qual",
+    direction: "range",
+    aliases: ["urine bilirubin", "bilirubinuria"],
+  },
+
+  // ── Phase-2: endocrine, coagulation & immune ──
+  {
+    code: "14586-2",
+    name: "Aldosterone",
+    category: "Hormones",
+    unit: "pmol/L",
+    ref: [100, 950],
+    optimal: [100, 650],
+    direction: "range",
+    aliases: ["aldosterone", "aldo"],
+  },
+  {
+    code: "2915-7",
+    name: "Renin (Plasma Renin Activity)",
+    category: "Hormones",
+    unit: "ng/mL/h",
+    ref: [0.25, 5.82],
+    direction: "range",
+    aliases: ["renin", "pra", "plasma renin activity"],
+  },
+  {
+    code: "2141-0",
+    name: "ACTH",
+    category: "Hormones",
+    unit: "pg/mL",
+    ref: [7.2, 63.3],
+    direction: "range",
+    aliases: ["acth", "adrenocorticotropic hormone", "corticotropin"],
+  },
+  {
+    code: "38476-3",
+    name: "AMH (Anti-Müllerian Hormone)",
+    category: "Hormones",
+    unit: "ng/mL",
+    ref: [1.0, 9.5],
+    direction: "range",
+    aliases: ["amh", "anti-mullerian hormone", "mullerian inhibiting substance", "mis"],
+  },
+  {
+    code: "1668-3",
+    name: "17-OH Progesterone",
+    category: "Hormones",
+    unit: "nmol/L",
+    ref: [0.5, 8.7],
+    direction: "range",
+    aliases: ["17-ohp", "17-oh progesterone", "17-hydroxyprogesterone", "17 ohp"],
+  },
+  {
+    code: "2147-7",
+    name: "Cortisol (evening)",
+    category: "Hormones",
+    unit: "nmol/L",
+    ref: [55, 250],
+    direction: "range",
+    aliases: ["cortisol pm", "evening cortisol", "pm cortisol", "cortisol evening"],
+  },
+  {
+    code: "14685-2",
+    name: "Ceruloplasmin",
+    category: "Electrolytes & Minerals",
+    unit: "mg/dL",
+    ref: [20, 35],
+    direction: "range",
+    aliases: ["ceruloplasmin", "cp"],
+  },
+  {
+    code: "5894-1",
+    name: "PT (Prothrombin Time)",
+    category: "Coagulation",
+    unit: "s",
+    ref: [11, 13.5],
+    direction: "range",
+    aliases: ["pt", "prothrombin time", "protime"],
+  },
+  {
+    code: "14979-9",
+    name: "aPTT",
+    category: "Coagulation",
+    unit: "s",
+    ref: [25, 35],
+    direction: "range",
+    aliases: [
+      "aptt",
+      "ptt",
+      "activated partial thromboplastin time",
+      "partial thromboplastin time",
+    ],
+  },
+  {
+    code: "3176-5",
+    name: "Antithrombin III",
+    category: "Coagulation",
+    unit: "%",
+    ref: [80, 120],
+    direction: "range",
+    aliases: ["antithrombin iii", "at iii", "atiii", "antithrombin", "at-3"],
+  },
+  {
+    code: "4485-9",
+    name: "Complement C3",
+    category: "Inflammation",
+    unit: "g/L",
+    ref: [0.9, 1.8],
+    direction: "range",
+    aliases: ["c3", "complement c3"],
+  },
+  {
+    code: "4498-2",
+    name: "Complement C4",
+    category: "Inflammation",
+    unit: "g/L",
+    ref: [0.1, 0.4],
+    direction: "range",
+    aliases: ["c4", "complement c4"],
+  },
+  {
+    code: "2465-3",
+    name: "IgG",
+    category: "Inflammation",
+    unit: "g/L",
+    ref: [7.0, 16.0],
+    direction: "range",
+    aliases: ["igg", "immunoglobulin g", "gamma globulin"],
+  },
+  {
+    code: "2458-8",
+    name: "IgA",
+    category: "Inflammation",
+    unit: "g/L",
+    ref: [0.7, 4.0],
+    direction: "range",
+    aliases: ["iga", "immunoglobulin a"],
+  },
+  {
+    code: "2472-9",
+    name: "IgM",
+    category: "Inflammation",
+    unit: "g/L",
+    ref: [0.4, 2.3],
+    direction: "range",
+    aliases: ["igm", "immunoglobulin m"],
+  },
+  {
+    code: "2188-1",
+    name: "DHEA",
+    category: "Hormones",
+    unit: "nmol/L",
+    ref: [4.0, 35.0],
+    direction: "range",
+    aliases: ["dhea", "dehydroepiandrosterone"],
+  },
 ];
+
+/**
+ * Multilingual alias enrichment, keyed by canonical name. Kept separate from
+ * SEED so the dictionary stays readable, and merged into every entry at seed/
+ * sync time. These feed the deterministic import mapper — Spanish/Portuguese/
+ * etc. report labels resolve to an exact/alias hit without an AI fallback call.
+ * Add freely; matching is case-/accent-insensitive (see normalizeLabel).
+ */
+const EXTRA_ALIASES: Record<string, string[]> = {
+  // Complete blood count
+  Hemoglobin: ["hemoglobina"],
+  Hematocrit: ["hematocrito"],
+  "Red Blood Cells": ["hematíes", "glóbulos rojos", "eritrocitos", "recuento de hematíes"],
+  "White Blood Cells": [
+    "leucocitos",
+    "leucocitos totales",
+    "glóbulos blancos",
+    "recuento de leucocitos",
+  ],
+  Platelets: ["plaquetas", "recuento de plaquetas", "trombocitos"],
+  MCV: ["volumen corpuscular medio", "vcm"],
+  MCH: ["hemoglobina corpuscular media", "hcm"],
+  MCHC: [
+    "concentración de hemoglobina corpuscular media",
+    "concentración hemoglobina corpuscular media",
+    "chcm",
+  ],
+  RDW: [
+    "índice de anisocitosis",
+    "ancho de distribución eritrocitaria",
+    "amplitud de distribución eritrocitaria",
+  ],
+  Neutrophils: ["neutrófilos", "neutrófilos segmentados", "segmentados", "neutrófilos %"],
+  Lymphocytes: ["linfocitos"],
+  Monocytes: ["monocitos"],
+  Eosinophils: ["eosinófilos"],
+  Basophils: ["basófilos"],
+  ESR: ["velocidad de sedimentación globular", "vsg", "velocidad de eritrosedimentación"],
+  // Glucose metabolism
+  "Glucose (fasting)": ["glucosa", "glucosa basal", "glucosa en ayunas", "glicemia"],
+  HbA1c: ["hemoglobina glicosilada", "hemoglobina glucosilada"],
+  "Insulin (fasting)": ["insulina", "insulina basal"],
+  "Uric Acid": ["ácido úrico"],
+  // Kidney
+  Creatinine: ["creatinina"],
+  Urea: ["úrea", "urea"],
+  BUN: ["nitrógeno ureico", "nitrogeno ureico", "bun (nitrógeno ureico)"],
+  // Electrolytes & minerals
+  Sodium: ["sodio", "sodio (na)"],
+  Potassium: ["potasio", "potasio (k)"],
+  Chloride: ["cloro", "cloruro", "cloro (cl)"],
+  Calcium: ["calcio"],
+  Magnesium: ["magnesio"],
+  Phosphorus: ["fósforo", "fosforo"],
+  Bicarbonate: ["bicarbonato"],
+  Zinc: ["cinc"],
+  Copper: ["cobre"],
+  // Lipid panel
+  "Total Cholesterol": ["colesterol total"],
+  "HDL Cholesterol": ["colesterol hdl"],
+  "LDL Cholesterol": ["colesterol ldl"],
+  "VLDL Cholesterol": ["colesterol vldl"],
+  Triglycerides: ["triglicéridos"],
+  "Non-HDL Cholesterol": ["colesterol no hdl"],
+  // Liver
+  Albumin: ["albúmina"],
+  "Total Protein": ["proteínas totales"],
+  "Alkaline Phosphatase": ["fosfatasa alcalina"],
+  ALT: [
+    "tgp",
+    "transaminasa glutámico pirúvica",
+    "alanina aminotransferasa",
+    "alanino aminotransferasa",
+  ],
+  AST: ["tgo", "transaminasa glutámico oxalacética", "aspartato aminotransferasa"],
+  GGT: ["gamma glutamil transpeptidasa", "gamma-glutamil transferasa", "transpeptidasa"],
+  "Bilirubin Total": ["bilirrubina total", "bilirrubinas totales"],
+  "Bilirubin Direct": ["bilirrubina directa"],
+  "Bilirubin Indirect": ["bilirrubina indirecta"],
+  LDH: ["deshidrogenasa láctica", "lactato deshidrogenasa", "lactato deshidrogenasa (ldh)"],
+  // Thyroid
+  TSH: ["tsh ultrasensible", "hormona estimulante de la tiroides", "tirotropina"],
+  "Free T4": ["t4 libre", "tiroxina libre"],
+  "Free T3": ["t3 libre"],
+  "Total T4": ["t4 total", "tiroxina total"],
+  "Total T3": ["t3 total"],
+  // Iron status
+  Ferritin: ["ferritina", "ferritina sérica"],
+  Iron: ["hierro", "hierro sérico"],
+  Transferrin: ["transferrina"],
+  TIBC: ["capacidad total de fijación de hierro", "capacidad de fijación de hierro"],
+  "Transferrin Saturation": ["saturación de transferrina", "índice de saturación de transferrina"],
+  // Hormones (common on general panels)
+  "Cortisol (morning)": ["cortisol"],
+  "Testosterone Total": ["testosterona total", "testosterona"],
+  "Vitamin D (25-OH)": ["vitamina d", "25-hidroxivitamina d"],
+  "Vitamin B12": ["vitamina b12", "cobalamina"],
+  Folate: ["folato", "ácido fólico"],
+  // Phase-2 additions
+  MPV: ["volumen plaquetario medio", "vpm", "средний объём тромбоцита"],
+  PDW: [
+    "ancho de distribución plaquetaria",
+    "índice de distribución plaquetaria",
+    "ширина распределения тромбоцитов",
+  ],
+  "RDW-SD": ["ancho de distribución eritrocitaria sd", "rdw desviación estándar"],
+  "Band Neutrophils": [
+    "bastones",
+    "cayados",
+    "baciliformes",
+    "neutrófilos en banda",
+    "neutrófilos en cayado",
+    "палочкоядерные нейтрофилы",
+    "палочкоядерные",
+  ],
+  "Band Neutrophils (absolute)": [
+    "bastones absolutos",
+    "cayados absolutos",
+    "recuento absoluto de bastones",
+  ],
+  "Reticulocytes (%)": [
+    "reticulocitos",
+    "reticulocitos %",
+    "porcentaje de reticulocitos",
+    "ретикулоциты",
+  ],
+  "Reticulocytes (absolute)": ["reticulocitos absolutos", "recuento absoluto de reticulocitos"],
+  "Neutrophils (absolute)": [
+    "neutrófilos absolutos",
+    "recuento absoluto de neutrófilos",
+    "neutrófilos segmentados (absoluto)",
+    "абсолютное число нейтрофилов",
+  ],
+  "Lymphocytes (absolute)": ["linfocitos absolutos", "recuento absoluto de linfocitos"],
+  "Monocytes (absolute)": ["monocitos absolutos", "recuento absoluto de monocitos"],
+  "Eosinophils (absolute)": ["eosinófilos absolutos", "recuento absoluto de eosinófilos"],
+  "Basophils (absolute)": ["basófilos absolutos", "recuento absoluto de basófilos"],
+  "Nucleated RBC": ["eritrocitos nucleados", "eritroblastos", "normoblastos"],
+  "Immature Granulocytes (%)": [
+    "granulocitos inmaduros",
+    "granulocitos inmaduros %",
+    "незрелые гранулоциты",
+  ],
+  Globulin: ["globulina", "globulinas"],
+  "Albumin/Globulin Ratio": [
+    "relación albúmina/globulina",
+    "índice albúmina/globulina",
+    "cociente a/g",
+    "relación a/g",
+  ],
+  "Total Cholesterol/HDL Ratio": [
+    "riesgo coronario 1",
+    "colesterol total/hdl",
+    "índice aterogénico",
+    "índice de castelli",
+    "relación colesterol total/hdl",
+  ],
+  "LDL/HDL Ratio": ["riesgo coronario 2", "relación ldl/hdl", "colesterol ldl/hdl"],
+  "Triglyceride/HDL Ratio": [
+    "riesgo coronario 3",
+    "relación triglicéridos/hdl",
+    "triglicéridos/hdl",
+  ],
+  "BUN/Creatinine Ratio": [
+    "relación bun/creatinina",
+    "índice urea/creatinina",
+    "relación urea/creatinina",
+  ],
+  "Anion Gap": ["brecha aniónica", "anión gap", "hiato aniónico"],
+  "Serum Osmolality": ["osmolalidad sérica", "osmolalidad plasmática", "osmolaridad sérica"],
+  Lactate: ["lactato", "ácido láctico"],
+  Ammonia: ["amoníaco", "amonio", "amoniaco"],
+  "CK (Creatine Kinase)": [
+    "creatina quinasa",
+    "creatinquinasa",
+    "creatinfosfoquinasa",
+    "cpk",
+    "ck total",
+  ],
+  "CK-MB": ["creatina quinasa mb", "fracción mb"],
+  Procalcitonin: ["procalcitonina"],
+  CRP: [
+    "proteína c reactiva",
+    "pcr",
+    "proteína c-reactiva",
+    "срб",
+    "с-реактивный белок",
+    "c-реактивный белок",
+  ],
+  "Urine Specific Gravity": [
+    "densidad",
+    "densidad urinaria",
+    "densidad de la orina",
+    "gravedad específica",
+  ],
+  "Urine pH": ["ph urinario", "ph en orina", "ph de la orina"],
+  "Urine Protein": ["proteínas en orina", "proteínas orina"],
+  "Urine Glucose": ["glucosa en orina", "glucosa orina"],
+  "Urine Ketones": ["cuerpos cetónicos", "cetonas en orina", "cetonuria", "acetona en orina"],
+  "Urine Urobilinogen": ["urobilinógeno", "urobilinógeno en orina"],
+  "Microalbumin (urine)": [
+    "microalbúmina",
+    "albúmina en orina",
+    "albúmina en orina (microalbúmina)",
+  ],
+  "Urine Albumin/Creatinine Ratio (ACR)": [
+    "cociente albúmina/creatinina",
+    "índice albúmina/creatinina",
+    "relación albúmina creatinina",
+    "cac",
+  ],
+  "Urine Creatinine": ["creatinina en orina", "creatinina urinaria"],
+  "Urine RBC (microscopy)": [
+    "hematíes en orina",
+    "eritrocitos en orina",
+    "glóbulos rojos en orina",
+  ],
+  "Urine WBC (microscopy)": ["leucocitos en orina", "piuria", "glóbulos blancos en orina"],
+  "Urine Epithelial Cells": [
+    "células epiteliales",
+    "células epiteliales en orina",
+    "células epiteliales escamosas",
+  ],
+  "Urine Casts (hyaline)": ["cilindros hialinos", "cilindros en orina", "cilindruria"],
+  "Urine Leukocyte Esterase": ["esterasa leucocitaria", "esterasa de leucocitos"],
+  "Urine Nitrite": ["nitritos", "nitritos en orina"],
+  "Urine Blood (hemoglobin)": ["sangre en orina", "hemoglobina en orina", "sangre oculta en orina"],
+  "Urine Bilirubin": ["bilirrubina en orina"],
+  Aldosterone: ["aldosterona"],
+  "Renin (Plasma Renin Activity)": ["renina", "actividad de renina plasmática"],
+  ACTH: ["hormona adrenocorticotrópica", "corticotropina"],
+  "AMH (Anti-Müllerian Hormone)": ["hormona antimülleriana"],
+  "17-OH Progesterone": ["17-hidroxiprogesterona"],
+  "Cortisol (evening)": ["cortisol vespertino", "cortisol de la tarde"],
+  Ceruloplasmin: ["ceruloplasmina"],
+  "PT (Prothrombin Time)": ["tiempo de protrombina", "tp"],
+  aPTT: ["tiempo de tromboplastina parcial activada", "ttpa", "ttp"],
+  "Antithrombin III": ["antitrombina iii", "antitrombina"],
+  "Complement C3": ["complemento c3"],
+  "Complement C4": ["complemento c4"],
+  IgG: ["inmunoglobulina g", "gammaglobulina"],
+  IgA: ["inmunoglobulina a"],
+  IgM: ["inmunoglobulina m"],
+  DHEA: ["dehidroepiandrosterona"],
+};
+
+/** Canonical SEED aliases plus any multilingual enrichment for that entry. */
+function aliasesFor(b: SeedBiomarker): string[] {
+  const extra = EXTRA_ALIASES[b.name] ?? [];
+  return [...new Set([...b.aliases, ...extra])];
+}
+
+/**
+ * Aliases to strip from an existing seeded row when a term has been relocated to
+ * a more specific entry. A union-merge alone can't remove them, so `syncBiomarkers`
+ * applies these so existing installs converge (keyed by LOINC code).
+ */
+const ALIAS_REMOVALS: Record<string, string[]> = {
+  // Urea → split out a dedicated BUN entry.
+  "3091-6": ["bun", "blood urea nitrogen"],
+  // hs-CRP → plain "CRP"/"СРБ" labels now belong to the standard CRP entry.
+  "30522-7": ["crp", "c-reactive protein", "срб", "с-реактивный белок", "c-реактивный белок"],
+};
 
 /**
  * Sex-specific adult reference ranges, in each biomarker's default unit.
@@ -1233,7 +2088,7 @@ export async function seedBiomarkersIfEmpty(conn: Database): Promise<void> {
           b.code ?? null,
           b.name,
           b.category,
-          JSON.stringify(b.aliases),
+          JSON.stringify(aliasesFor(b)),
           b.unit,
           b.ref?.[0] ?? null,
           b.ref?.[1] ?? null,
@@ -1248,4 +2103,92 @@ export async function seedBiomarkersIfEmpty(conn: Database): Promise<void> {
     await conn.execute("ROLLBACK");
     throw e;
   }
+}
+
+/**
+ * Reconciles the biomarker table with the current SEED on every startup so
+ * library improvements reach existing installs without a manual step: inserts
+ * any new dictionary entries and unions in new (incl. multilingual) aliases.
+ * Only touches seeded rows (is_custom = 0) and only adds aliases — user-created
+ * biomarkers and user-added aliases are preserved. Idempotent.
+ */
+export async function syncBiomarkers(conn: Database): Promise<void> {
+  type Row = {
+    id: number;
+    code: string | null;
+    canonical_name: string;
+    aliases: string;
+    is_custom: number;
+  };
+  const rows = await conn.select<Row[]>(
+    "SELECT id, code, canonical_name, aliases, is_custom FROM biomarker",
+  );
+  const byCode = new Map<string, Row>();
+  const byName = new Map<string, Row>();
+  for (const r of rows) {
+    if (r.code) byCode.set(r.code, r);
+    byName.set(r.canonical_name.toLowerCase(), r);
+  }
+
+  await conn.execute("BEGIN");
+  try {
+    for (const b of SEED) {
+      const existing =
+        (b.code ? byCode.get(b.code) : undefined) ?? byName.get(b.name.toLowerCase());
+      if (!existing) {
+        await conn.execute(
+          `INSERT INTO biomarker
+             (code, canonical_name, category, aliases, default_unit,
+              ref_low, ref_high, optimal_low, optimal_high, direction, is_custom)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0)`,
+          [
+            b.code ?? null,
+            b.name,
+            b.category,
+            JSON.stringify(aliasesFor(b)),
+            b.unit,
+            b.ref?.[0] ?? null,
+            b.ref?.[1] ?? null,
+            b.optimal?.[0] ?? null,
+            b.optimal?.[1] ?? null,
+            b.direction ?? "range",
+          ],
+        );
+        continue;
+      }
+      if (existing.is_custom) continue;
+      const current = safeAliases(existing.aliases);
+      // Union in new aliases, then strip any that were relocated to another entry
+      // (a plain union can't remove, so existing installs need this explicit step).
+      const removals = (b.code && ALIAS_REMOVALS[b.code]) || [];
+      const next = [...new Set([...current, ...aliasesFor(b)])].filter(
+        (a) => !removals.includes(a),
+      );
+      if (!sameSet(current, next)) {
+        await conn.execute("UPDATE biomarker SET aliases = $1 WHERE id = $2", [
+          JSON.stringify(next),
+          existing.id,
+        ]);
+      }
+    }
+    await conn.execute("COMMIT");
+  } catch (e) {
+    await conn.execute("ROLLBACK");
+    throw e;
+  }
+}
+
+function safeAliases(json: string): string[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function sameSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const s = new Set(a);
+  return b.every((x) => s.has(x));
 }

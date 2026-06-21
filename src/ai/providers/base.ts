@@ -5,20 +5,9 @@ import {
   type AIProvider,
   type ChatMessage,
   type DocumentInput,
-  type LabExtraction,
   type MappingCandidatePayload,
-  type RawDischargeExtraction,
-  type RawExtraction,
-  type RawVaccineExtraction,
 } from "../types";
-import {
-  buildMappingPrompt,
-  DISCHARGE_EXTRACTION_PROMPT,
-  EXTRACTION_PROMPT,
-  extractJson,
-  TEST_PROMPT,
-  VACCINE_EXTRACTION_PROMPT,
-} from "../prompts";
+import { buildMappingPrompt, extractJson, TEST_PROMPT } from "../prompts";
 
 export type UserPart = { type: "text"; text: string } | { type: "document"; doc: DocumentInput };
 
@@ -43,37 +32,21 @@ export abstract class BaseProvider implements AIProvider {
 
   protected abstract complete(req: CompletionRequest): Promise<string>;
 
-  async extractFromDocument(doc: DocumentInput): Promise<LabExtraction> {
+  /**
+   * Generic phase-1 extraction: send the document + a doc-type prompt, return
+   * the model's parsed JSON. Validation of the shape is the caller's job (each
+   * doc-type module owns its validator). A truncated/garbled reply surfaces as a
+   * `bad_response` AIProviderError via `parseModelJson`.
+   */
+  async extractStructured(doc: DocumentInput, prompt: string, maxTokens = 8192): Promise<unknown> {
     const text = await this.complete({
       parts: [
         { type: "document", doc },
-        { type: "text", text: EXTRACTION_PROMPT },
+        { type: "text", text: prompt },
       ],
-      maxTokens: 16384,
+      maxTokens,
     });
-    return validateLabExtraction(parseModelJson(text));
-  }
-
-  async extractVaccinesFromDocument(doc: DocumentInput): Promise<RawVaccineExtraction[]> {
-    const text = await this.complete({
-      parts: [
-        { type: "document", doc },
-        { type: "text", text: VACCINE_EXTRACTION_PROMPT },
-      ],
-      maxTokens: 8192,
-    });
-    return validateVaccines(parseModelJson(text));
-  }
-
-  async extractDischargeFromDocument(doc: DocumentInput): Promise<RawDischargeExtraction> {
-    const text = await this.complete({
-      parts: [
-        { type: "document", doc },
-        { type: "text", text: DISCHARGE_EXTRACTION_PROMPT },
-      ],
-      maxTokens: 8192,
-    });
-    return validateDischarge(parseModelJson(text));
+    return parseModelJson(text);
   }
 
   async mapBiomarker(
@@ -203,187 +176,4 @@ function classifyStatus(status: number): "auth" | "rate_limit" | "overloaded" | 
   if (status === 429) return "rate_limit";
   if (status === 503 || status === 529) return "overloaded";
   return "unknown";
-}
-
-/**
- * Accepts the panel object `{collection_date, lab_name, fasting, results}` and,
- * for resilience, a bare `results` array from a model that ignored the schema.
- */
-/** Hard cap on surfaced skipped rows — a runaway report shouldn't bloat state. */
-const MAX_SKIPPED_ROWS = 50;
-
-function validateLabExtraction(parsed: unknown): LabExtraction {
-  const skipped: NonNullable<LabExtraction["skipped"]> = [];
-  if (Array.isArray(parsed)) {
-    return {
-      collectionDate: null,
-      labName: null,
-      fasting: null,
-      results: validateExtractions(parsed, skipped),
-      skipped: skipped.length ? skipped : undefined,
-    };
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new AIProviderError("Extraction did not return a JSON object", undefined, "bad_response");
-  }
-  const o = parsed as Record<string, unknown>;
-  const results = validateExtractions(o.results, skipped);
-  return {
-    collectionDate: isoDateOrNull(o.collection_date),
-    labName: nullableStr(o.lab_name),
-    fasting: typeof o.fasting === "boolean" ? o.fasting : null,
-    results,
-    skipped: skipped.length ? skipped : undefined,
-  };
-}
-
-/**
- * Parse a numeric string that may use locale formatting from a scanned report:
- * thousands separators (`1,234` / `1.234` / `1 234` / `1'234`) and a decimal
- * comma (`12,5`). The previous `replace(",", ".")` only swapped the first comma,
- * turning `"1.234,56"` into `1.234` — a silent 1000× error. We detect the
- * decimal separator as the right-most of `.`/`,` and strip the rest.
- */
-export function parseLocaleNumber(raw: string): number {
-  let s = raw.trim().replace(/[\s']/g, "");
-  const lastComma = s.lastIndexOf(",");
-  const lastDot = s.lastIndexOf(".");
-  if (lastComma !== -1 && lastDot !== -1) {
-    // Both present: the right-most separator is the decimal point.
-    if (lastComma > lastDot) s = s.replace(/\./g, "").replace(",", ".");
-    else s = s.replace(/,/g, "");
-  } else if (lastComma !== -1) {
-    // Commas only: treat the last as decimal, the rest as thousands groupers.
-    s = s.replace(/,(?=.*,)/g, "").replace(",", ".");
-  }
-  return Number.parseFloat(s);
-}
-
-/**
- * Validate the analyte rows. Rows that carry a real label but a non-numeric
- * result (qualitative "positive"/"negative", titres) are not silently dropped:
- * they're collected into `skipped` (capped) so the UI can disclose them.
- */
-function validateExtractions(
-  parsed: unknown,
-  skipped: NonNullable<LabExtraction["skipped"]>,
-): RawExtraction[] {
-  if (!Array.isArray(parsed)) {
-    throw new AIProviderError("Extraction results is not a JSON array", undefined, "bad_response");
-  }
-  const rows: RawExtraction[] = [];
-  for (const item of parsed) {
-    if (typeof item !== "object" || item === null) continue;
-    const o = item as Record<string, unknown>;
-    // Bound every string: model output is untrusted and could be huge.
-    const rawLabel = typeof o.raw_label === "string" ? o.raw_label.trim().slice(0, 300) : "";
-    const value =
-      typeof o.value === "number"
-        ? o.value
-        : typeof o.value === "string"
-          ? parseLocaleNumber(o.value)
-          : NaN;
-    if (!rawLabel) continue;
-    if (!Number.isFinite(value)) {
-      // Real label, unusable value → record it as skipped rather than losing it.
-      if (skipped.length < MAX_SKIPPED_ROWS) {
-        const rawValue =
-          typeof o.value === "string" || typeof o.value === "number" ? String(o.value) : "";
-        skipped.push({ label: rawLabel, rawValue: rawValue.slice(0, 100) });
-      }
-      continue;
-    }
-    rows.push({
-      raw_label: rawLabel,
-      analyte_en:
-        typeof o.analyte_en === "string" ? o.analyte_en.trim().slice(0, 120) || null : null,
-      value,
-      unit: typeof o.unit === "string" ? o.unit.trim().slice(0, 40) : "",
-      ref_range_text:
-        typeof o.ref_range_text === "string" ? o.ref_range_text.trim().slice(0, 120) : null,
-      page: typeof o.page === "number" ? o.page : null,
-    });
-  }
-  return rows;
-}
-
-/** Trimmed, length-bounded string or null (model output is untrusted). */
-function nullableStr(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  const t = v.trim().slice(0, 200);
-  return t ? t : null;
-}
-
-/** Accept only well-formed ISO `YYYY-MM-DD`; anything else (incl. guesses) → null. */
-function isoDateOrNull(v: unknown): string | null {
-  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null;
-}
-
-function validateVaccines(parsed: unknown): RawVaccineExtraction[] {
-  if (!Array.isArray(parsed)) {
-    throw new AIProviderError(
-      "Vaccine extraction did not return a JSON array",
-      undefined,
-      "bad_response",
-    );
-  }
-  const rows: RawVaccineExtraction[] = [];
-  for (const item of parsed) {
-    if (typeof item !== "object" || item === null) continue;
-    const o = item as Record<string, unknown>;
-    const name = nullableStr(o.vaccineName);
-    if (!name) continue;
-    const dose =
-      typeof o.doseNumber === "number" && Number.isFinite(o.doseNumber)
-        ? Math.trunc(o.doseNumber)
-        : null;
-    rows.push({
-      vaccineName: name,
-      date: isoDateOrNull(o.date),
-      doseNumber: dose,
-      manufacturer: nullableStr(o.manufacturer),
-      batchNumber: nullableStr(o.batchNumber),
-      expiresAt: isoDateOrNull(o.expiresAt),
-    });
-  }
-  return rows;
-}
-
-function validateDischarge(parsed: unknown): RawDischargeExtraction {
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new AIProviderError(
-      "Discharge extraction did not return a JSON object",
-      undefined,
-      "bad_response",
-    );
-  }
-  const o = parsed as Record<string, unknown>;
-  const diagnoses = Array.isArray(o.diagnoses)
-    ? o.diagnoses
-        .map((d) => {
-          if (typeof d !== "object" || d === null) return null;
-          const r = d as Record<string, unknown>;
-          const name = nullableStr(r.name);
-          return name ? { name, icdCode: nullableStr(r.icdCode) } : null;
-        })
-        .filter((d): d is { name: string; icdCode: string | null } => d !== null)
-    : [];
-  const medications = Array.isArray(o.medications)
-    ? o.medications
-        .map((m) => {
-          if (typeof m !== "object" || m === null) return null;
-          const r = m as Record<string, unknown>;
-          const name = nullableStr(r.name);
-          return name ? { name, dose: nullableStr(r.dose) } : null;
-        })
-        .filter((m): m is { name: string; dose: string | null } => m !== null)
-    : [];
-  return {
-    visitDate: isoDateOrNull(o.visitDate),
-    clinic: nullableStr(o.clinic),
-    doctorName: nullableStr(o.doctorName),
-    diagnoses,
-    medications,
-    notes: typeof o.notes === "string" ? o.notes.trim().slice(0, 4000) : "",
-  };
 }

@@ -4,72 +4,34 @@ import {
   AlertTriangle,
   FileText,
   Loader2,
-  Plus,
   Settings as SettingsIcon,
   Sparkles,
-  Syringe,
-  TestTubes,
   Upload,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import {
-  createAttachment,
-  createDiagnosis,
-  createMedication,
-  createPanelWithResults,
-  createVaccine,
-  createVisit,
-  listBiomarkers,
-  updateAttachment,
-} from "@/db/repos";
+import { listBiomarkers, listMedications } from "@/db/repos";
 import { getConfiguredProvider } from "@/ai";
 import { AIProviderError } from "@/ai/types";
-import type { AIErrorKind, AIProvider, RawVaccineExtraction } from "@/ai/types";
-import {
-  buildBiomarkerIndex,
-  mapExtractions,
-  markDuplicates,
-  reconvertRow,
-  type MappedRow,
-} from "@/ai/pipeline/map";
-import { mimeFromPath, storeAttachmentFile, toBase64 } from "@/lib/attachments";
+import type { AIErrorKind } from "@/ai/types";
+import { DOC_TYPE_MODULES, getDocTypeModule } from "@/ai/import/modules";
+import type { AnyDocTypeModule, DocType, ImportContext } from "@/ai/import/registry";
+import { mimeFromPath, toBase64 } from "@/lib/attachments";
 import { PageHeader } from "@/components/app/PageHeader";
 import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
-import { Field } from "@/components/app/Field";
-import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { useToast } from "@/components/app/Toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { DateInput } from "@/components/ui/date-input";
-import { SelectMenu } from "@/components/ui/select-menu";
-import { Combobox } from "@/components/ui/combobox";
-import type { ComboboxOption } from "@/components/ui/combobox";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { CreateBiomarkerDialog } from "./Biomarkers";
-import { cn, formatValue, todayISO } from "@/lib/utils";
-import { allKnownUnits } from "@/lib/units";
+import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-import type { Biomarker } from "@/db/schema";
-
-type DocType = "lab" | "vaccine" | "discharge";
 
 /**
  * UI-facing import failure. `affordance` drives which action button (if any) the
- * banner offers; `kind === "empty"` is the "no quantitative results" case that
- * sends the user back to pick a different document type.
+ * banner offers; `kind === "empty"` is the "nothing usable found" case that sends
+ * the user back to pick a different document type.
  */
 type ImportError = {
   kind: AIErrorKind | "empty";
@@ -81,20 +43,9 @@ type Step =
   | { name: "selectType" }
   | { name: "pick" }
   | { name: "extracting" }
-  | { name: "review"; rows: ReviewRow[] }
-  | { name: "vaccineReview"; rows: VaccineRow[] }
-  | { name: "dischargeReview"; meta: DischargeMeta; rows: DischargeRow[] }
+  // The review step is type-erased over each module's own Draft (contained here).
+  | { name: "review"; module: AnyDocTypeModule; draft: any }
   | { name: "saving" };
-
-type ReviewRow = MappedRow & { include: boolean; key: number };
-
-type VaccineRow = RawVaccineExtraction & { include: boolean; key: number };
-
-type DischargeMeta = { visitDate: string; clinic: string; doctorName: string; notes: string };
-
-type DischargeRow =
-  | { key: number; include: boolean; type: "diagnosis"; name: string; icdCode: string | null }
-  | { key: number; include: boolean; type: "medication"; name: string; dose: string | null };
 
 export function ImportWizard() {
   const { profileId } = useApp();
@@ -107,28 +58,18 @@ export function ImportWizard() {
     loading: booting,
     reload: reloadBoot,
   } = useQuery(async () => {
-    const [provider, biomarkers] = await Promise.all([getConfiguredProvider(), listBiomarkers()]);
-    return { provider, biomarkers };
-  }, []);
+    const [provider, biomarkers, medications] = await Promise.all([
+      getConfiguredProvider(),
+      listBiomarkers(),
+      listMedications(profileId),
+    ]);
+    return { provider, biomarkers, medications };
+  }, [profileId]);
 
   const [docType, setDocType] = React.useState<DocType | null>(null);
   const [filePath, setFilePath] = React.useState<string | null>(null);
   const [step, setStep] = React.useState<Step>({ name: "selectType" });
   const [error, setError] = React.useState<ImportError | null>(null);
-  const [customForKey, setCustomForKey] = React.useState<number | null>(null);
-  // Non-numeric rows the model returned (qualitative results) — surfaced in the
-  // review step. Reset on every extraction; cleared when the user dismisses.
-  const [skipped, setSkipped] = React.useState<{ label: string; rawValue: string }[]>([]);
-  // True when the extraction couldn't read the collection date and we fell back
-  // to today — shown as a small warning near the Date field in review.
-  const [dateGuessed, setDateGuessed] = React.useState(false);
-
-  // Panel meta (phase 3)
-  const [date, setDate] = React.useState(todayISO());
-  const [labName, setLabName] = React.useState("");
-  const [city, setCity] = React.useState("");
-  const [country, setCountry] = React.useState("");
-  const [panelType, setPanelType] = React.useState<"blood" | "urine" | "other">("blood");
 
   if (booting || !boot) return <Loading />;
 
@@ -164,15 +105,18 @@ export function ImportWizard() {
     );
   }
 
-  const index = buildBiomarkerIndex(boot.biomarkers);
+  const provider = boot.provider;
 
-  // The review row behind the open "create custom biomarker" dialog, used to
-  // pre-fill the new biomarker's name/unit/reference range from the document.
-  const customRow =
-    step.name === "review" && customForKey != null
-      ? step.rows.find((r) => r.key === customForKey)
-      : undefined;
-  const customRange = parseRefRange(customRow?.raw.ref_range_text ?? null);
+  const ctx: ImportContext = {
+    profileId,
+    provider,
+    biomarkers: boot.biomarkers,
+    medications: boot.medications,
+    sourceFilePath: filePath,
+    reloadLookups: async () => {
+      await reloadBoot();
+    },
+  };
 
   // Maps any thrown error onto the typed banner model: AI failures branch on
   // their `kind`, everything else falls back to a generic retry-less message.
@@ -211,7 +155,7 @@ export function ImportWizard() {
   const pickFile = async () => {
     const selected = await open({
       multiple: false,
-      filters: [{ name: "Lab report", extensions: ["pdf", "jpg", "jpeg", "png", "webp"] }],
+      filters: [{ name: "Document", extensions: ["pdf", "jpg", "jpeg", "png", "webp"] }],
     });
     if (typeof selected === "string") {
       setFilePath(selected);
@@ -219,12 +163,12 @@ export function ImportWizard() {
     }
   };
 
-  const runExtraction = async (provider: AIProvider) => {
-    if (!filePath) return;
+  const runExtraction = async () => {
+    if (!filePath || !docType) return;
+    const module = getDocTypeModule(docType);
+    if (!module) return;
     setStep({ name: "extracting" });
     setError(null);
-    setSkipped([]);
-    setDateGuessed(false);
     try {
       const bytes = await readFile(filePath);
       const doc = {
@@ -232,61 +176,8 @@ export function ImportWizard() {
         mimeType: mimeFromPath(filePath),
         fileName: filePath.split(/[/\\]/).pop(),
       };
-
-      if (docType === "vaccine") {
-        const vaccines = await provider.extractVaccinesFromDocument(doc);
-        if (!vaccines.length) throw new Error(t("importWizard.vaccineReview.empty"));
-        // §8: vaccines have no dictionary fallback — every row starts UNCHECKED.
-        setStep({
-          name: "vaccineReview",
-          rows: vaccines.map((v, i) => ({ ...v, include: false, key: i })),
-        });
-        return;
-      }
-
-      if (docType === "discharge") {
-        const d = await provider.extractDischargeFromDocument(doc);
-        const rows: DischargeRow[] = [
-          ...d.diagnoses.map(
-            (dx, i): DischargeRow => ({
-              key: i,
-              include: false,
-              type: "diagnosis",
-              name: dx.name,
-              icdCode: dx.icdCode,
-            }),
-          ),
-          ...d.medications.map(
-            (m, i): DischargeRow => ({
-              key: d.diagnoses.length + i,
-              include: false,
-              type: "medication",
-              name: m.name,
-              dose: m.dose,
-            }),
-          ),
-        ];
-        if (!rows.length && !d.visitDate && !d.clinic && !d.doctorName) {
-          throw new Error(t("importWizard.dischargeReview.empty"));
-        }
-        setStep({
-          name: "dischargeReview",
-          meta: {
-            visitDate: d.visitDate ?? "",
-            clinic: d.clinic ?? "",
-            doctorName: d.doctorName ?? "",
-            notes: d.notes,
-          },
-          rows,
-        });
-        return;
-      }
-
-      // Lab report (default): Phase 1 raw extraction (never written to lab_result).
-      const extraction = await provider.extractFromDocument(doc);
-      if (!extraction.results.length) {
-        // Distinct from an error: the document parsed fine but held no values —
-        // most likely the wrong document type. Offer a route back to selection.
+      const draft = await module.prepare(doc, { ...ctx, sourceFilePath: filePath });
+      if (module.isEmpty(draft)) {
         setError({
           kind: "empty",
           affordance: "switchType",
@@ -295,18 +186,7 @@ export function ImportWizard() {
         setStep({ name: "pick" });
         return;
       }
-      // Pre-fill panel metadata from the document so an old report imported
-      // today keeps its real collection date — essential for the trend.
-      if (extraction.collectionDate) setDate(extraction.collectionDate);
-      else setDateGuessed(true);
-      if (extraction.labName && !labName) setLabName(extraction.labName);
-      if (extraction.skipped?.length) setSkipped(extraction.skipped);
-      // Phase 2: deterministic mapping + narrow AI disambiguation.
-      const mapped = await mapExtractions(extraction.results, boot.biomarkers, provider);
-      setStep({
-        name: "review",
-        rows: mapped.map((m, i) => ({ ...m, include: m.biomarkerId != null, key: i })),
-      });
+      setStep({ name: "review", module, draft });
     } catch (e) {
       console.error(e);
       setError(toImportError(e));
@@ -314,165 +194,20 @@ export function ImportWizard() {
     }
   };
 
-  const saveVaccines = async (rows: VaccineRow[]) => {
+  const save = async (module: AnyDocTypeModule, draft: any) => {
     setStep({ name: "saving" });
     try {
-      const attachmentId = await storeSourceAttachment("vaccination_cert", "vaccine");
-      const included = rows.filter((r) => r.include && r.vaccineName.trim() && r.date);
-      for (const r of included) {
-        await createVaccine({
-          profileId,
-          vaccineName: r.vaccineName.trim(),
-          date: r.date!,
-          manufacturer: r.manufacturer?.trim() || null,
-          batchNumber: r.batchNumber?.trim() || null,
-          dose: r.doseNumber ?? null,
-          expiresAt: r.expiresAt || null,
-          attachmentId,
-        });
-      }
+      const route = await module.save(draft, { ...ctx, sourceFilePath: filePath });
       toast.show(t("toasts.importSaved"));
-      navigate("/vaccines");
+      navigate(route);
     } catch (e) {
       console.error(e);
       setError(toImportError(e));
-      setStep({ name: "vaccineReview", rows });
+      setStep({ name: "review", module, draft });
     }
   };
 
-  const saveDischarge = async (meta: DischargeMeta, rows: DischargeRow[]) => {
-    setStep({ name: "saving" });
-    try {
-      const attachmentId = await storeSourceAttachment("discharge", "visit");
-      const visitDate = meta.visitDate || null;
-      const recordDate = visitDate ?? todayISO();
-      let visitId: number | null = null;
-      if (visitDate || meta.clinic.trim() || meta.doctorName.trim()) {
-        visitId = await createVisit({
-          profileId,
-          date: recordDate,
-          doctorName: meta.doctorName.trim() || null,
-          clinic: meta.clinic.trim() || null,
-          notes: meta.notes.trim() || null,
-        });
-        if (attachmentId != null) {
-          await updateAttachment(attachmentId, {
-            linkedEntityType: "visit",
-            linkedEntityId: visitId,
-          });
-        }
-      }
-
-      const included = rows.filter((r) => r.include && r.name.trim());
-      for (const r of included) {
-        if (r.type === "diagnosis") {
-          await createDiagnosis({
-            profileId,
-            name: r.name.trim(),
-            icdCode: r.icdCode?.trim() || null,
-            date: recordDate,
-            visitId,
-          });
-        } else {
-          const parsed = parseDose(r.dose);
-          await createMedication({
-            profileId,
-            name: r.name.trim(),
-            type: "drug",
-            doseAmount: parsed.amount,
-            doseUnit: parsed.unit,
-            schedule: null,
-            startDate: recordDate,
-            endDate: null,
-          });
-        }
-      }
-      toast.show(t("toasts.importSaved"));
-      navigate(visitId != null ? `/visits/${visitId}` : "/visits");
-    } catch (e) {
-      console.error(e);
-      setError(toImportError(e));
-      setStep({ name: "dischargeReview", meta, rows });
-    }
-  };
-
-  /** Stores the source file as an attachment; returns its id (or null). */
-  const storeSourceAttachment = async (
-    kind: "vaccination_cert" | "discharge",
-    entityType: string,
-  ): Promise<number | null> => {
-    if (!filePath) return null;
-    const stored = await storeAttachmentFile(filePath);
-    return createAttachment({
-      profileId,
-      filePath: stored,
-      mimeType: mimeFromPath(filePath),
-      kind,
-      linkedEntityType: entityType,
-    });
-  };
-
-  const updateRows = (rows: ReviewRow[], mutate: (rs: ReviewRow[]) => void) => {
-    const next = rows.map((r) => ({ ...r }));
-    mutate(next);
-    markDuplicates(next);
-    setStep({ name: "review", rows: next });
-  };
-
-  const save = async (rows: ReviewRow[]) => {
-    setStep({ name: "saving" });
-    try {
-      // Keep the source document as an attachment for full traceability.
-      let sourceFileId: number | null = null;
-      if (filePath) {
-        const stored = await storeAttachmentFile(filePath);
-        sourceFileId = await createAttachment({
-          profileId,
-          filePath: stored,
-          mimeType: mimeFromPath(filePath),
-          kind: mimeFromPath(filePath) === "application/pdf" ? "lab_pdf" : "photo",
-          linkedEntityType: "lab_panel",
-        });
-      }
-
-      const byId = new Map<number, Biomarker>(boot.biomarkers.map((b) => [b.id, b]));
-      const included = rows.filter((r) => r.include && r.biomarkerId != null);
-      // Phase 3 complete — only now do confirmed rows reach lab_result,
-      // each keeping its raw_label for the mapping audit trail.
-      const panelId = await createPanelWithResults(
-        {
-          profileId,
-          date,
-          labName: labName.trim() || null,
-          city: city.trim() || null,
-          country: country.trim() || null,
-          panelType,
-          importMethod: "ai",
-          sourceFileId,
-        },
-        included.map((r) => ({
-          biomarkerId: r.biomarkerId!,
-          value: r.raw.value,
-          unit: r.raw.unit || byId.get(r.biomarkerId!)?.defaultUnit || "",
-          rawLabel: r.raw.raw_label,
-          sourcePage: r.raw.page,
-          // "none" only survives here when the user hand-picked the biomarker for
-          // a previously-unmatched row, so that selection is author-trusted.
-          confidence: r.confidence === "none" ? ("manual" as const) : r.confidence,
-        })),
-        byId,
-      );
-      if (sourceFileId != null) {
-        await updateAttachment(sourceFileId, { linkedEntityId: panelId });
-      }
-      toast.show(t("toasts.importSaved"));
-      navigate(`/labs/${panelId}`);
-    } catch (e) {
-      console.error(e);
-      setError(toImportError(e));
-      setStep({ name: "review", rows });
-    }
-  };
+  const activeLabel = docType ? t(`importWizard.docTypes.${docType}`) : "";
 
   return (
     <>
@@ -506,12 +241,7 @@ export function ImportWizard() {
               </Link>
             )}
             {error.affordance === "retry" && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                onClick={() => runExtraction(boot.provider!)}
-              >
+              <Button size="sm" variant="outline" className="mt-2" onClick={runExtraction}>
                 {t("importErrors.retry")}
               </Button>
             )}
@@ -564,7 +294,7 @@ export function ImportWizard() {
                     <Button variant="outline" onClick={pickFile}>
                       {t("importWizard.chooseAnother")}
                     </Button>
-                    <Button onClick={() => runExtraction(boot.provider!)}>
+                    <Button onClick={runExtraction}>
                       <Sparkles /> {t("importWizard.extractResults")}
                     </Button>
                   </div>
@@ -572,11 +302,7 @@ export function ImportWizard() {
               ) : (
                 <>
                   <p className="text-sm font-medium">
-                    {docType === "vaccine"
-                      ? t("importWizard.vaccineReview.choose")
-                      : docType === "discharge"
-                        ? t("importWizard.dischargeReview.choose")
-                        : t("importWizard.chooseLabReport")}
+                    {t("importWizard.choosePrompt", { type: activeLabel.toLowerCase() })}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t("importWizard.fileFormats")}
@@ -595,11 +321,9 @@ export function ImportWizard() {
             <CardContent className="flex flex-col items-center py-12 text-center">
               <Loader2 className="mb-3 size-6 animate-spin text-primary" />
               <p className="text-sm font-medium">
-                {docType === "vaccine"
-                  ? t("importWizard.vaccineReview.extracting")
-                  : docType === "discharge"
-                    ? t("importWizard.dischargeReview.extracting")
-                    : t("importWizard.extractingMapping")}
+                {docType === "lab"
+                  ? t("importWizard.extractingMapping")
+                  : t("importWizard.extractingDoc")}
               </p>
               {docType === "lab" && (
                 <p className="mt-1 max-w-sm text-xs text-muted-foreground">
@@ -610,434 +334,19 @@ export function ImportWizard() {
           </Card>
         )}
 
-        {(step.name === "review" || step.name === "saving") && step.name === "review" && (
-          <ReviewStep
-            rows={step.rows}
-            index={index}
-            biomarkers={boot.biomarkers}
-            onChangeRow={(key, biomarkerId) =>
-              updateRows(step.rows, (rs) => {
-                const row = rs.find((r) => r.key === key)!;
-                row.biomarkerId = biomarkerId;
-                row.confidence = biomarkerId == null ? "none" : row.confidence;
-                row.include = biomarkerId != null ? row.include : false;
-                reconvertRow(row, index);
-              })
-            }
-            onToggleInclude={(key) =>
-              updateRows(step.rows, (rs) => {
-                const row = rs.find((r) => r.key === key)!;
-                row.include = !row.include && row.biomarkerId != null;
-              })
-            }
-            onCreateCustom={(key) => setCustomForKey(key)}
-            meta={{ date, labName, city, country, panelType }}
-            setMeta={{
-              // Editing the date clears the "guessed/today" warning so it can't
-              // linger over a value the user has since corrected.
-              setDate: (v: string) => {
-                setDate(v);
-                setDateGuessed(false);
-              },
-              setLabName,
-              setCity,
-              setCountry,
-              setPanelType,
-            }}
-            skipped={skipped}
-            onDismissSkipped={() => setSkipped([])}
-            dateGuessed={dateGuessed}
-            onSave={() => save(step.rows)}
-          />
-        )}
-
-        {step.name === "vaccineReview" && (
-          <VaccineReviewStep
-            rows={step.rows}
-            onChangeRow={(key, patch) =>
-              setStep({
-                name: "vaccineReview",
-                rows: step.rows.map((r) => (r.key === key ? { ...r, ...patch } : r)),
-              })
-            }
-            onToggleInclude={(key) =>
-              setStep({
-                name: "vaccineReview",
-                rows: step.rows.map((r) => (r.key === key ? { ...r, include: !r.include } : r)),
-              })
-            }
-            onSave={() => saveVaccines(step.rows)}
-          />
-        )}
-
-        {step.name === "dischargeReview" && (
-          <DischargeReviewStep
-            meta={step.meta}
-            rows={step.rows}
-            onChangeMeta={(patch) =>
-              setStep({
-                name: "dischargeReview",
-                meta: { ...step.meta, ...patch },
-                rows: step.rows,
-              })
-            }
-            onChangeRow={(key, name) =>
-              setStep({
-                name: "dischargeReview",
-                meta: step.meta,
-                rows: step.rows.map((r) => (r.key === key ? { ...r, name } : r)),
-              })
-            }
-            onToggleInclude={(key) =>
-              setStep({
-                name: "dischargeReview",
-                meta: step.meta,
-                rows: step.rows.map((r) => (r.key === key ? { ...r, include: !r.include } : r)),
-              })
-            }
-            onSave={() => saveDischarge(step.meta, step.rows)}
+        {step.name === "review" && (
+          <step.module.Review
+            draft={step.draft}
+            setDraft={(next) => setStep({ name: "review", module: step.module, draft: next })}
+            ctx={ctx}
+            onSave={() => save(step.module, step.draft)}
           />
         )}
 
         {step.name === "saving" && <Loading label={t("importWizard.savingPanel")} />}
       </div>
-
-      <CreateBiomarkerDialog
-        open={customForKey != null}
-        onClose={() => setCustomForKey(null)}
-        initialName={customRow?.raw.analyte_en ?? customRow?.raw.raw_label ?? ""}
-        initialUnit={customRow?.raw.unit ?? ""}
-        initialRefLow={customRange.low}
-        initialRefHigh={customRange.high}
-        existingCategories={[...new Set(boot.biomarkers.map((b) => b.category))]}
-        unitCatalog={allKnownUnits(boot.biomarkers.map((b) => b.defaultUnit))}
-        onCreated={async (id) => {
-          const key = customForKey;
-          setCustomForKey(null);
-          await reloadBoot();
-          if (step.name === "review" && key != null) {
-            updateRows(step.rows, (rs) => {
-              const row = rs.find((r) => r.key === key);
-              if (row) {
-                row.biomarkerId = id;
-                row.confidence = "exact";
-                row.include = true;
-              }
-            });
-          }
-        }}
-      />
     </>
   );
-}
-
-function ConfidenceBadge({ confidence }: { confidence: MappedRow["confidence"] }) {
-  const { t } = useI18n();
-  switch (confidence) {
-    case "exact":
-      return <Badge variant="success">exact</Badge>;
-    case "translated":
-      return (
-        <Badge variant="warning" title={t("importWizard.translatedHint")}>
-          translated
-        </Badge>
-      );
-    case "fuzzy":
-      return <Badge variant="warning">fuzzy</Badge>;
-    case "ai":
-      return <Badge>AI</Badge>;
-    case "none":
-      return <Badge variant="destructive">unmatched</Badge>;
-  }
-}
-
-function ReviewStep({
-  rows,
-  index,
-  biomarkers,
-  onChangeRow,
-  onToggleInclude,
-  onCreateCustom,
-  meta,
-  setMeta,
-  skipped,
-  onDismissSkipped,
-  dateGuessed,
-  onSave,
-}: {
-  rows: ReviewRow[];
-  index: ReturnType<typeof buildBiomarkerIndex>;
-  biomarkers: Biomarker[];
-  onChangeRow: (key: number, biomarkerId: number | null) => void;
-  onToggleInclude: (key: number) => void;
-  onCreateCustom: (key: number) => void;
-  meta: {
-    date: string;
-    labName: string;
-    city: string;
-    country: string;
-    panelType: "blood" | "urine" | "other";
-  };
-  setMeta: {
-    setDate: (v: string) => void;
-    setLabName: (v: string) => void;
-    setCity: (v: string) => void;
-    setCountry: (v: string) => void;
-    setPanelType: (v: "blood" | "urine" | "other") => void;
-  };
-  skipped: { label: string; rawValue: string }[];
-  onDismissSkipped: () => void;
-  dateGuessed: boolean;
-  onSave: () => void;
-}) {
-  const { t } = useI18n();
-  // Local dismiss + expand state for the "non-numeric rows skipped" note.
-  const [skippedDismissed, setSkippedDismissed] = React.useState(false);
-  const [showSkipped, setShowSkipped] = React.useState(false);
-  const includedCount = rows.filter((r) => r.include && r.biomarkerId != null).length;
-  const duplicates = rows.filter((r) => r.include && r.duplicate).length;
-
-  const byCategory = new Map<string, Biomarker[]>();
-  for (const b of biomarkers) {
-    const list = byCategory.get(b.category) ?? [];
-    list.push(b);
-    byCategory.set(b.category, list);
-  }
-  const biomarkerOptions: ComboboxOption[] = [...byCategory.entries()].flatMap(
-    ([category, items]) =>
-      items.map((b) => ({
-        value: String(b.id),
-        label: b.canonicalName,
-        group: category,
-        keywords: b.aliases,
-      })),
-  );
-
-  return (
-    <>
-      {skipped.length > 0 && !skippedDismissed && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p>{t("importErrors.droppedRows", { count: String(skipped.length) })}</p>
-            <button
-              type="button"
-              className="mt-1 inline-flex cursor-pointer items-center gap-1 text-xs underline-offset-2 hover:underline"
-              onClick={() => setShowSkipped((v) => !v)}
-            >
-              {t("importErrors.showDropped")}
-            </button>
-            {showSkipped && (
-              <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs opacity-90">
-                {skipped.map((s, i) => (
-                  <li key={i} className="truncate" title={`${s.label}: ${s.rawValue}`}>
-                    {s.label}
-                    {s.rawValue ? ` — ${s.rawValue}` : ""}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            className="cursor-pointer text-warning/70 hover:text-warning"
-            onClick={() => {
-              setSkippedDismissed(true);
-              onDismissSkipped();
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("importWizard.reviewExtractedResults")}</CardTitle>
-          <CardDescription>
-            Check each mapping before saving. Green = the printed label is an exact dictionary
-            match; amber = matched via translation or fuzzy similarity (verify these); blue =
-            AI-suggested; red = unrecognized. Original labels are kept for audit.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">{t("common.save")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
-                <TableHead>{t("fields.value")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
-                <TableHead>{t("importWizard.matchColumn")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => {
-                const bio = row.biomarkerId != null ? index.byId.get(row.biomarkerId) : undefined;
-                return (
-                  <TableRow key={row.key}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-[var(--primary)]"
-                        checked={row.include}
-                        disabled={row.biomarkerId == null}
-                        onChange={() => onToggleInclude(row.key)}
-                      />
-                    </TableCell>
-                    <TableCell className="max-w-44">
-                      <p className="truncate text-sm" title={row.raw.raw_label}>
-                        {row.raw.raw_label}
-                      </p>
-                      {row.raw.analyte_en &&
-                        row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase() && (
-                          <p
-                            className="truncate text-[10px] italic text-muted-foreground"
-                            title={row.raw.analyte_en}
-                          >
-                            ≈ {row.raw.analyte_en}
-                          </p>
-                        )}
-                      {row.raw.ref_range_text && (
-                        <p className="text-[10px] text-muted-foreground">
-                          ref: {row.raw.ref_range_text}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums">
-                      {formatValue(row.raw.value)} {row.raw.unit}
-                    </TableCell>
-                    <TableCell className="min-w-52">
-                      <Combobox
-                        value={row.biomarkerId != null ? String(row.biomarkerId) : null}
-                        onChange={(v) => onChangeRow(row.key, v ? Number(v) : null)}
-                        options={biomarkerOptions}
-                        placeholder={t("importWizard.notMapped")}
-                      />
-                      {row.biomarkerId == null && (
-                        <button
-                          className="mt-1 inline-flex cursor-pointer items-center gap-1 text-[11px] text-primary hover:underline"
-                          onClick={() => onCreateCustom(row.key)}
-                        >
-                          <Plus className="size-3" /> Create custom biomarker
-                        </button>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col items-start gap-1">
-                        <ConfidenceBadge confidence={row.confidence} />
-                        {row.duplicate && row.include && (
-                          <Badge variant="destructive">duplicate</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-xs">
-                      {row.conversion == null ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : row.conversion.ok ? (
-                        <span className="tabular-nums text-muted-foreground">
-                          {formatValue(row.conversion.value)} {row.conversion.unit}
-                        </span>
-                      ) : (
-                        <Badge
-                          variant="warning"
-                          title={`No known conversion ${row.raw.unit} → ${bio?.defaultUnit}`}
-                        >
-                          unit?
-                        </Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-          <div className="px-5 pb-4">
-            <AiDisclaimer />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>{t("importWizard.panelDetailsTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Field label={t("fields.date")}>
-            <DateInput value={meta.date} onChange={setMeta.setDate} />
-            {dateGuessed && (
-              <p className="mt-1 flex items-start gap-1 text-[11px] text-warning">
-                <AlertTriangle className="mt-px size-3 shrink-0" />
-                {t("importErrors.dateNotRecognized")}
-              </p>
-            )}
-          </Field>
-          <Field label={t("labPanelNew.fields.labName")}>
-            <Input value={meta.labName} onChange={(e) => setMeta.setLabName(e.target.value)} />
-          </Field>
-          <Field label={t("fields.city")}>
-            <Input value={meta.city} onChange={(e) => setMeta.setCity(e.target.value)} />
-          </Field>
-          <Field label={t("fields.country")}>
-            <Input value={meta.country} onChange={(e) => setMeta.setCountry(e.target.value)} />
-          </Field>
-          <Field label={t("fields.type")}>
-            <SelectMenu
-              value={meta.panelType}
-              onChange={(v) => setMeta.setPanelType(v as "blood" | "urine" | "other")}
-              options={[
-                { value: "blood", label: t("types.blood") },
-                { value: "urine", label: t("types.urine") },
-                { value: "other", label: t("types.other") },
-              ]}
-            />
-          </Field>
-        </CardContent>
-      </Card>
-
-      <div className="mt-5 flex items-center justify-end gap-3">
-        {duplicates > 0 && (
-          <p className="flex items-center gap-1.5 text-xs text-destructive">
-            <AlertTriangle className="size-3.5" /> {duplicates} duplicate mapping
-            {duplicates > 1 ? "s" : ""} selected
-          </p>
-        )}
-        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date || duplicates > 0}>
-          Confirm & save {includedCount} result{includedCount === 1 ? "" : "s"}
-        </Button>
-      </div>
-    </>
-  );
-}
-
-/**
- * Best-effort parse of a printed reference-range string into low/high input
- * strings: "3.5 - 5.0" → {low:"3.5", high:"5.0"}, "< 5" → {high:"5"},
- * "> 1.0" → {low:"1.0"}, "0,9–1,3" → {low:"0.9", high:"1.3"}.
- */
-function parseRefRange(text: string | null): { low: string; high: string } {
-  if (!text) return { low: "", high: "" };
-  // Comma decimals → dots; no leading minus (range hyphens aren't sign).
-  const [first, second] = text.replace(/,/g, ".").match(/\d+(?:\.\d+)?/g) ?? [];
-  if (first && second) return { low: first, high: second };
-  if (first) {
-    if (/[<≤]/.test(text)) return { low: "", high: first };
-    if (/[>≥]/.test(text)) return { low: first, high: "" };
-  }
-  return { low: "", high: "" };
-}
-
-/** Best-effort dose split: "500 mg" → { amount: 500, unit: "mg" }. */
-function parseDose(dose: string | null): { amount: number | null; unit: string | null } {
-  if (!dose) return { amount: null, unit: null };
-  const m = /^\s*([\d.,]+)\s*([^\d\s].*)?$/.exec(dose.trim());
-  if (!m) return { amount: null, unit: dose.trim() || null };
-  const amount = Number.parseFloat(m[1].replace(",", "."));
-  return {
-    amount: Number.isFinite(amount) ? amount : null,
-    unit: m[2]?.trim() || null,
-  };
 }
 
 function SelectTypeStep({
@@ -1050,27 +359,6 @@ function SelectTypeStep({
   onContinue: () => void;
 }) {
   const { t } = useI18n();
-  const options: { type: DocType; icon: typeof TestTubes; label: string; description: string }[] = [
-    {
-      type: "lab",
-      icon: TestTubes,
-      label: t("importWizard.docTypes.lab"),
-      description: t("importWizard.docTypes.labDescription"),
-    },
-    {
-      type: "vaccine",
-      icon: Syringe,
-      label: t("importWizard.docTypes.vaccine"),
-      description: t("importWizard.docTypes.vaccineDescription"),
-    },
-    {
-      type: "discharge",
-      icon: FileText,
-      label: t("importWizard.docTypes.discharge"),
-      description: t("importWizard.docTypes.dischargeDescription"),
-    },
-  ];
-
   return (
     <Card className="mx-auto max-w-lg">
       <CardHeader>
@@ -1078,14 +366,14 @@ function SelectTypeStep({
         <CardDescription>{t("importWizard.selectType.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        {options.map((o) => {
-          const Icon = o.icon;
-          const selected = value === o.type;
+        {DOC_TYPE_MODULES.map((m) => {
+          const Icon = m.icon;
+          const selected = value === m.id;
           return (
             <button
-              key={o.type}
+              key={m.id}
               type="button"
-              onClick={() => onChange(o.type)}
+              onClick={() => onChange(m.id)}
               className={cn(
                 "flex items-center gap-3 rounded-lg border p-3 text-left transition-colors",
                 selected ? "border-primary bg-primary/5" : "hover:bg-muted/50",
@@ -1095,8 +383,10 @@ function SelectTypeStep({
                 <Icon className="size-4.5 text-secondary-foreground" />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium">{o.label}</p>
-                <p className="text-xs text-muted-foreground">{o.description}</p>
+                <p className="text-sm font-medium">{t(`importWizard.docTypes.${m.id}`)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t(`importWizard.docTypes.${m.id}Description`)}
+                </p>
               </div>
             </button>
           );
@@ -1106,243 +396,5 @@ function SelectTypeStep({
         </Button>
       </CardContent>
     </Card>
-  );
-}
-
-function ReviewBanner() {
-  const { t } = useI18n();
-  return (
-    <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-      <div>
-        <p className="font-medium">{t("importWizard.reviewBanner.title")}</p>
-        <p className="text-xs opacity-90">{t("importWizard.reviewBanner.description")}</p>
-      </div>
-    </div>
-  );
-}
-
-function VaccineReviewStep({
-  rows,
-  onChangeRow,
-  onToggleInclude,
-  onSave,
-}: {
-  rows: VaccineRow[];
-  onChangeRow: (key: number, patch: Partial<VaccineRow>) => void;
-  onToggleInclude: (key: number) => void;
-  onSave: () => void;
-}) {
-  const { t } = useI18n();
-  const included = rows.filter((r) => r.include);
-  const canSave = included.length > 0 && included.every((r) => r.vaccineName.trim() && r.date);
-
-  return (
-    <>
-      <ReviewBanner />
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("importWizard.vaccineReview.title")}</CardTitle>
-          <CardDescription>{t("importWizard.vaccineReview.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">{t("common.save")}</TableHead>
-                <TableHead>{t("importWizard.vaccineReview.columns.vaccine")}</TableHead>
-                <TableHead>{t("fields.date")}</TableHead>
-                <TableHead className="w-16">
-                  {t("importWizard.vaccineReview.columns.dose")}
-                </TableHead>
-                <TableHead>{t("importWizard.vaccineReview.columns.manufacturer")}</TableHead>
-                <TableHead>{t("importWizard.vaccineReview.columns.batch")}</TableHead>
-                <TableHead>{t("importWizard.vaccineReview.columns.expires")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => {
-                const missing = row.include && (!row.vaccineName.trim() || !row.date);
-                return (
-                  <TableRow key={row.key}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-[var(--primary)]"
-                        checked={row.include}
-                        onChange={() => onToggleInclude(row.key)}
-                      />
-                    </TableCell>
-                    <TableCell className="min-w-44">
-                      <Input
-                        value={row.vaccineName}
-                        onChange={(e) => onChangeRow(row.key, { vaccineName: e.target.value })}
-                        className={missing && !row.vaccineName.trim() ? "border-destructive" : ""}
-                      />
-                    </TableCell>
-                    <TableCell className="min-w-36">
-                      <DateInput
-                        value={row.date ?? ""}
-                        onChange={(v) => onChangeRow(row.key, { date: v || null })}
-                        clearable
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={row.doseNumber != null ? String(row.doseNumber) : ""}
-                        onChange={(e) => {
-                          const n = Number.parseInt(e.target.value, 10);
-                          onChangeRow(row.key, { doseNumber: Number.isFinite(n) ? n : null });
-                        }}
-                        inputMode="numeric"
-                      />
-                    </TableCell>
-                    <TableCell className="min-w-36">
-                      <Input
-                        value={row.manufacturer ?? ""}
-                        onChange={(e) =>
-                          onChangeRow(row.key, { manufacturer: e.target.value || null })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell className="min-w-28">
-                      <Input
-                        value={row.batchNumber ?? ""}
-                        onChange={(e) =>
-                          onChangeRow(row.key, { batchNumber: e.target.value || null })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell className="min-w-36">
-                      <DateInput
-                        value={row.expiresAt ?? ""}
-                        onChange={(v) => onChangeRow(row.key, { expiresAt: v || null })}
-                        clearable
-                      />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-          <div className="px-5 pb-4">
-            <AiDisclaimer />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="mt-5 flex justify-end">
-        <Button onClick={onSave} disabled={!canSave}>
-          {t("importWizard.vaccineReview.save", { count: String(included.length) })}
-        </Button>
-      </div>
-    </>
-  );
-}
-
-function DischargeReviewStep({
-  meta,
-  rows,
-  onChangeMeta,
-  onChangeRow,
-  onToggleInclude,
-  onSave,
-}: {
-  meta: DischargeMeta;
-  rows: DischargeRow[];
-  onChangeMeta: (patch: Partial<DischargeMeta>) => void;
-  onChangeRow: (key: number, name: string) => void;
-  onToggleInclude: (key: number) => void;
-  onSave: () => void;
-}) {
-  const { t } = useI18n();
-  const included = rows.filter((r) => r.include && r.name.trim());
-
-  return (
-    <>
-      <ReviewBanner />
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("importWizard.dischargeReview.title")}</CardTitle>
-          <CardDescription>{t("importWizard.dischargeReview.description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3">
-          <Field label={t("fields.date")}>
-            <DateInput
-              value={meta.visitDate}
-              onChange={(v) => onChangeMeta({ visitDate: v })}
-              clearable
-            />
-          </Field>
-          <Field label={t("visits.fields.clinic")}>
-            <Input value={meta.clinic} onChange={(e) => onChangeMeta({ clinic: e.target.value })} />
-          </Field>
-          <Field label={t("visits.fields.doctor")}>
-            <Input
-              value={meta.doctorName}
-              onChange={(e) => onChangeMeta({ doctorName: e.target.value })}
-            />
-          </Field>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">{t("common.save")}</TableHead>
-                <TableHead className="w-28">
-                  {t("importWizard.dischargeReview.typeColumn")}
-                </TableHead>
-                <TableHead>{t("fields.name")}</TableHead>
-                <TableHead>{t("importWizard.dischargeReview.detailColumn")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell>
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-[var(--primary)]"
-                      checked={row.include}
-                      onChange={() => onToggleInclude(row.key)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {row.type === "diagnosis" ? (
-                      <Badge variant="secondary">
-                        {t("importWizard.dischargeReview.diagnosisBadge")}
-                      </Badge>
-                    ) : (
-                      <Badge>{t("importWizard.dischargeReview.medicationBadge")}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="min-w-52">
-                    <Input
-                      value={row.name}
-                      onChange={(e) => onChangeRow(row.key, e.target.value)}
-                    />
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                    {row.type === "diagnosis" ? (row.icdCode ?? "—") : (row.dose ?? "—")}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="px-5 pb-4">
-            <AiDisclaimer />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="mt-5 flex justify-end">
-        <Button onClick={onSave} disabled={included.length === 0}>
-          {t("importWizard.dischargeReview.save", { count: String(included.length) })}
-        </Button>
-      </div>
-    </>
   );
 }

@@ -138,6 +138,12 @@ export class AIProviderError extends Error {
     message: string,
     public readonly status?: number,
     kind?: AIErrorKind,
+    /**
+     * Server-advised minimum wait before retrying, in ms, parsed from a
+     * `Retry-After` header (429/503). The retry layer honors it over its own
+     * backoff when present.
+     */
+    public readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "AIProviderError";

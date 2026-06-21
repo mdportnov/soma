@@ -155,6 +155,7 @@ fn encrypt_snapshot(plain: &[u8], key: &[u8; 32], mode: u8) -> Result<Vec<u8>, S
 }
 
 /// Parsed vault header fields needed to derive the key and decrypt.
+#[derive(Debug)]
 struct Header {
     mode: u8,
     salt: [u8; 16],

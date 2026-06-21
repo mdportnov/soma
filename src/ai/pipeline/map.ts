@@ -43,18 +43,31 @@ export type BiomarkerIndex = {
   exact: Map<string, number>;
   entries: IndexEntry[];
   byId: Map<number, Biomarker>;
+  /** Biomarkers grouped by base name, so %/absolute variants of the same analyte
+   *  (e.g. "Monocytes" + "Monocytes (absolute)") can be disambiguated by unit. */
+  byBase: Map<string, number[]>;
 };
+
+/** Canonical name with a trailing "(absolute)" / "(%)" variant suffix removed. */
+function baseKey(name: string): string {
+  return normalizeLabel(name.replace(/\s*\((?:absolute|%)\)\s*$/i, ""));
+}
 
 export function buildBiomarkerIndex(biomarkers: Biomarker[]): BiomarkerIndex {
   const exact = new Map<string, number>();
   const entries: IndexEntry[] = [];
   const byId = new Map<number, Biomarker>();
+  const byBase = new Map<string, number[]>();
   // Keys that two DIFFERENT biomarkers share (e.g. "tg" = triglycerides AND
   // thyroglobulin). Silently picking the first would mis-route; instead we drop
   // them from the exact map so they fall through to fuzzy/AI/manual review.
   const ambiguous = new Set<string>();
   for (const b of biomarkers) {
     byId.set(b.id, b);
+    const base = baseKey(b.canonicalName);
+    const group = byBase.get(base);
+    if (group) group.push(b.id);
+    else byBase.set(base, [b.id]);
     for (const name of [b.canonicalName, ...(b.aliases ?? [])]) {
       const normalized = normalizeLabel(name);
       if (!normalized) continue;
@@ -65,7 +78,7 @@ export function buildBiomarkerIndex(biomarkers: Biomarker[]): BiomarkerIndex {
     }
   }
   for (const key of ambiguous) exact.delete(key);
-  return { exact, entries, byId };
+  return { exact, entries, byId, byBase };
 }
 
 type Candidate = { biomarkerId: number; score: number };
@@ -124,6 +137,32 @@ function conversionFor(
   const bio = index.byId.get(biomarkerId);
   if (!bio) return null;
   return convertToDefaultUnit(raw.value, raw.unit || bio.defaultUnit, bio);
+}
+
+/**
+ * Unit-aware re-routing for variant pairs. The differential is reported both as
+ * a percentage and an absolute count under the SAME printed label (e.g.
+ * "Monocitos" 7.4 % AND 0.36 ×10³/µL); label matching alone sends both to the
+ * "%" entry. When the matched biomarker can't accept the row's unit but exactly
+ * one sibling variant ("X" ↔ "X (absolute)") can, re-route to that sibling.
+ * No-op for unitless rows and for matches whose unit already converts cleanly,
+ * so it never disturbs ordinary mappings.
+ */
+function preferUnitCompatibleSibling(row: MappedRow, index: BiomarkerIndex): void {
+  if (row.biomarkerId == null || !row.raw.unit) return;
+  const matched = index.byId.get(row.biomarkerId);
+  if (!matched) return;
+  if (convertToDefaultUnit(row.raw.value, row.raw.unit, matched).ok) return;
+  const siblings = index.byBase.get(baseKey(matched.canonicalName)) ?? [];
+  const compatible = siblings.filter((id) => {
+    if (id === row.biomarkerId) return false;
+    const b = index.byId.get(id);
+    return !!b && convertToDefaultUnit(row.raw.value, row.raw.unit, b).ok;
+  });
+  if (compatible.length === 1) {
+    row.biomarkerId = compatible[0];
+    row.conversion = conversionFor(row.raw, compatible[0], index);
+  }
 }
 
 /**
@@ -197,6 +236,10 @@ export async function mapExtractions(
       duplicate: false,
     };
   });
+
+  // 3b. Unit-aware re-route: a label that resolved to the "%" variant but carries
+  // an absolute-count unit (or vice versa) is sent to its compatible sibling.
+  for (const row of rows) preferUnitCompatibleSibling(row, index);
 
   // 4. Narrow AI disambiguation for leftovers that have candidates.
   if (provider) {

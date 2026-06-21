@@ -136,7 +136,16 @@ export const attachment = sqliteTable("attachment", {
   filePath: text("file_path").notNull(),
   mimeType: text("mime_type").notNull(),
   kind: text("kind", {
-    enum: ["lab_pdf", "photo", "discharge", "imaging", "vaccination_cert", "other"],
+    enum: [
+      "lab_pdf",
+      "photo",
+      "discharge",
+      "imaging",
+      "vaccination_cert",
+      "prescription",
+      "allergy_doc",
+      "other",
+    ],
   })
     .notNull()
     .default("other"),

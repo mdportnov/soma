@@ -2,7 +2,11 @@ import Database from "@tauri-apps/plugin-sql";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as schema from "./schema";
 import { runMigrations, runOnceTask } from "./migrate";
-import { seedBiomarkersIfEmpty, seedReferenceRangesIfEmpty } from "./seed-biomarkers";
+import {
+  seedBiomarkersIfEmpty,
+  seedReferenceRangesIfEmpty,
+  syncBiomarkers,
+} from "./seed-biomarkers";
 
 const DB_URL = "sqlite:soma.db";
 
@@ -68,6 +72,9 @@ export function initDatabase(): Promise<void> {
       await conn.execute("PRAGMA foreign_keys = ON");
       await runMigrations(conn);
       await seedBiomarkersIfEmpty(conn);
+      // Reconcile the dictionary with the current SEED on every launch so
+      // library expansions + new aliases reach existing installs (idempotent).
+      await syncBiomarkers(conn);
       await seedReferenceRangesIfEmpty(conn);
       // One-time backfill: the critical-flag logic became clinically aware (no
       // more "0% eosinophils = critical"), so re-derive stored flags for data

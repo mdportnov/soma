@@ -57,6 +57,20 @@ export function unitsEquivalent(a: string, b: string): boolean {
     "thousand/µl": "x10^9/l",
     "млн/µl": "x10^12/l",
     "million/µl": "x10^12/l",
+    // Per-µL cell counts printed on many reports (10³/µL ≡ 10⁹/L, 10⁶/µL ≡ 10¹²/L).
+    // "ui" appears when a model reads the Spanish "µL" as "UI".
+    "x10^3/ul": "x10^9/l",
+    "x10^3/µl": "x10^9/l",
+    "10^3/ul": "x10^9/l",
+    "10^3/µl": "x10^9/l",
+    "10e3/ul": "x10^9/l",
+    "x10e3/ul": "x10^9/l",
+    "x10^6/ul": "x10^12/l",
+    "x10^6/µl": "x10^12/l",
+    "10^6/ul": "x10^12/l",
+    "10^6/µl": "x10^12/l",
+    "10^6/ui": "x10^12/l",
+    "x10^6/ui": "x10^12/l",
     "mm/hour": "mm/h",
   };
   const canon = (u: string) => synonyms[u] ?? u;
@@ -76,6 +90,9 @@ const GENERIC_FACTORS: Record<string, number> = {
   "µg/dl->µg/l": 10,
   "µg/l->µg/dl": 0.1,
   "тыс/мкл->x10^9/l": 1,
+  // Mass-concentration (no molar dependence): proteins reported mg/dL vs g/L.
+  "mg/dl->g/l": 0.01,
+  "g/l->mg/dl": 100,
 };
 
 /**
@@ -93,8 +110,15 @@ const MOLAR_FACTORS: Record<string, Record<string, number>> = {
   "2571-8": { "mg/dl->mmol/l": 0.01129, "mmol/l->mg/dl": 88.57 },
   // Creatinine (MW 113.12)
   "2160-0": { "mg/dl->µmol/l": 88.4, "µmol/l->mg/dl": 0.0113 },
-  // Urea / BUN (urea MW 60.06; BUN→urea ≈ ×0.357 mmol/L)
-  "3091-6": { "mg/dl->mmol/l": 0.357, "mmol/l->mg/dl": 2.8 },
+  // Urea (MW 60.06): mg/dL ÷ 6.006. NB: this is urea, NOT BUN — BUN (nitrogen
+  // basis) is a separate analyte with its own ×2.14 relationship to urea.
+  "3091-6": { "mg/dl->mmol/l": 0.1665, "mmol/l->mg/dl": 6.006 },
+  // VLDL cholesterol (same molar basis as cholesterol, MW 386.65)
+  "13458-5": { "mg/dl->mmol/l": 0.02586, "mmol/l->mg/dl": 38.67 },
+  // Bilirubin indirect (MW 584.66)
+  "1971-1": { "mg/dl->µmol/l": 17.1, "µmol/l->mg/dl": 0.0585 },
+  // Free T4 / free thyroxine (MW 776.87): ng/dL ↔ pmol/L
+  "3024-7": { "ng/dl->pmol/l": 12.87, "pmol/l->ng/dl": 0.0777 },
   // Uric acid (MW 168.11)
   "14933-6": { "mg/dl->µmol/l": 59.48, "µmol/l->mg/dl": 0.0168 },
   // Bilirubin (MW 584.66)
@@ -133,6 +157,25 @@ const MOLAR_FACTORS: Record<string, Record<string, number>> = {
   "2191-5": { "µg/dl->µmol/l": 0.0271, "µmol/l->µg/dl": 36.85 },
   // Prolactin (WHO IS 84/500: 1 ng/mL ≈ 21.2 mIU/L)
   "2842-3": { "ng/ml->miu/l": 21.2, "miu/l->ng/ml": 0.0472 },
+  // ── Phase-2 additions ──
+  // Lactate (MW 90.08)
+  "2524-7": { "mg/dl->mmol/l": 0.111, "mmol/l->mg/dl": 9.01 },
+  // Ammonia (MW 17.03)
+  "1841-6": { "µg/dl->µmol/l": 0.5872, "µmol/l->µg/dl": 1.703 },
+  // Urine creatinine (MW 113.12) — distinct code from serum creatinine
+  "2161-8": { "mg/dl->mmol/l": 0.0884, "mmol/l->mg/dl": 11.31 },
+  // Aldosterone (MW 360.44)
+  "14586-2": { "ng/dl->pmol/l": 27.7, "pmol/l->ng/dl": 0.0361 },
+  // ACTH (MW ~4540)
+  "2141-0": { "pg/ml->pmol/l": 0.22, "pmol/l->pg/ml": 4.54 },
+  // Anti-Müllerian hormone (MW ~140000; clinical factor)
+  "38476-3": { "ng/ml->pmol/l": 7.14, "pmol/l->ng/ml": 0.14 },
+  // 17-OH progesterone (MW 330.46)
+  "1668-3": { "ng/ml->nmol/l": 3.03, "nmol/l->ng/ml": 0.33, "ng/dl->nmol/l": 0.0303 },
+  // Cortisol evening (MW 362.46)
+  "2147-7": { "µg/dl->nmol/l": 27.59, "nmol/l->µg/dl": 0.0362 },
+  // DHEA unbound (MW 288.42)
+  "2188-1": { "ng/ml->nmol/l": 3.47, "nmol/l->ng/ml": 0.288 },
   // Hemoglobin
   "718-7": { "g/dl->g/l": 10, "g/l->g/dl": 0.1 },
 };

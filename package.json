@@ -15,6 +15,7 @@
     "postinstall": "pnpm -C mcp install",
     "db:generate": "drizzle-kit generate",
     "check:biomarker-info": "tsx scripts/check-biomarker-info.ts",
+    "check:import": "tsx scripts/check-import.ts",
     "seed:dev": "tsx scripts/seed-fake-data.ts",
     "lint": "eslint .",
     "format": "prettier --write .",

@@ -323,10 +323,18 @@ export const biomarkerInfoEn: BiomarkerInfoMap = {
     affects: "A core measure of how well the kidneys clear waste.",
   },
   Urea: {
-    summary: "A waste product of protein breakdown, cleared by the kidneys (also called BUN).",
+    summary: "A waste product of protein breakdown, cleared by the kidneys.",
     high: "May reflect reduced kidney function, dehydration, high protein intake or bleeding in the gut.",
     low: "May reflect low protein intake or liver issues.",
     affects: "Reflects kidney filtration and the balance of protein metabolism and hydration.",
+  },
+  BUN: {
+    summary:
+      "Blood urea nitrogen — the nitrogen portion of urea. It measures the same waste product as urea but on a nitrogen basis (BUN ≈ urea × 0.47).",
+    high: "May reflect reduced kidney function, dehydration, a high-protein diet, or gastrointestinal bleeding.",
+    low: "May reflect low protein intake, overhydration or liver disease.",
+    affects:
+      "A standard marker of kidney filtration and protein/hydration balance, common on US-style panels.",
   },
   eGFR: {
     summary:
@@ -777,5 +785,468 @@ export const biomarkerInfoEn: BiomarkerInfoMap = {
     high: "May reflect certain liver or germ-cell conditions, liver regeneration, or pregnancy.",
     low: "Generally reassuring outside pregnancy.",
     affects: "Used for monitoring specific conditions and in prenatal screening.",
+  },
+
+  // ── Phase-2: CBC completion + differential absolutes ──
+  MPV: {
+    summary:
+      "The average size of platelets in the blood; younger, freshly released platelets tend to be larger.",
+    high: "May reflect faster platelet turnover as the marrow releases young platelets — seen with low platelet counts, recovery from blood loss, or some inherited conditions.",
+    low: "May occur when the marrow produces fewer or smaller platelets, as in some marrow disorders or after certain treatments.",
+    affects:
+      "Helps interpret a platelet count: paired with platelet number, it hints at whether the marrow is producing or the body is consuming platelets.",
+  },
+  PDW: {
+    summary:
+      "A measure of how much platelet sizes vary from one another (platelet size variability).",
+    high: "May reflect a mix of young and old platelets in circulation, often alongside active platelet turnover or inflammation.",
+    low: "Suggests platelets are uniform in size, which is generally unremarkable.",
+    affects:
+      "Read together with platelet count and MPV, it adds detail about platelet production and turnover.",
+  },
+  "RDW-SD": {
+    summary:
+      "The spread of red blood cell sizes reported as an absolute width in femtoliters, an alternate form of RDW.",
+    high: "May reflect a wider range of red-cell sizes, as seen with iron, B12 or folate deficiency, recent blood loss or transfusion.",
+    low: "Generally not clinically meaningful on its own.",
+    affects:
+      "Like RDW, it helps narrow down the cause of anemia by gauging how uniform the red cells are.",
+  },
+  "Band Neutrophils": {
+    summary:
+      "Immature neutrophils (band or stab cells) newly released from the bone marrow before they fully mature.",
+    high: "May rise when the body ramps up neutrophil production to fight an infection — sometimes called a 'left shift'.",
+    low: "Low or absent bands are normal in healthy people.",
+    affects:
+      "An increase signals the marrow is responding to an acute demand, often infection or inflammation.",
+  },
+  "Band Neutrophils (absolute)": {
+    summary:
+      "The actual number of immature (band) neutrophils per volume of blood, rather than their percentage.",
+    high: "May rise when the marrow accelerates neutrophil production to meet an acute demand, often a bacterial infection (a 'left shift').",
+    low: "Low or zero is the normal finding in healthy people.",
+    affects:
+      "A count-based view of how strongly the marrow is mobilizing young neutrophils to fight infection.",
+  },
+  "Reticulocytes (%)": {
+    summary:
+      "The percentage of red blood cells that are young, newly made cells still maturing in circulation.",
+    high: "May reflect increased red-cell production, as after blood loss, in hemolysis, or while responding to iron, B12 or folate treatment.",
+    low: "May indicate the marrow is producing too few red cells, as in iron deficiency, marrow suppression or chronic disease.",
+    affects:
+      "Shows how actively the bone marrow is replacing red cells and helps classify the cause of anemia.",
+  },
+  "Reticulocytes (absolute)": {
+    summary: "The actual number of young, newly made red blood cells per volume of blood.",
+    high: "May reflect a strong marrow response to blood loss or red-cell breakdown, or recovery after treating a deficiency.",
+    low: "May indicate the marrow is not making enough new red cells.",
+    affects:
+      "A more reliable gauge of marrow red-cell production than the percentage, since it does not depend on the total red-cell count.",
+  },
+  "Neutrophils (absolute)": {
+    summary:
+      "The actual number of neutrophils, the white cells that are the first responders to bacterial infection.",
+    high: "May accompany bacterial infection, inflammation, physical stress, smoking or certain medications such as steroids.",
+    low: "May follow some viral infections, certain drugs, autoimmune conditions or reduced marrow production, lowering defense against bacteria.",
+    affects:
+      "A key measure of infection-fighting capacity; very low counts raise the risk of serious infection.",
+  },
+  "Lymphocytes (absolute)": {
+    summary:
+      "The actual number of lymphocytes, the white cells central to viral defense and long-term immunity.",
+    high: "May accompany viral infections, some chronic infections, or certain blood conditions.",
+    low: "May follow acute illness, physical stress, steroid use, or some immune and marrow disorders.",
+    affects:
+      "Reflects the strength of the body's adaptive immune response to viruses and other threats.",
+  },
+  "Monocytes (absolute)": {
+    summary:
+      "The actual number of monocytes, white cells that clean up debris and help coordinate the immune response.",
+    high: "May accompany chronic infections, inflammation, recovery from an acute infection, or certain blood conditions.",
+    low: "May occur with some marrow disorders, certain medications, or overwhelming acute infection.",
+    affects: "Reflects the body's ongoing immune surveillance and tissue-repair activity.",
+  },
+  "Eosinophils (absolute)": {
+    summary:
+      "The actual number of eosinophils, white cells active in allergic responses and against parasites.",
+    high: "May accompany allergies, asthma, skin conditions, parasitic infections or certain medication reactions.",
+    low: "Usually not clinically significant; can be lowered by acute stress or steroids.",
+    affects: "Reflects allergic and anti-parasite immune activity.",
+  },
+  "Basophils (absolute)": {
+    summary:
+      "The actual number of basophils, the least common white cells, involved in allergic and inflammatory reactions.",
+    high: "May accompany allergic reactions, chronic inflammation or, less often, certain blood disorders.",
+    low: "Usually not clinically significant.",
+    affects: "Plays a role in allergic responses and the release of histamine during inflammation.",
+  },
+  "Nucleated RBC": {
+    summary:
+      "Immature red blood cells that still contain a nucleus; normally they stay in the marrow and are absent from adult blood.",
+    high: "Their presence in the blood may reflect strong marrow stress, rapid red-cell production, severe anemia or other significant marrow demand.",
+    low: "Absence is the normal, expected finding in healthy adults.",
+    affects:
+      "When present, signals the marrow is under unusual strain and warrants closer attention.",
+  },
+  "Immature Granulocytes (%)": {
+    summary:
+      "The percentage of early-stage granulocytes (such as metamyelocytes and myelocytes) released into the blood before maturing.",
+    high: "May reflect the marrow accelerating white-cell production in response to infection, inflammation or physical stress.",
+    low: "Low or absent levels are the normal finding in healthy people.",
+    affects:
+      "An early flag that the immune system is mounting an active response, often before other counts change.",
+  },
+
+  // ── Phase-2: chemistry extras + clinical ratios ──
+  Globulin: {
+    summary:
+      "A broad group of blood proteins (including antibodies and transport proteins) calculated as total protein minus albumin.",
+    high: "May reflect chronic infection, inflammation, autoimmune conditions, or certain blood disorders; rarely a sign of liver disease.",
+    low: "May relate to impaired immune-protein production, kidney protein loss, or certain liver conditions.",
+    affects: "Reflects immune activity, inflammation, and the liver's protein-making capacity.",
+  },
+  "Albumin/Globulin Ratio": {
+    summary:
+      "The balance between albumin and the other major blood proteins (globulins), used as a general health screen.",
+    high: "May occur with low globulin levels or certain hormonal or genetic conditions; usually not concerning on its own.",
+    low: "May accompany inflammation, infection, liver disease, kidney protein loss, or certain blood disorders.",
+    affects: "Gives a quick read on the proportion of protein types in the blood.",
+  },
+  "Total Cholesterol/HDL Ratio": {
+    summary:
+      "Total cholesterol divided by HDL ('good') cholesterol, a simple summary of cardiovascular risk.",
+    high: "May indicate a less favorable cholesterol balance and higher long-term heart-disease risk.",
+    low: "Generally favorable, suggesting a healthy proportion of protective HDL cholesterol.",
+    affects:
+      "Summarizes the overall cholesterol balance relevant to heart and blood-vessel health.",
+  },
+  "LDL/HDL Ratio": {
+    summary:
+      "LDL ('bad') cholesterol divided by HDL ('good') cholesterol, weighing harmful against protective cholesterol.",
+    high: "May reflect an unfavorable balance with more LDL relative to HDL, linked to higher cardiovascular risk.",
+    low: "Generally favorable, with protective HDL well represented.",
+    affects: "Indicates the balance between artery-clogging and protective cholesterol.",
+  },
+  "Triglyceride/HDL Ratio": {
+    summary:
+      "Triglycerides divided by HDL cholesterol; often used as an indirect marker of insulin resistance and metabolic health.",
+    high: "May suggest insulin resistance, excess abdominal fat, or a metabolic pattern linked to heart risk.",
+    low: "Generally favorable, suggesting good metabolic and lipid balance.",
+    affects: "Reflects metabolic health and the body's handling of fats and sugar.",
+  },
+  "BUN/Creatinine Ratio": {
+    summary:
+      "The ratio of urea nitrogen to creatinine in blood, helping distinguish causes of changing kidney values.",
+    high: "May point to dehydration, reduced blood flow to the kidneys, or gastrointestinal bleeding.",
+    low: "May relate to low protein intake, liver disease, or overhydration.",
+    affects: "Helps interpret kidney function and hydration status.",
+  },
+  "Anion Gap": {
+    summary: "A calculated value from electrolytes that helps detect hidden acids in the blood.",
+    high: "May accompany conditions that build up acids, such as poorly controlled diabetes, kidney problems, or certain poisonings.",
+    low: "Uncommon; may relate to low albumin or specific lab imbalances.",
+    affects: "Helps assess the body's acid-base balance.",
+  },
+  "Serum Osmolality": {
+    summary:
+      "A measure of how concentrated the blood is, reflecting the balance of water, salts, and other dissolved particles.",
+    high: "May indicate dehydration, high blood sugar, or elevated sodium; sometimes certain ingested substances.",
+    low: "May reflect excess water or low sodium levels.",
+    affects: "Reflects hydration and the balance of fluids and salts in the body.",
+  },
+  Lactate: {
+    summary:
+      "A byproduct of energy production that rises when tissues are short on oxygen or under stress.",
+    high: "May follow intense exercise, but can also reflect poor tissue oxygen delivery, infection, or certain medications.",
+    low: "Low levels are not usually a concern.",
+    affects: "Reflects how well tissues are getting and using oxygen.",
+  },
+  Ammonia: {
+    summary: "A waste product of protein breakdown that the liver normally clears from the blood.",
+    high: "May occur when the liver cannot clear it well, as in advanced liver disease, or with certain genetic conditions.",
+    low: "Low levels are not generally a concern.",
+    affects: "Reflects the liver's ability to process protein waste.",
+  },
+  "CK (Creatine Kinase)": {
+    summary:
+      "An enzyme found mainly in muscle that leaks into the blood when muscle tissue is stressed or damaged.",
+    high: "May follow intense exercise, injury, certain medications, or muscle and rarely heart conditions.",
+    low: "Low levels are usually not a concern and may relate to low muscle mass.",
+    affects: "Reflects the health and workload of muscle tissue.",
+  },
+  "CK-MB": {
+    summary:
+      "A form of creatine kinase concentrated in heart muscle, historically used to help detect heart injury.",
+    high: "May rise with heart-muscle injury, though skeletal-muscle damage can also contribute.",
+    low: "Low levels are normal and expected.",
+    affects: "Helps indicate possible injury to heart muscle.",
+  },
+  Procalcitonin: {
+    summary:
+      "A protein that rises sharply during serious bacterial infections, used to gauge infection severity.",
+    high: "May indicate a significant bacterial infection or widespread inflammation; helps guide antibiotic decisions.",
+    low: "Low levels make a serious bacterial infection less likely.",
+    affects: "Helps distinguish bacterial infection from other causes of inflammation.",
+  },
+  CRP: {
+    summary: "A protein made by the liver that rises with inflammation anywhere in the body.",
+    high: "May accompany infection, injury, or inflammatory conditions; higher levels suggest more active inflammation.",
+    low: "Low levels suggest little active inflammation.",
+    affects: "Reflects the overall level of inflammation in the body.",
+  },
+
+  // ── Phase-2: Urinalysis ──
+  "Urine Specific Gravity": {
+    summary:
+      "A measure of how concentrated the urine is, comparing it to pure water; it reflects how well the kidneys balance water and dissolved substances.",
+    high: "May reflect dehydration, reduced fluid intake, fluid loss (sweating, vomiting, diarrhea) or substances such as glucose or protein in the urine.",
+    low: "May reflect high fluid intake, diuretic use or reduced ability of the kidneys to concentrate urine.",
+    affects: "Indicates the body's hydration status and the kidneys' concentrating ability.",
+  },
+  "Urine pH": {
+    summary:
+      "A measure of how acidic or alkaline the urine is, shaped by diet, metabolism and kidney function.",
+    high: "More alkaline urine may follow a vegetarian diet, certain infections, or conditions affecting acid balance.",
+    low: "More acidic urine may follow a high-protein diet, dehydration or certain metabolic states.",
+    affects:
+      "Influences the tendency to form some kidney stones and can hint at acid-base or infection issues.",
+  },
+  "Urine Protein": {
+    summary:
+      "The amount of protein detected in urine; healthy kidneys normally let very little protein pass into it.",
+    high: "May reflect kidney stress or damage, urinary tract infection, fever, intense exercise or, sometimes, a transient harmless cause.",
+    low: "Low or absent protein is the expected, healthy finding.",
+    affects: "An early signal of kidney filter health; persistent elevation warrants follow-up.",
+  },
+  "Urine Glucose": {
+    summary:
+      "The amount of glucose (sugar) detected in urine; normally the kidneys reabsorb glucose so little appears.",
+    high: "May reflect high blood sugar (as in diabetes), pregnancy or a kidney threshold that lets glucose pass more easily.",
+    low: "Low or absent glucose is the expected, healthy finding.",
+    affects:
+      "Can flag elevated blood sugar and prompt evaluation for diabetes or kidney handling of glucose.",
+  },
+  "Urine Ketones": {
+    summary:
+      "Byproducts of fat breakdown that appear in urine when the body burns fat for fuel instead of carbohydrate.",
+    high: "May reflect fasting, low-carbohydrate diets, prolonged exercise, illness with vomiting or, importantly, uncontrolled diabetes.",
+    low: "Low or absent ketones is the expected finding in a well-fed state.",
+    affects:
+      "Signals a shift toward fat metabolism; marked elevation with diabetes can indicate a medical emergency.",
+  },
+  "Urine Urobilinogen": {
+    summary:
+      "A substance formed when bilirubin is processed by gut bacteria; small amounts normally return to the blood and appear in urine.",
+    high: "May reflect increased red-cell breakdown or liver conditions affecting bilirubin handling.",
+    low: "Very low or absent levels may reflect blocked bile flow or altered gut bacteria.",
+    affects: "Offers a window into liver function and red-cell turnover.",
+  },
+  "Microalbumin (urine)": {
+    summary:
+      "A test for very small amounts of albumin (a blood protein) in urine, below what a standard protein dipstick detects.",
+    high: "May reflect early kidney damage, often from diabetes or high blood pressure, and can also rise transiently with exercise, fever or infection.",
+    low: "Low or undetectable levels are the expected, healthy finding.",
+    affects:
+      "An early and sensitive marker of kidney filter damage, valuable for catching problems before they advance.",
+  },
+  "Urine Albumin/Creatinine Ratio (ACR)": {
+    summary:
+      "The amount of albumin in urine corrected for urine concentration using creatinine, giving a reliable estimate of daily albumin loss from a single sample.",
+    high: "May reflect early or established kidney damage, commonly linked to diabetes or high blood pressure.",
+    low: "Low values are the expected, healthy finding.",
+    affects: "A standard screening tool for kidney disease; rising values guide closer monitoring.",
+  },
+  "Urine Creatinine": {
+    summary:
+      "The concentration of creatinine in urine, a muscle-breakdown product; mainly used to adjust other urine measurements for how dilute or concentrated the sample is.",
+    high: "May reflect a concentrated sample (lower fluid intake) or higher muscle mass.",
+    low: "May reflect a dilute sample (high fluid intake) or lower muscle mass.",
+    affects:
+      "Serves as a reference point that makes other urine results, such as albumin, more reliable.",
+  },
+  "Urine RBC (microscopy)": {
+    summary:
+      "The number of red blood cells seen in urine under the microscope, counted per high-power field.",
+    high: "May reflect urinary tract infection, stones, inflammation, vigorous exercise, menstrual contamination or, less often, kidney or bladder conditions.",
+    low: "Few or no red cells is the expected, healthy finding.",
+    affects:
+      "Helps detect bleeding anywhere along the urinary tract; persistent findings warrant follow-up.",
+  },
+  "Urine WBC (microscopy)": {
+    summary:
+      "The number of white blood cells seen in urine under the microscope, counted per high-power field.",
+    high: "May reflect urinary tract infection or inflammation anywhere along the urinary tract.",
+    low: "Few or no white cells is the expected, healthy finding.",
+    affects: "A key clue to infection or inflammation in the urinary system.",
+  },
+  "Urine Epithelial Cells": {
+    summary:
+      "Cells shed from the lining of the urinary tract that appear in urine; squamous cells often come from the sample collection itself.",
+    high: "Many cells, especially squamous, may reflect skin or genital contamination during collection; other cell types may point to inflammation.",
+    low: "A small number is normal.",
+    affects:
+      "Helps judge sample quality and, occasionally, points to irritation of the urinary tract lining.",
+  },
+  "Urine Casts (hyaline)": {
+    summary:
+      "Tube-shaped structures formed in the kidney tubules from protein; hyaline casts are the most common and often harmless type.",
+    high: "More casts may appear with dehydration, exercise, fever or diuretic use, and sometimes with kidney conditions.",
+    low: "Few or no casts is the typical finding.",
+    affects: "Offers a glimpse into the kidney tubules; hyaline casts alone are usually benign.",
+  },
+  "Urine Leukocyte Esterase": {
+    summary:
+      "A dipstick test for an enzyme released by white blood cells, used as an indirect sign of their presence in urine.",
+    high: "A positive result may reflect a urinary tract infection or inflammation.",
+    low: "A negative result suggests few white blood cells and makes infection less likely.",
+    affects: "A quick screen for urinary tract infection, often paired with the nitrite test.",
+  },
+  "Urine Nitrite": {
+    summary:
+      "A dipstick test that detects nitrite, which forms when certain bacteria convert nitrate in urine.",
+    high: "A positive result may reflect a urinary tract infection caused by nitrite-producing bacteria.",
+    low: "A negative result does not rule out infection, since not all bacteria produce nitrite.",
+    affects:
+      "Supports detection of urinary tract infection, most informative when combined with leukocyte esterase.",
+  },
+  "Urine Blood (hemoglobin)": {
+    summary:
+      "A dipstick test that detects hemoglobin from red blood cells or muscle breakdown product (myoglobin) in urine.",
+    high: "A positive result may reflect infection, stones, inflammation, intense exercise, menstrual contamination or, less often, kidney or bladder conditions.",
+    low: "A negative result is the expected, healthy finding.",
+    affects:
+      "Flags possible bleeding in the urinary tract; a positive dipstick is usually checked against microscopy.",
+  },
+  "Urine Bilirubin": {
+    summary:
+      "A dipstick test for bilirubin, a pigment from red-cell breakdown that the liver processes; it is normally absent from urine.",
+    high: "A positive result may reflect liver conditions or blocked bile flow.",
+    low: "A negative result is the expected, healthy finding.",
+    affects:
+      "Can be an early sign of liver or bile-duct problems, often before other symptoms appear.",
+  },
+
+  // ── Phase-2: endocrine, coagulation & immune ──
+  Aldosterone: {
+    summary:
+      "An adrenal hormone that helps regulate blood pressure by controlling how much sodium and water the kidneys retain and how much potassium they excrete.",
+    high: "May reflect primary aldosteronism (an adrenal nodule), kidney artery narrowing, heart or liver conditions causing fluid retention, or low sodium intake.",
+    low: "May occur with adrenal insufficiency, certain medications, or high sodium intake.",
+    affects:
+      "Influences blood pressure, blood volume, and the balance of sodium and potassium in the body.",
+  },
+  "Renin (Plasma Renin Activity)": {
+    summary:
+      "An enzyme released by the kidneys that starts the hormone cascade controlling blood pressure and salt balance; usually interpreted alongside aldosterone.",
+    high: "May reflect dehydration, blood loss, narrowed kidney arteries, certain diuretics, or adrenal insufficiency.",
+    low: "May be seen in primary aldosteronism, high salt intake, or some blood-pressure medications.",
+    affects:
+      "Sets the pace of the renin-angiotensin-aldosterone system, which governs blood pressure and fluid balance.",
+  },
+  ACTH: {
+    summary:
+      "A pituitary hormone that tells the adrenal glands to make cortisol; measured to locate the source of cortisol problems.",
+    high: "May reflect a pituitary tumor (Cushing disease), primary adrenal insufficiency (Addison disease), or severe stress.",
+    low: "May indicate an adrenal tumor making excess cortisol, or suppression from steroid medication.",
+    affects: "Drives the adrenal glands' production of cortisol, the body's main stress hormone.",
+  },
+  "AMH (Anti-Müllerian Hormone)": {
+    summary:
+      "A hormone made by ovarian follicles (and testicular cells) that reflects the remaining egg supply, or ovarian reserve, in women.",
+    high: "May be seen in polycystic ovary syndrome or certain ovarian tumors.",
+    low: "May reflect diminishing ovarian reserve with age, approaching menopause, or prior ovarian surgery or chemotherapy.",
+    affects:
+      "Indicates ovarian reserve and helps predict fertility and response to fertility treatment.",
+  },
+  "17-OH Progesterone": {
+    summary:
+      "A steroid made by the adrenal glands and ovaries; chiefly used to screen for a form of congenital adrenal hyperplasia.",
+    high: "May reflect congenital adrenal hyperplasia (a 21-hydroxylase enzyme deficiency) or, less often, an adrenal or ovarian tumor.",
+    low: "Generally not clinically concerning; very low levels are not typically a problem.",
+    affects: "Serves as a building block in the pathway that makes cortisol and sex hormones.",
+  },
+  "Cortisol (evening)": {
+    summary:
+      "Cortisol measured later in the day, when it should normally be much lower than the morning peak; used to assess the daily rhythm.",
+    high: "May reflect Cushing syndrome, ongoing stress or illness, or a disrupted day-night rhythm.",
+    low: "An expected finding in the evening; a normal part of the daily cortisol cycle.",
+    affects:
+      "Reflects the body's daily cortisol rhythm, which influences metabolism, immune function, and stress response.",
+  },
+  Ceruloplasmin: {
+    summary:
+      "The main copper-carrying protein in the blood; measured mainly to help evaluate copper metabolism and Wilson disease.",
+    high: "May rise with inflammation, infection, pregnancy, or estrogen use, since it is an acute-phase protein.",
+    low: "May indicate Wilson disease, copper deficiency, or significant protein loss or malnutrition.",
+    affects: "Transports copper in the blood and participates in iron metabolism.",
+  },
+  "PT (Prothrombin Time)": {
+    summary:
+      "The time it takes blood to clot through one of the main clotting pathways; sensitive to several clotting factors and vitamin K.",
+    high: "A longer time may reflect blood-thinning medication (warfarin), liver disease, vitamin K deficiency, or a clotting-factor deficiency.",
+    low: "A shorter time is rarely meaningful but can occur with increased clotting tendency.",
+    affects: "Indicates how readily blood forms a clot and helps monitor blood-thinning therapy.",
+  },
+  aPTT: {
+    summary:
+      "The time it takes blood to clot through a different clotting pathway; used to screen clotting function and monitor heparin therapy.",
+    high: "A longer time may reflect heparin therapy, a clotting-factor deficiency (such as hemophilia), or an antiphospholipid antibody.",
+    low: "A shorter time is usually not significant but may suggest a tendency toward clotting.",
+    affects:
+      "Indicates clotting function through the intrinsic pathway and helps monitor heparin treatment.",
+  },
+  "Antithrombin III": {
+    summary:
+      "A natural blood protein that slows clotting and keeps it in check; measured when an inherited or acquired clotting tendency is suspected.",
+    high: "Generally not a clinical concern; can occasionally rise with some medications.",
+    low: "May reflect an inherited deficiency, liver disease, active clotting, or protein loss, and can raise clotting risk.",
+    affects:
+      "Acts as a natural brake on clot formation, helping keep the clotting system in balance.",
+  },
+  "Complement C3": {
+    summary:
+      "A protein of the complement system, part of the immune defense; levels help evaluate inflammatory and autoimmune conditions.",
+    high: "May rise with infection or inflammation, as it is an acute-phase protein.",
+    low: "May reflect active autoimmune disease (such as lupus), certain kidney diseases, or an inherited deficiency.",
+    affects:
+      "Participates in the immune system's complement cascade that fights infection and clears damaged cells.",
+  },
+  "Complement C4": {
+    summary:
+      "Another protein of the complement system; often measured with C3 to assess autoimmune and inflammatory activity.",
+    high: "May rise with inflammation or infection.",
+    low: "May reflect lupus or other autoimmune disease, hereditary angioedema, or an inherited deficiency.",
+    affects:
+      "Works within the complement cascade to support immune defense and clearance of immune complexes.",
+  },
+  IgG: {
+    summary:
+      "The most abundant antibody in the blood, providing long-term immunity against infections you have encountered or been vaccinated against.",
+    high: "May reflect chronic infection, chronic inflammation, autoimmune disease, or certain blood disorders.",
+    low: "May indicate an immune deficiency, protein loss, or suppression from certain medications, raising infection risk.",
+    affects:
+      "Provides lasting immune protection and is the main antibody passed to a baby during pregnancy.",
+  },
+  IgA: {
+    summary:
+      "An antibody concentrated in mucous membranes, such as the gut and airways, that defends surfaces exposed to the outside world.",
+    high: "May reflect chronic infection, liver disease, or certain inflammatory or blood disorders.",
+    low: "May indicate selective IgA deficiency (common and often harmless) or a broader immune deficiency.",
+    affects: "Protects mucosal surfaces of the airways, gut, and other linings against infection.",
+  },
+  IgM: {
+    summary:
+      "The first antibody the body makes when it meets a new infection, providing the earliest line of antibody defense.",
+    high: "May reflect a recent or acute infection or certain blood disorders.",
+    low: "May indicate an immune deficiency or suppression from some medications.",
+    affects:
+      "Provides the early antibody response to new infections before other antibodies build up.",
+  },
+  DHEA: {
+    summary:
+      "An adrenal steroid that serves as a precursor to both male and female sex hormones; the unbound form measured here turns over faster than DHEA-S.",
+    high: "May reflect congenital adrenal hyperplasia, polycystic ovary syndrome, or an adrenal tumor.",
+    low: "May occur with adrenal insufficiency or simply with advancing age.",
+    affects: "Acts as a building block the body converts into testosterone and estrogen.",
   },
 };

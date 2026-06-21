@@ -53,16 +53,74 @@ export const DISCHARGE_EXTRACTION_PROMPT = `You are a data-extraction engine for
 
 Extract its structured content and return ONLY a single JSON object:
 
-{"visitDate": string | null, "clinic": string | null, "doctorName": string | null, "diagnoses": [{"name": string, "icdCode": string | null}], "medications": [{"name": string, "dose": string | null}], "notes": string}
+{"visitDate": string | null, "clinic": string | null, "doctorName": string | null, "diagnoses": [{"name": string, "icdCode": string | null}], "medications": [{"name": string, "dose": string | null}], "allergies": [{"allergen": string, "reaction": string | null, "severity": string | null}], "notes": string}
 
 Strict rules:
 - "visitDate" is the discharge (or admission, if discharge is absent) date as ISO "YYYY-MM-DD". If not fully legible, use null. Never guess.
 - "clinic" is the hospital or clinic name as printed, or null.
 - "doctorName" is the discharging/attending physician's name as printed, or null.
-- "diagnoses" lists each diagnosis with "name" as printed and "icdCode" (ICD-10/ICD-11) exactly as printed, or null when no code is given. Use [] if none.
+- "diagnoses" lists each diagnosis with "name" as printed and "icdCode" (the ICD-10 or ICD-11 code, e.g. "E11.9", "I10") exactly as printed, or null when no code is given. Do not invent or infer codes. Use [] if none.
 - "medications" lists each prescribed medication with "name" as printed and "dose" (the dose/strength text as printed, e.g. "500 mg"), or null. Use [] if none.
+- "allergies" lists each allergy or adverse drug reaction stated in the document: "allergen" is the substance (drug/food/etc.) as printed; "reaction" is the described reaction (e.g. "rash", "anaphylaxis") or null; "severity" is one of "mild", "moderate", "severe", "anaphylactic" if stated or clearly implied, else null. Use [] if none. Never invent an allergy.
 - "notes" is a concise plain-text summary of recommendations and clinical course, in the document's original language. Use "" if nothing relevant.
-- Do not invent diagnoses, medications, codes, or dates. Output ONLY the JSON object. No preamble, no Markdown fences, no commentary.`;
+- Do not invent diagnoses, medications, allergies, codes, or dates. Output ONLY the JSON object. No preamble, no Markdown fences, no commentary.`;
+
+/**
+ * Imaging-report extraction prompt. Output is reviewed 100% manually. One report
+ * usually describes a single study but may bundle several (e.g. "CT chest +
+ * abdomen") — emit one object per distinct study. The model never guesses.
+ */
+export const IMAGING_EXTRACTION_PROMPT = `You are a data-extraction engine for radiology / medical imaging reports. The attached document is an imaging report (X-ray, CT, MRI, ultrasound, PET, mammography, etc.); it may be in any language, from any country, photographed or scanned.
+
+Extract EVERY distinct imaging study and return ONLY a JSON array, one object per study:
+
+[{"date": string | null, "modality": string, "bodyArea": string, "findings": string | null, "radiologistName": string | null, "clinic": string | null}]
+
+Strict rules:
+- "date" is the study/examination date as ISO "YYYY-MM-DD". If not fully legible, use null. Never guess.
+- "modality" is the imaging method in clinical English: one of "X-ray", "CT", "MRI", "Ultrasound", "PET", or the printed name if none of these fit. Translate to English (e.g. "Рентген" → "X-ray", "Ecografía" → "Ultrasound").
+- "bodyArea" is the examined region/organ in clinical English (e.g. "Chest", "Lumbar spine", "Abdomen", "Right knee"). Keep it short.
+- "findings" is the radiologist's findings/impression as a concise plain-text summary, in the document's ORIGINAL language. Use null if none is legible.
+- "radiologistName" is the reporting radiologist's name as printed, or null.
+- "clinic" is the facility / imaging center name as printed, or null.
+- Do not invent studies, findings, or dates. Output ONLY the JSON array. No preamble, no Markdown fences, no commentary.`;
+
+/**
+ * Prescription / medication-list extraction prompt. Output is reviewed 100%
+ * manually. Covers handwritten or printed prescriptions and medication lists.
+ */
+export const PRESCRIPTION_EXTRACTION_PROMPT = `You are a data-extraction engine for prescriptions and medication lists. The attached document is a prescription (Rx) or a list of medications/supplements; it may be in any language, from any country, photographed or scanned.
+
+Extract EVERY medication or supplement and return ONLY a JSON array, one object per item:
+
+[{"name": string, "type": string | null, "dose": string | null, "frequency": string | null, "purpose": string | null, "asNeeded": boolean | null}]
+
+Strict rules:
+- "name" is the drug or supplement name as printed (keep the original brand/INN spelling; do not translate the name itself).
+- "type" is "drug" for pharmaceuticals or "supplement" for vitamins/minerals/herbal/dietary supplements, in English. Use null if you cannot tell.
+- "dose" is the strength/amount per intake exactly as printed (e.g. "500 mg", "1 tablet", "10 IU"), or null.
+- "frequency" is how often it is taken, in clinical English where possible (e.g. "twice daily", "once a week", "as needed", "every 8 hours"), or null.
+- "purpose" is the indication / reason if stated (e.g. "hypertension"), in the original language, or null.
+- "asNeeded" is true if the item is explicitly PRN / "as needed" / "при необходимости", false if it is a standing schedule, otherwise null.
+- Do not invent medications, doses, or schedules. Output ONLY the JSON array. No preamble, no Markdown fences, no commentary.`;
+
+/**
+ * Allergy-record extraction prompt. Output is reviewed 100% manually — allergies
+ * are safety-critical, so the model must never guess severity or invent entries.
+ */
+export const ALLERGY_EXTRACTION_PROMPT = `You are a data-extraction engine for allergy records. The attached document lists a patient's allergies or intolerances (an allergy passport, a chart section, or a note); it may be in any language, from any country, photographed or scanned.
+
+Extract EVERY allergy / intolerance and return ONLY a JSON array, one object per allergen:
+
+[{"allergen": string, "category": string | null, "severity": string | null, "reaction": string | null, "onsetDate": string | null}]
+
+Strict rules:
+- "allergen" is the substance the person is allergic to as printed (e.g. "Penicillin", "Peanuts", "Pollen").
+- "category" is one of "drug", "food", "environmental", or "other" in English, inferred from the allergen. Use null only if genuinely unclear.
+- "severity" is one of "mild", "moderate", "severe", "anaphylactic" in English, ONLY if the document states or clearly implies it (e.g. "anaphylaxis" → "anaphylactic"). Use null when severity is not indicated. Never guess severity.
+- "reaction" is the described reaction (e.g. "hives", "swelling", "difficulty breathing") in the original language, or null.
+- "onsetDate" is the date the allergy was first noted as ISO "YYYY-MM-DD", or null. Never guess.
+- Do not invent allergies, severities, or reactions. Output ONLY the JSON array. No preamble, no Markdown fences, no commentary.`;
 
 /**
  * Phase-2 disambiguation prompt (§4). The model may ONLY choose from the

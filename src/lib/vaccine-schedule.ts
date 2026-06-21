@@ -766,9 +766,7 @@ export function countActionable(
   todayISO: string,
 ): number {
   const overdueAntigens = views.filter((v) => v.overall === "overdue").length;
-  const lapsedCerts = records.filter(
-    (r) => r.expiresAt != null && r.expiresAt < todayISO,
-  ).length;
+  const lapsedCerts = records.filter((r) => r.expiresAt != null && r.expiresAt < todayISO).length;
   return overdueAntigens + lapsedCerts;
 }
 

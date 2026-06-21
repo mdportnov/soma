@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, Plus, Search } from "lucide-react";
+import { Activity, AlertTriangle, Pencil, Plus, Search } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createBiomarker, getBiomarkerSeries, getLatestResults, listBiomarkers } from "@/db/repos";
@@ -10,6 +10,8 @@ import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { FlagBadge } from "@/components/app/FlagBadge";
+import { IconAction } from "@/components/app/IconAction";
+import { EditBiomarkerDialog } from "@/components/app/EditBiomarkerDialog";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +57,7 @@ export function Biomarkers() {
   const [query, setQuery] = React.useState("");
   const [onlyTracked, setOnlyTracked] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<Biomarker | null>(null);
 
   const { data, loading, reload } = useQuery(async () => {
     const [biomarkers, latest] = await Promise.all([listBiomarkers(), getLatestResults(profileId)]);
@@ -150,60 +153,71 @@ export function Biomarkers() {
                   const status = statusOf(b);
                   const trend = data.series.get(b.id);
                   return (
-                    <Link
-                      key={b.id}
-                      to={`/biomarkers/${b.id}`}
-                      className={cn(
-                        "rounded-lg border bg-card p-3 transition-colors hover:bg-muted/40",
-                        // Cards without data recede so markers with readings lead.
-                        status === "no_data" && "border-dashed bg-transparent opacity-60",
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-medium selectable">{b.canonicalName}</p>
-                        {b.isCustom && <Badge variant="secondary">{t("biomarkers.custom")}</Badge>}
-                      </div>
-                      {latest ? (
-                        <>
-                          <div className="mt-1.5 flex items-center justify-between gap-2">
-                            <p className="text-sm tabular-nums selectable">
-                              <span className="font-semibold">{formatValue(latest.value)}</span>{" "}
-                              <span className="text-xs text-muted-foreground">{latest.unit}</span>
-                            </p>
-                            <div className="flex items-center gap-1.5">
-                              {status === "out_of_range" || status === "not_evaluated" ? (
-                                <FlagBadge
-                                  flag={latest.outOfRange ? latest.flag : null}
-                                  evaluated={!!latest.evaluated}
+                    <div key={b.id} className="group relative">
+                      <Link
+                        to={`/biomarkers/${b.id}`}
+                        className={cn(
+                          "block rounded-lg border bg-card p-3 transition-colors hover:bg-muted/40",
+                          // Cards without data recede so markers with readings lead.
+                          status === "no_data" && "border-dashed bg-transparent opacity-60",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-medium selectable">
+                            {b.canonicalName}
+                          </p>
+                          {b.isCustom && (
+                            <Badge variant="secondary">{t("biomarkers.custom")}</Badge>
+                          )}
+                        </div>
+                        {latest ? (
+                          <>
+                            <div className="mt-1.5 flex items-center justify-between gap-2">
+                              <p className="text-sm tabular-nums selectable">
+                                <span className="font-semibold">{formatValue(latest.value)}</span>{" "}
+                                <span className="text-xs text-muted-foreground">{latest.unit}</span>
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                {status === "out_of_range" || status === "not_evaluated" ? (
+                                  <FlagBadge
+                                    flag={latest.outOfRange ? latest.flag : null}
+                                    evaluated={!!latest.evaluated}
+                                  />
+                                ) : status === "optimal" ? (
+                                  <Badge variant="success">{t("biomarkers.optimal")}</Badge>
+                                ) : (
+                                  <Badge variant="secondary">{t("biomarkers.inRange")}</Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-1.5 flex items-end justify-between gap-2">
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatDate(latest.date)}
+                              </span>
+                              {trend && trend.length >= 2 && (
+                                <Sparkline
+                                  values={trend.map((p) => p.value)}
+                                  optimalLow={b.optimalLow}
+                                  optimalHigh={b.optimalHigh}
+                                  lastOutOfRange={status === "out_of_range"}
                                 />
-                              ) : status === "optimal" ? (
-                                <Badge variant="success">{t("biomarkers.optimal")}</Badge>
-                              ) : (
-                                <Badge variant="secondary">{t("biomarkers.inRange")}</Badge>
                               )}
                             </div>
-                          </div>
-                          <div className="mt-1.5 flex items-end justify-between gap-2">
-                            <span className="text-[10px] text-muted-foreground">
-                              {formatDate(latest.date)}
-                            </span>
-                            {trend && trend.length >= 2 && (
-                              <Sparkline
-                                values={trend.map((p) => p.value)}
-                                optimalLow={b.optimalLow}
-                                optimalHigh={b.optimalHigh}
-                                lastOutOfRange={status === "out_of_range"}
-                              />
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <p className="mt-1.5 text-xs text-muted-foreground">
-                          {t("biomarkers.noData")} · {b.refLow ?? "—"}–{b.refHigh ?? "—"}{" "}
-                          {b.defaultUnit}
-                        </p>
-                      )}
-                    </Link>
+                          </>
+                        ) : (
+                          <p className="mt-1.5 text-xs text-muted-foreground">
+                            {t("biomarkers.noData")} · {b.refLow ?? "—"}–{b.refHigh ?? "—"}{" "}
+                            {b.defaultUnit}
+                          </p>
+                        )}
+                      </Link>
+                      <IconAction
+                        label={t("biomarkers.editDialog.action")}
+                        icon={<Pencil className="size-3.5" />}
+                        onClick={() => setEditing(b)}
+                        className="absolute right-1.5 top-1.5 size-7 bg-card opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                      />
+                    </div>
                   );
                 })}
               </div>
@@ -221,6 +235,16 @@ export function Biomarkers() {
         }}
         existingCategories={[...new Set(data.biomarkers.map((b) => b.category))]}
         unitCatalog={allKnownUnits(data.biomarkers.map((b) => b.defaultUnit))}
+      />
+
+      <EditBiomarkerDialog
+        open={!!editing}
+        biomarker={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          void reload();
+        }}
       />
     </>
   );

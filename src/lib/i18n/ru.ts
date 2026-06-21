@@ -613,6 +613,18 @@ export const ru = {
       aliasesPlaceholder: "synonym 1, синоним 2",
       create: "Создать",
     },
+    editDialog: {
+      action: "Изменить диапазоны",
+      title: "Редактировать запись словаря",
+      refLowLabel: "Нижний реф.",
+      refHighLabel: "Верхний реф.",
+      optimalLowLabel: "Нижний оптим.",
+      optimalHighLabel: "Верхний оптим.",
+      aliasesLabel: "Псевдонимы (через запятую или с новой строки, любой язык)",
+      aliasesPlaceholder: "synonym 1, синоним 2",
+      refOrderError: "Нижний референс не может быть больше верхнего.",
+      optimalOrderError: "Нижний оптимум не может быть больше верхнего.",
+    },
   },
 
   // Medications page

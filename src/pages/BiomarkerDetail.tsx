@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, Info, LineChart } from "lucide-react";
+import { AlertTriangle, Info, LineChart, Pencil } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getBiomarker, getBiomarkerSeries, listMedications, listSymptomLog } from "@/db/repos";
@@ -12,9 +12,11 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
 import { DeltaBadge } from "@/components/app/DeltaBadge";
 import { AiInterpretation } from "@/components/app/AiInterpretation";
+import { EditBiomarkerDialog } from "@/components/app/EditBiomarkerDialog";
 import { changeBetween, type ValuePoint } from "@/lib/insights";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import {
   Table,
@@ -39,8 +41,9 @@ export function BiomarkerDetail() {
   const biomarkerId = Number(id);
   const [activeOverlays, setActiveOverlays] = React.useState<Set<number>>(new Set());
   const [showSymptoms, setShowSymptoms] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
 
-  const { data, loading } = useQuery(async () => {
+  const { data, loading, reload } = useQuery(async () => {
     const [bio, series, meds, symptoms] = await Promise.all([
       getBiomarker(biomarkerId),
       getBiomarkerSeries(profileId, biomarkerId),
@@ -100,7 +103,14 @@ export function BiomarkerDetail() {
         )}
         title={bio.canonicalName}
         description={`${bio.category} · ${bio.defaultUnit}${bio.code ? ` · LOINC ${bio.code}` : ""}`}
-        actions={bio.isCustom ? <Badge variant="secondary">custom</Badge> : undefined}
+        actions={
+          <div className="flex items-center gap-2">
+            {bio.isCustom && <Badge variant="secondary">custom</Badge>}
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              <Pencil /> {t("biomarkers.editDialog.action")}
+            </Button>
+          </div>
+        }
       />
 
       <div className="mb-4 flex flex-wrap gap-2 text-xs">
@@ -277,6 +287,16 @@ export function BiomarkerDetail() {
           </Card>
         </>
       )}
+
+      <EditBiomarkerDialog
+        open={editing}
+        biomarker={bio}
+        onClose={() => setEditing(false)}
+        onSaved={() => {
+          setEditing(false);
+          void reload();
+        }}
+      />
     </>
   );
 }

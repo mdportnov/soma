@@ -198,6 +198,26 @@ export async function updateBiomarker(id: number, data: Partial<NewBiomarker>) {
   await db.update(biomarker).set(data).where(eq(biomarker.id, id));
 }
 
+export type BiomarkerDictionaryEdit = {
+  refLow: number | null;
+  refHigh: number | null;
+  optimalLow: number | null;
+  optimalHigh: number | null;
+  aliases: string[];
+};
+
+/**
+ * Edits a dictionary entry's ranges and aliases from the in-app editor, stamping
+ * `isUserModified` so the startup seed reconciliation (`syncBiomarkers`) stops
+ * overriding it — the edit then persists across launches, for seeded entries too.
+ */
+export async function updateBiomarkerDictionary(id: number, data: BiomarkerDictionaryEdit) {
+  await db
+    .update(biomarker)
+    .set({ ...data, isUserModified: true })
+    .where(eq(biomarker.id, id));
+}
+
 /** All demographic reference ranges, grouped by biomarker id. */
 export async function getReferenceRangesByBiomarker(): Promise<Map<number, DemographicRange[]>> {
   const rows = await db.select().from(biomarkerReferenceRange);

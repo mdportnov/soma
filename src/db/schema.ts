@@ -95,6 +95,12 @@ export const biomarker = sqliteTable(
       .notNull()
       .default("range"),
     isCustom: integer("is_custom", { mode: "boolean" }).notNull().default(false),
+    /**
+     * Set when the user edits a seeded dictionary entry's ranges/aliases. The
+     * startup `syncBiomarkers` reconciliation then leaves the entry alone, so the
+     * edit survives across launches (the seed no longer re-adds removed aliases).
+     */
+    isUserModified: integer("is_user_modified", { mode: "boolean" }).notNull().default(false),
   },
   (t) => [index("biomarker_name_idx").on(t.canonicalName)],
 );

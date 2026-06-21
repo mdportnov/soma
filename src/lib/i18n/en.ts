@@ -610,6 +610,18 @@ export const en = {
       aliasesPlaceholder: "synonym 1, синоним 2",
       create: "Create",
     },
+    editDialog: {
+      action: "Edit ranges",
+      title: "Edit dictionary entry",
+      refLowLabel: "Ref. low",
+      refHighLabel: "Ref. high",
+      optimalLowLabel: "Optimal low",
+      optimalHighLabel: "Optimal high",
+      aliasesLabel: "Aliases (comma- or newline-separated, any language)",
+      aliasesPlaceholder: "synonym 1, синоним 2",
+      refOrderError: "Reference low can't be higher than reference high.",
+      optimalOrderError: "Optimal low can't be higher than optimal high.",
+    },
   },
 
   // Medications page

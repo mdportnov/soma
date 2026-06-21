@@ -2110,7 +2110,8 @@ export async function seedBiomarkersIfEmpty(conn: Database): Promise<void> {
  * library improvements reach existing installs without a manual step: inserts
  * any new dictionary entries and unions in new (incl. multilingual) aliases.
  * Only touches seeded rows (is_custom = 0) and only adds aliases — user-created
- * biomarkers and user-added aliases are preserved. Idempotent.
+ * biomarkers and entries the user has edited in the dictionary editor
+ * (is_user_modified = 1) are left untouched so those edits persist. Idempotent.
  */
 export async function syncBiomarkers(conn: Database): Promise<void> {
   type Row = {
@@ -2119,9 +2120,10 @@ export async function syncBiomarkers(conn: Database): Promise<void> {
     canonical_name: string;
     aliases: string;
     is_custom: number;
+    is_user_modified: number;
   };
   const rows = await conn.select<Row[]>(
-    "SELECT id, code, canonical_name, aliases, is_custom FROM biomarker",
+    "SELECT id, code, canonical_name, aliases, is_custom, is_user_modified FROM biomarker",
   );
   const byCode = new Map<string, Row>();
   const byName = new Map<string, Row>();
@@ -2156,7 +2158,9 @@ export async function syncBiomarkers(conn: Database): Promise<void> {
         );
         continue;
       }
-      if (existing.is_custom) continue;
+      // Skip custom entries and any seeded entry the user has taken ownership of
+      // via the dictionary editor — re-adding seed aliases would undo their edit.
+      if (existing.is_custom || existing.is_user_modified) continue;
       const current = safeAliases(existing.aliases);
       // Union in new aliases, then strip any that were relocated to another entry
       // (a plain union can't remove, so existing installs need this explicit step).

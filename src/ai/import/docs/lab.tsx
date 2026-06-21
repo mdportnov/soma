@@ -128,7 +128,9 @@ function validateExtractions(
       unit: typeof o.unit === "string" ? o.unit.trim().slice(0, 40) : "",
       ref_range_text:
         typeof o.ref_range_text === "string" ? o.ref_range_text.trim().slice(0, 120) : null,
-      page: typeof o.page === "number" ? o.page : null,
+      // Source page must be a positive integer — a 0/negative/NaN page would
+      // break the "jump to source" verify workflow (a core safety feature).
+      page: Number.isInteger(o.page) && (o.page as number) >= 1 ? (o.page as number) : null,
     });
   }
   return rows;

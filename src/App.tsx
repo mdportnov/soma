@@ -1,4 +1,6 @@
+import * as React from "react";
 import { HashRouter, Route, Routes } from "react-router-dom";
+import { watchSystemTheme } from "@/lib/theme";
 import { AppProvider } from "@/app/AppContext";
 import { I18nProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/components/app/Toast";
@@ -27,6 +29,10 @@ import { ImagingNew } from "@/pages/ImagingNew";
 import { Settings } from "@/pages/Settings";
 
 export default function App() {
+  // Re-apply the theme when the OS appearance changes (while pref = system);
+  // the returned disposer removes the matchMedia listener on unmount.
+  React.useEffect(() => watchSystemTheme(), []);
+
   return (
     <I18nProvider>
       <AppProvider>

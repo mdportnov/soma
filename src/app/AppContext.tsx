@@ -24,18 +24,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    let cancelled = false;
+    let stopScheduler: (() => void) | null = null;
     (async () => {
       try {
         await initDatabase();
         const profileId = await ensureActiveProfile();
-        setOnboarded(await isOnboarded(profileId));
+        const onboardedNow = await isOnboarded(profileId);
+        if (cancelled) return;
+        setOnboarded(onboardedNow);
         setState({ profileId });
-        initBackupScheduler();
+        stopScheduler = initBackupScheduler();
       } catch (e) {
+        if (cancelled) return;
         console.error(e);
         setError(e instanceof Error ? e.message : String(e));
       }
     })();
+    return () => {
+      cancelled = true;
+      stopScheduler?.();
+    };
   }, []);
 
   if (error) {

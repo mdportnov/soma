@@ -186,15 +186,14 @@ async function runIfDue(): Promise<void> {
   }
 }
 
-let schedulerStarted = false;
-
 /**
- * Called once after DB init: runs a catch-up backup if one is overdue and
- * re-checks every 6 hours while the app stays open.
+ * Called after DB init: runs a catch-up backup if one is overdue and re-checks
+ * every 6 hours while the app stays open. Returns a disposer that clears the
+ * interval — the caller owns the lifecycle, so the timer can't leak or stack
+ * across remounts (StrictMode double-invoke, HMR).
  */
-export function initBackupScheduler(): void {
-  if (schedulerStarted) return;
-  schedulerStarted = true;
+export function initBackupScheduler(): () => void {
   void runIfDue();
-  setInterval(() => void runIfDue(), 6 * 60 * 60 * 1000);
+  const id = setInterval(() => void runIfDue(), 6 * 60 * 60 * 1000);
+  return () => clearInterval(id);
 }

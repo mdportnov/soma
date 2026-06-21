@@ -25,6 +25,9 @@ type NavItem =
   | { kind: "link"; to: string; labelKey: string; icon: React.ElementType; end?: boolean }
   | { kind: "label"; labelKey: string };
 
+/** Cap on retained per-history-entry scroll offsets (prevents unbounded growth). */
+const MAX_SCROLL_ENTRIES = 50;
+
 const NAV: NavItem[] = [
   { kind: "link", to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
   { kind: "link", to: "/timeline", labelKey: "nav.timeline", icon: CalendarRange },
@@ -69,7 +72,18 @@ export function Shell() {
   React.useEffect(() => {
     const main = mainRef.current;
     if (!main) return;
-    const onScroll = () => scrollPositions.current.set(lastKey.current, main.scrollTop);
+    const onScroll = () => {
+      const positions = scrollPositions.current;
+      positions.set(lastKey.current, main.scrollTop);
+      // Bound the map: one entry per visited history key would otherwise grow
+      // forever over a long session. Evict oldest (insertion-ordered), never the
+      // entry we're actively scrolling.
+      while (positions.size > MAX_SCROLL_ENTRIES) {
+        const oldest = positions.keys().next().value;
+        if (oldest === undefined || oldest === lastKey.current) break;
+        positions.delete(oldest);
+      }
+    };
     main.addEventListener("scroll", onScroll, { passive: true });
     return () => main.removeEventListener("scroll", onScroll);
   }, []);

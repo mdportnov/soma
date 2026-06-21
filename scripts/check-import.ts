@@ -7,7 +7,8 @@
  *   1. controlled-vocabulary resolution (multilingual enum matching),
  *   2. dose parsing + untrusted-output validation primitives,
  *   3. unit conversions (incl. the urea fix and cell-count equivalences),
- *   4. unit-aware differential routing (%/absolute variants must not collide).
+ *   4. unit-aware differential routing (%/absolute variants must not collide),
+ *   5. Cyrillic-unit normalization, non-finite guards, and JSON salvage.
  *
  * Pure functions only — no Tauri / network. Exits non-zero on any mismatch.
  */
@@ -25,8 +26,9 @@ import {
   asArray,
   asObject,
 } from "../src/ai/import/validate";
-import { convertToDefaultUnit } from "../src/lib/units";
+import { convertToDefaultUnit, normalizeUnit, computeFlag } from "../src/lib/units";
 import { mapExtractions } from "../src/ai/pipeline/map";
+import { extractJson } from "../src/ai/prompts";
 
 let pass = 0;
 let fail = 0;
@@ -126,6 +128,30 @@ near(
   convertToDefaultUnit(4.74, "x10^6/UI", { code: "789-8", defaultUnit: "10^12/L" }),
   4.74,
 );
+
+// 3b. Cyrillic-unit normalization + non-finite guards
+eq("normalize мг/дл → mg/dl", normalizeUnit("мг/дл"), "mg/dl");
+eq("normalize мкг/дл → µg/dl", normalizeUnit("мкг/дл"), "µg/dl");
+near(
+  "Glucose 90 мг/дл → mmol/L (Cyrillic deciliter)",
+  convertToDefaultUnit(90, "мг/дл", { code: "1558-6", defaultUnit: "mmol/L" }),
+  5.0,
+);
+near(
+  "DHEA-S 300 µg/dL → µmol/L",
+  convertToDefaultUnit(300, "µg/dL", { code: "2191-5", defaultUnit: "µmol/L" }),
+  8.14,
+);
+eq(
+  "NaN value → unknown_conversion",
+  convertToDefaultUnit(NaN, "mmol/L", { code: "1558-6", defaultUnit: "mmol/L" }).ok,
+  false,
+);
+eq("computeFlag(NaN) → no flag", computeFlag(NaN, { refLow: 1, refHigh: 10 }).flag, null);
+
+// 3c. JSON salvage from imperfect model output
+eq("extractJson trailing comma", extractJson('[{"a":1},]'), [{ a: 1 }]);
+eq("extractJson fenced + prose", extractJson('Here:\n```json\n{"a":1}\n```'), { a: 1 });
 
 // 4. Unit-aware differential routing — %/absolute must not collide
 type Bio = Parameters<typeof mapExtractions>[1][number];

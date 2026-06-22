@@ -1,29 +1,38 @@
 import * as React from "react";
-import { ArrowLeft, ArrowRight, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, RotateCcw, ShieldCheck, Sparkles } from "lucide-react";
 import { completeOnboarding } from "@/db/repos";
 import { useI18n } from "@/lib/i18n";
+import { SECTION_GROUPS, saveInterests, type SectionGroup } from "@/lib/interests";
 import {
   CoreFields,
   OptionalFields,
   draftToUpdate,
   useProfileDraft,
 } from "@/components/app/ProfileFields";
+import { SectionToggles } from "@/components/app/SectionToggles";
+import { RestoreDialog } from "@/components/app/BackupCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import logo from "@/assets/logo.svg";
 
-type StepId = "welcome" | "core" | "optional" | "done";
-const ORDER: StepId[] = ["welcome", "core", "optional", "done"];
+type StepId = "welcome" | "core" | "interests" | "optional" | "done";
+const ORDER: StepId[] = ["welcome", "core", "interests", "optional", "done"];
 
 /**
  * First-run onboarding wizard. Collects the profile data needed for
- * sex/age-aware biomarker reference ranges before the dashboard is shown.
- * Optional steps can be skipped. On finish it stamps `onboardedAt`.
+ * sex/age-aware biomarker reference ranges, then lets the user pick which
+ * sections matter to them. Optional steps can be skipped. On finish it stamps
+ * `onboardedAt` and persists the section selection.
+ *
+ * Rendered above the router (see AppContext), so it cannot navigate — the
+ * "enable AI" nudge lives on the dashboard's getting-started checklist instead.
  */
 export function Onboarding({ profileId, onDone }: { profileId: number; onDone: () => void }) {
   const { t, lang, setLang } = useI18n();
   const { draft, patch } = useProfileDraft();
   const [step, setStep] = React.useState<StepId>("welcome");
+  const [groups, setGroups] = React.useState<Set<SectionGroup>>(() => new Set(SECTION_GROUPS));
+  const [restoreOpen, setRestoreOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -36,10 +45,19 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
     setStep(id);
   };
 
+  const toggleGroup = (g: SectionGroup) =>
+    setGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
+      return next;
+    });
+
   const finish = async () => {
     setSaving(true);
     setError(null);
     try {
+      saveInterests(groups);
       await completeOnboarding(profileId, draftToUpdate(draft));
       onDone();
     } catch (e) {
@@ -47,6 +65,17 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
       setError(e instanceof Error ? e.message : String(e));
       setSaving(false);
     }
+  };
+
+  // Enter submits the current step (when valid) — the primary buttons are submit.
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (step === "welcome") go("core");
+    else if (step === "core") {
+      if (coreValid) go("interests");
+    } else if (step === "interests") go("optional");
+    else if (step === "optional") go("done");
+    else void finish();
   };
 
   return (
@@ -65,6 +94,20 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
         <div className="mb-6 flex items-center justify-center gap-2.5">
           <img src={logo} alt="" className="size-9" />
           <span className="text-lg font-semibold tracking-tight">Soma</span>
+          {/* Language toggle stays reachable on every step, not just welcome. */}
+          <div className="ml-3 flex rounded-lg border p-0.5" aria-label={t("onboarding.language")}>
+            {(["en", "ru"] as const).map((l) => (
+              <Button
+                key={l}
+                size="sm"
+                variant={lang === l ? "secondary" : "ghost"}
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setLang(l)}
+              >
+                {l.toUpperCase()}
+              </Button>
+            ))}
+          </div>
         </div>
 
         <div className="mb-5 flex items-center justify-center gap-1.5">
@@ -86,29 +129,11 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
         )}
 
         {/* key={step} re-mounts the card so each step slides in */}
-        <div key={step} className="animate-step-in">
+        <form key={step} onSubmit={onSubmit} className="animate-step-in">
           {step === "welcome" && (
             <Card>
               <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <CardTitle className="text-lg">{t("onboarding.welcomeTitle")}</CardTitle>
-                  <div
-                    className="flex shrink-0 rounded-lg border p-0.5"
-                    aria-label={t("onboarding.language")}
-                  >
-                    {(["en", "ru"] as const).map((l) => (
-                      <Button
-                        key={l}
-                        size="sm"
-                        variant={lang === l ? "secondary" : "ghost"}
-                        className="h-7 px-2.5 text-xs"
-                        onClick={() => setLang(l)}
-                      >
-                        {l.toUpperCase()}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+                <CardTitle className="text-lg">{t("onboarding.welcomeTitle")}</CardTitle>
                 <CardDescription className="text-sm">
                   {t("onboarding.welcomeDescription")}
                 </CardDescription>
@@ -118,8 +143,14 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                   <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
                   {t("onboarding.privacyNote")}
                 </p>
-                <div className="flex justify-end">
-                  <Button onClick={() => go("core")}>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("onboarding.disclaimer")}
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <Button type="button" variant="ghost" onClick={() => setRestoreOpen(true)}>
+                    <RotateCcw /> {t("onboarding.restore")}
+                  </Button>
+                  <Button type="submit">
                     {t("onboarding.getStarted")} <ArrowRight />
                   </Button>
                 </div>
@@ -138,10 +169,33 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
               <CardContent className="space-y-5">
                 <CoreFields draft={draft} patch={patch} />
                 <div className="flex items-center justify-between">
-                  <Button variant="ghost" onClick={() => go("welcome")}>
+                  <Button type="button" variant="ghost" onClick={() => go("welcome")}>
                     <ArrowLeft /> {t("common.back")}
                   </Button>
-                  <Button disabled={!coreValid} onClick={() => go("optional")}>
+                  <Button type="submit" disabled={!coreValid}>
+                    {t("common.continue")} <ArrowRight />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {step === "interests" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("onboarding.interestsTitle")}</CardTitle>
+                <CardDescription className="text-sm">
+                  {t("onboarding.interestsDescription")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <SectionToggles enabled={groups} onToggle={toggleGroup} />
+                <p className="text-xs text-muted-foreground">{t("onboarding.interestsHint")}</p>
+                <div className="flex items-center justify-between">
+                  <Button type="button" variant="ghost" onClick={() => go("core")}>
+                    <ArrowLeft /> {t("common.back")}
+                  </Button>
+                  <Button type="submit">
                     {t("common.continue")} <ArrowRight />
                   </Button>
                 </div>
@@ -160,17 +214,13 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
               <CardContent className="space-y-5">
                 <OptionalFields draft={draft} patch={patch} />
                 <div className="flex items-center justify-between">
-                  <Button variant="ghost" onClick={() => go("core")}>
+                  <Button type="button" variant="ghost" onClick={() => go("interests")}>
                     <ArrowLeft /> {t("common.back")}
                   </Button>
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => go("done")}>
-                      {t("common.skipForNow")}
-                    </Button>
-                    <Button onClick={() => go("done")}>
-                      {t("common.continue")} <ArrowRight />
-                    </Button>
-                  </div>
+                  {/* Fields are optional, so Continue doubles as Skip. */}
+                  <Button type="submit">
+                    {t("common.continue")} <ArrowRight />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -194,10 +244,15 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                   {t("onboarding.tip")}
                 </p>
                 <div className="flex items-center justify-between">
-                  <Button variant="ghost" onClick={() => go("optional")} disabled={saving}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => go("optional")}
+                    disabled={saving}
+                  >
                     <ArrowLeft /> {t("common.back")}
                   </Button>
-                  <Button onClick={finish} disabled={saving}>
+                  <Button type="submit" disabled={saving}>
                     {saving ? <Loader2 className="animate-spin" /> : null}
                     {t("onboarding.openDashboard")}
                   </Button>
@@ -205,8 +260,10 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
               </CardContent>
             </Card>
           )}
-        </div>
+        </form>
       </div>
+
+      {restoreOpen && <RestoreDialog onClose={() => setRestoreOpen(false)} />}
     </div>
   );
 }

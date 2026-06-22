@@ -85,7 +85,7 @@ export async function ensureActiveProfile(): Promise<number> {
       .where(eq(profile.id, Number(stored)));
     if (existing.length) return existing[0].id;
   }
-  const all = await db.select().from(profile).limit(1);
+  const all = await db.select().from(profile).orderBy(asc(profile.id)).limit(1);
   if (all.length) {
     localStorage.setItem(ACTIVE_PROFILE_KEY, String(all[0].id));
     return all[0].id;
@@ -106,10 +106,19 @@ export async function getProfile(id: number): Promise<Profile | null> {
 export type ProfileUpdate = Partial<Omit<NewProfile, "id" | "createdAt">>;
 
 export async function updateProfile(id: number, data: ProfileUpdate) {
-  await db.update(profile).set(data).where(eq(profile.id, id));
   // Sex/age drive demographic reference ranges → recompute stored flags so an
   // existing panel reflects the corrected range, not the one used at import.
-  if ("sex" in data || "birthDate" in data) {
+  // `draftToUpdate` always sends sex+birthDate, so a key-presence check would
+  // recompute on every profile save; compare against the stored row instead and
+  // recompute only on a real demographic change (the recompute is O(all results)).
+  const probeDemographics = "sex" in data || "birthDate" in data;
+  const before = probeDemographics ? await getProfile(id) : null;
+  await db.update(profile).set(data).where(eq(profile.id, id));
+  const demographicsChanged =
+    before != null &&
+    (("sex" in data && data.sex !== before.sex) ||
+      ("birthDate" in data && data.birthDate !== before.birthDate));
+  if (demographicsChanged) {
     await recomputeFlagsForProfile(id);
   }
 }

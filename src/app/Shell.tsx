@@ -1,5 +1,5 @@
 import * as React from "react";
-import { NavLink, Outlet, useLocation, useNavigationType } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigationType } from "react-router-dom";
 import {
   Activity,
   Bell,
@@ -14,6 +14,7 @@ import {
   ScanLine,
   Settings,
   ShieldAlert,
+  SlidersHorizontal,
   Sparkles,
   Stethoscope,
   Syringe,
@@ -24,6 +25,7 @@ import { useI18n } from "@/lib/i18n";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getNotificationFeedData } from "@/db/repos";
+import { INTERESTS_EVENT, isRouteEnabled, loadInterests } from "@/lib/interests";
 import { buildNotificationFeed, loadDismissedIds, visibleNotifications } from "@/lib/notifications";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/app/CommandPalette";
@@ -154,6 +156,47 @@ export function Shell() {
     }
   }, [location.key, navType]);
 
+  // Section interests filter the sidebar. Re-read on navigation and on the live
+  // INTERESTS_EVENT so a toggle on the Settings page updates the sidebar at once.
+  const [interestsTick, setInterestsTick] = React.useState(0);
+  React.useEffect(() => {
+    const onChange = () => setInterestsTick((n) => n + 1);
+    window.addEventListener(INTERESTS_EVENT, onChange);
+    return () => window.removeEventListener(INTERESTS_EVENT, onChange);
+  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- location.key/tick are intended re-run triggers
+  const enabled = React.useMemo(() => loadInterests(), [location.key, interestsTick]);
+  const [showAll, setShowAll] = React.useState(false);
+  const isVisible = React.useCallback(
+    (to: string) => showAll || isRouteEnabled(to, enabled),
+    [showAll, enabled],
+  );
+  const hiddenCount = NAV.reduce(
+    (n, item) => (item.kind === "link" && !isRouteEnabled(item.to, enabled) ? n + 1 : n),
+    0,
+  );
+  // Drop hidden links, and any section label left with no visible links under it.
+  const navItems = React.useMemo(() => {
+    const out: NavItem[] = [];
+    for (let i = 0; i < NAV.length; i++) {
+      const item = NAV[i];
+      if (item.kind === "label") {
+        let hasVisible = false;
+        for (let j = i + 1; j < NAV.length && NAV[j].kind !== "label"; j++) {
+          const next = NAV[j];
+          if (next.kind === "link" && isVisible(next.to)) {
+            hasVisible = true;
+            break;
+          }
+        }
+        if (hasVisible) out.push(item);
+      } else if (isVisible(item.to)) {
+        out.push(item);
+      }
+    }
+    return out;
+  }, [isVisible]);
+
   return (
     <div className="flex h-screen overflow-hidden">
       <aside className="flex w-14 shrink-0 flex-col border-r bg-card md:w-52">
@@ -175,7 +218,7 @@ export function Shell() {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-          {NAV.map((item) => {
+          {navItems.map((item) => {
             if (item.kind === "label") {
               return (
                 <span
@@ -207,6 +250,33 @@ export function Shell() {
               </NavLink>
             );
           })}
+          {hiddenCount > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAll((v) => !v)}
+                title={showAll ? t("nav.showFewer") : t("nav.showAll")}
+                className="mt-1 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <SlidersHorizontal className="size-4 shrink-0" />
+                <span className="hidden md:block">
+                  {showAll ? t("nav.showFewer") : `${t("nav.showAll")} (+${hiddenCount})`}
+                </span>
+              </button>
+              {/* When peeking at hidden sections, point to where the choice sticks. */}
+              {showAll && (
+                <Link
+                  to="/settings"
+                  state={{ openSections: true }}
+                  title={t("nav.manageSections")}
+                  className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Settings className="size-4 shrink-0" />
+                  <span className="hidden md:block">{t("nav.manageSections")}</span>
+                </Link>
+              )}
+            </>
+          )}
         </nav>
         <div className="flex flex-col gap-0.5 border-t p-2">
           <NavLink

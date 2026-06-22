@@ -455,7 +455,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
 
 // ── restore ─────────────────────────────────────────────────────────────────
 
-function RestoreDialog({ onClose }: { onClose: () => void }) {
+export function RestoreDialog({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
   const [filePath, setFilePath] = React.useState("");
   const [pass, setPass] = React.useState("");

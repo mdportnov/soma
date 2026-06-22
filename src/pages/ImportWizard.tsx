@@ -94,7 +94,7 @@ export function ImportWizard() {
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {t("importWizard.aiDisabledDescription")}
             </p>
-            <Link to="/settings" className="mt-4">
+            <Link to="/settings" state={{ openAi: true }} className="mt-4">
               <Button>
                 <SettingsIcon /> {t("importWizard.openSettings")}
               </Button>
@@ -234,7 +234,7 @@ export function ImportWizard() {
             </p>
             <p className="mt-0.5 text-xs opacity-90">{error.message}</p>
             {error.affordance === "settings" && (
-              <Link to="/settings" className="mt-2 inline-block">
+              <Link to="/settings" state={{ openAi: true }} className="mt-2 inline-block">
                 <Button size="sm" variant="outline">
                   <SettingsIcon /> {t("importErrors.authAction")}
                 </Button>

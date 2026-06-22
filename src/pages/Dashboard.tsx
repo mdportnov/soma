@@ -8,6 +8,7 @@ import {
   HeartPulse,
   Pill,
   ShieldAlert,
+  Sparkles,
   Stethoscope,
   Syringe,
   TestTubes,
@@ -34,9 +35,11 @@ import {
   isGradedTier,
   VACCINE_SCHEDULE,
 } from "@/lib/vaccine-schedule";
+import { getConfiguredProvider } from "@/ai";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
+import { GettingStarted } from "@/components/app/GettingStarted";
 import { NotableChanges } from "@/components/app/NotableChanges";
 import { HealthVerdict } from "@/components/app/HealthVerdict";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,6 +70,7 @@ export function Dashboard() {
       timeline,
       latestChanges,
       reviewCount,
+      aiProvider,
     ] = await Promise.all([
       listPanels(profileId),
       listMedications(profileId),
@@ -77,6 +81,7 @@ export function Dashboard() {
       getTimeline(profileId),
       getLatestPanelChanges(profileId),
       countPanelsNeedingReview(profileId),
+      getConfiguredProvider(),
     ]);
     return {
       panels,
@@ -88,6 +93,7 @@ export function Dashboard() {
       timeline,
       latestChanges,
       reviewCount,
+      aiConfigured: !!aiProvider,
     };
   }, [profileId]);
 
@@ -103,10 +109,12 @@ export function Dashboard() {
     timeline,
     latestChanges,
     reviewCount,
+    aiConfigured,
   } = data;
   const latestPanel = panels[0] ?? null;
   const activeMeds = meds.filter((m) => !m.endDate);
   const recent = timeline.slice(0, 8);
+  const isEmpty = timeline.length === 0;
   const hasComparable = !!latestChanges?.changes.some((c) => c.change != null);
 
   const today = todayISO();
@@ -218,7 +226,17 @@ export function Dashboard() {
         </Link>
       )}
 
-      <HealthVerdict status={digest.status} message={verdictMessage} className="mb-6" />
+      <GettingStarted
+        hasLabs={panels.length > 0}
+        hasMeds={meds.length > 0}
+        aiEnabled={aiConfigured}
+      />
+
+      {/* On a brand-new (empty) account the checklist is the hero — a green
+          "all calm" verdict there is hollow, so show it only once data exists. */}
+      {!isEmpty && (
+        <HealthVerdict status={digest.status} message={verdictMessage} className="mb-6" />
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -332,9 +350,18 @@ export function Dashboard() {
               title={t("dashboard.noRecordsTitle")}
               description={t("dashboard.recentActivity.description")}
               action={
-                <Link to="/labs/new">
-                  <Button size="sm">{t("dashboard.addLabResults")}</Button>
-                </Link>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Link to="/labs/import">
+                    <Button size="sm">
+                      <Sparkles /> {t("dashboard.importLab")}
+                    </Button>
+                  </Link>
+                  <Link to="/labs/new">
+                    <Button size="sm" variant="outline">
+                      {t("dashboard.addLabResults")}
+                    </Button>
+                  </Link>
+                </div>
               }
             />
           ) : (

@@ -54,7 +54,7 @@ export function AiAnalysis() {
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {t("aiAnalysis.stubDescription")}
             </p>
-            <Link to="/settings" className="mt-4">
+            <Link to="/settings" state={{ openAi: true }} className="mt-4">
               <Button>
                 <SettingsIcon /> {t("aiAnalysis.openSettings")}
               </Button>

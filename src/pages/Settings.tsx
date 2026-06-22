@@ -11,15 +11,19 @@ import {
   Lightbulb,
   Loader2,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   SquareArrowOutUpRight,
   Trash2,
   XCircle,
 } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { getProfile, updateProfile } from "@/db/repos";
+import { loadInterests, saveInterests, type SectionGroup } from "@/lib/interests";
 import {
   buildProvider,
   effectiveModelId,
@@ -39,6 +43,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
 import { EncryptionCard } from "@/components/app/EncryptionCard";
 import { McpCard } from "@/components/app/McpCard";
+import { SectionToggles } from "@/components/app/SectionToggles";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import {
@@ -59,15 +64,19 @@ import { exportAllJson, exportLabsCsv } from "@/lib/export";
 
 export function Settings() {
   const { t } = useI18n();
+  // GettingStarted's "enable AI" deep-links here with state to open the AI card.
+  const location = useLocation();
+  const openAi = (location.state as { openAi?: boolean } | null)?.openAi === true;
 
   return (
     <>
       <PageHeader title={t("settings.title")} description={t("settings.description")} />
       <div className="space-y-4">
         <AppearanceCard />
+        <SectionsCard />
         <ProfileCard />
         <EmergencyContactCard />
-        <AiSettingsCard />
+        <AiSettingsCard defaultOpen={openAi} />
         <McpCard />
         <BackupCard />
         <EncryptionCard />
@@ -149,9 +158,56 @@ function AppearanceCard() {
   );
 }
 
+// ── sidebar sections ─────────────────────────────────────────────────────────
+
+function SectionsCard() {
+  const { t } = useI18n();
+  const location = useLocation();
+  const [groups, setGroups] = React.useState<Set<SectionGroup>>(() => loadInterests());
+  // Deep-linked from the sidebar's "Manage sections": scroll to and briefly
+  // highlight this card so the user lands exactly on the control they wanted.
+  const [glow, setGlow] = React.useState(false);
+  React.useEffect(() => {
+    if ((location.state as { openSections?: boolean } | null)?.openSections !== true) return;
+    document
+      .getElementById("settings-sections")
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setGlow(true);
+    const timer = setTimeout(() => setGlow(false), 2000);
+    return () => clearTimeout(timer);
+  }, [location.state]);
+
+  const toggle = (g: SectionGroup) =>
+    setGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
+      saveInterests(next);
+      return next;
+    });
+
+  return (
+    <Card
+      id="settings-sections"
+      className={cn("transition-shadow", glow && "ring-2 ring-primary/40")}
+    >
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="size-4 text-muted-foreground" />
+          <CardTitle>{t("settings.sections.title")}</CardTitle>
+        </div>
+        <CardDescription>{t("settings.sections.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <SectionToggles enabled={groups} onToggle={toggle} />
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── AI provider / model / key ──────────────────────────────────────────────
 
-function AiSettingsCard() {
+function AiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const { t } = useI18n();
   const toast = useToast();
   const {
@@ -234,7 +290,7 @@ function AiSettingsCard() {
     <Collapsible
       title={t("settings.ai.title")}
       description={t("settings.ai.description")}
-      defaultOpen={false}
+      defaultOpen={defaultOpen}
       icon={<Sparkles className="size-4" />}
     >
       <div className="grid gap-4 p-5 pt-0">

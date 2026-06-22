@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, Info, LineChart, Pencil } from "lucide-react";
+import { AlertTriangle, Info, Lightbulb, LineChart, Pencil } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getBiomarker, getBiomarkerSeries, listMedications, listSymptomLog } from "@/db/repos";
@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
+import { HintCard } from "@/components/app/HintCard";
 import { FlagBadge } from "@/components/app/FlagBadge";
 import { DeltaBadge } from "@/components/app/DeltaBadge";
 import { AiInterpretation } from "@/components/app/AiInterpretation";
@@ -166,6 +167,16 @@ export function BiomarkerDetail() {
         />
       ) : (
         <>
+          {meds.length > 0 && (
+            <HintCard
+              id="biomarker-overlay"
+              icon={Lightbulb}
+              title={t("hints.overlayTitle")}
+              className="mb-4"
+            >
+              {t("hints.overlayBody")}
+            </HintCard>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>{t("biomarkerDetail.trendTitle")}</CardTitle>

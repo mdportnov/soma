@@ -20,6 +20,9 @@ export const en = {
     records: "Records",
     labsVitals: "Labs & Vitals",
     care: "Care",
+    showAll: "Show all sections",
+    showFewer: "Show fewer",
+    manageSections: "Manage sections",
   },
 
   // AI analysis (v0.3)
@@ -80,6 +83,7 @@ export const en = {
     back: "Back",
     continue: "Continue",
     skipForNow: "Skip for now",
+    dismiss: "Dismiss",
     export: "Export",
     import: "Import",
     remove: "Remove",
@@ -166,6 +170,10 @@ export const en = {
 
   // Settings
   settings: {
+    sections: {
+      title: "Sidebar sections",
+      description: "Choose which areas appear in the sidebar.",
+    },
     appearance: {
       title: "Appearance",
       description: "Language and theme.",
@@ -362,14 +370,14 @@ export const en = {
   onboarding: {
     welcomeTitle: "Welcome to Soma",
     welcomeDescription:
-      "Your health record, on your terms — labs, medications and visits in one private timeline. A minute of setup lets Soma read your results against the reference ranges that actually apply to you.",
+      "Your health record, on your terms — labs, medications and visits in one private timeline. A minute of setup lets Soma read your results against what's actually normal for someone like you.",
     privacyNote: "Everything you enter stays on this device — no account, no cloud, no tracking.",
     getStarted: "Get started",
     language: "Language",
 
     aboutYouTitle: "About you",
     aboutYouDescription:
-      "Sex and age decide which reference ranges apply to your biomarkers — that's why these few are required.",
+      "Soma uses your sex and age to know which results count as normal for you — that's the only reason these few are required.",
 
     fineTuningTitle: "Fine-tuning",
     fineTuningDescription:
@@ -381,6 +389,38 @@ export const en = {
       "Your profile is saved locally. Import a lab report, log what you take, and Soma starts connecting the dots.",
     tip: "Tip: overlay any medication on a biomarker chart to see whether what you take actually moves the numbers.",
     openDashboard: "Open dashboard",
+    disclaimer:
+      "Soma organizes your records — it isn't a medical device and gives no medical advice.",
+    restore: "I already have a backup",
+    interestsTitle: "What do you want to track?",
+    interestsDescription:
+      "Pick the areas you care about. The rest stay out of the sidebar — turn them back on anytime in Settings.",
+    interestsHint: "Labs, biomarkers and your timeline are always on.",
+    groups: {
+      meds: { label: "Medications & supplements", desc: "Doses, schedules, intake periods" },
+      conditions: { label: "Visits & diagnoses", desc: "Doctor visits, diagnoses, prescriptions" },
+      allergies: { label: "Allergies & emergency", desc: "Allergy records and emergency card" },
+      vaccines: { label: "Vaccines", desc: "Records, series and travel guidance" },
+      imaging: { label: "Imaging", desc: "X-ray, CT, MRI, ultrasound reports" },
+      vitals: { label: "Journal & lifestyle", desc: "Weight, blood pressure, sleep, stress" },
+      ai: { label: "AI assistant & import", desc: "Chat and photo/PDF import" },
+    },
+  },
+
+  gettingStarted: {
+    title: "Get started",
+    description: "A few steps to make Soma useful.",
+    importLab: "Import or add your first lab report",
+    addMed: "Add a medication or supplement",
+    enableAi: "Turn on AI import & assistant (optional)",
+    cta: "Open",
+    skip: "Skip setup",
+  },
+
+  hints: {
+    overlayTitle: "Tip: overlay medications on the chart",
+    overlayBody:
+      "Toggle any medication below to see its intake period as a band over the trend — spot whether what you take actually moves the marker.",
   },
 
   // Page headers (will be used by PageHeader component)
@@ -1224,6 +1264,7 @@ export const en = {
     recentActivityTitle: "Recent activity",
     fullTimeline: "Full timeline",
     addLabResults: "Add lab results",
+    importLab: "Import lab report",
     stats: {
       labPanels: "Lab panels",
       outOfRangeLatest: "Out of range (latest panel)",

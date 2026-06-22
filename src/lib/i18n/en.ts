@@ -110,12 +110,19 @@ export const en = {
   },
 
   // Common field labels
+  poweredBy: {
+    prefix: "Powered by",
+  },
+
   fields: {
     date: "Date",
     name: "Name",
     city: "City",
     country: "Country",
     type: "Type",
+    sampleTypes: "Sample types",
+    cost: "Cost",
+    costHint: "What you paid for the whole check-up (USD).",
     notes: "Notes",
     unit: "Unit",
     value: "Value",
@@ -137,6 +144,7 @@ export const en = {
   types: {
     blood: "Blood",
     urine: "Urine",
+    stool: "Stool",
     other: "Other",
     supplement: "Supplement",
     drug: "Drug",
@@ -1120,6 +1128,11 @@ export const en = {
     reviewExtractedResults: "Review extracted results",
     matchColumn: "Match",
     panelDetailsTitle: "Panel details",
+    duplicateBadge: "duplicate",
+    duplicateGroupHint:
+      "Two rows mapped to the same biomarker. The best match is kept by default — pick another if needed.",
+    duplicatesUnresolved:
+      "{{count}} biomarker(s) still have duplicate rows selected — keep only one each.",
     aiDisabledTitle: "AI analysis is disabled",
     aiDisabledDescription:
       "To import lab reports from PDF or photos, enable AI analysis and paste your API key in Settings. Your documents are sent only to the provider you choose, only when you run an import.",

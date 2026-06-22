@@ -182,6 +182,10 @@ export const attachment = sqliteTable("attachment", {
 });
 
 // ── lab_panel (one lab-draw event) ─────────────────────────────────────────
+/** Specimen kinds a lab panel can cover. A check-up commonly mixes several. */
+export const SAMPLE_TYPES = ["blood", "urine", "stool", "other"] as const;
+export type SampleType = (typeof SAMPLE_TYPES)[number];
+
 export const labPanel = sqliteTable(
   "lab_panel",
   {
@@ -193,9 +197,14 @@ export const labPanel = sqliteTable(
     labName: text("lab_name"),
     city: text("city"),
     country: text("country"),
-    panelType: text("panel_type", { enum: ["blood", "urine", "other"] })
+    /** Specimen kinds collected in this panel — a single check-up routinely draws
+     *  several (blood + urine + stool). Stored as a JSON set; defaults to blood. */
+    sampleTypes: text("sample_types", { mode: "json" })
+      .$type<SampleType[]>()
       .notNull()
-      .default("blood"),
+      .default(["blood"]),
+    /** What the user paid for the whole panel/check-up, in USD. null = not entered. */
+    cost: real("cost"),
     /** Optional HH:MM draw time — diurnal markers (cortisol, testosterone, iron). */
     collectionTime: text("collection_time"),
     /** Fasting state at draw; null = unknown. Drives glucose/lipid interpretation. */

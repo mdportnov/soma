@@ -21,10 +21,29 @@ export class GeminiProvider extends BaseProvider {
       },
     );
 
-    const text = (data.candidates?.[0]?.content?.parts ?? [])
-      .map((p: any) => p.text ?? "")
-      .join("");
-    if (!text) throw new AIProviderError("Empty response from Gemini", undefined, "bad_response");
+    const candidate = data.candidates?.[0];
+    const text = (candidate?.content?.parts ?? []).map((p: any) => p.text ?? "").join("");
+    if (!text) {
+      const reason = candidate?.finishReason;
+      const blocked = candidate?.finishReason === "SAFETY" || data.promptFeedback?.blockReason;
+      if (reason === "MAX_TOKENS") {
+        // Thinking models spend the output budget on reasoning first; a too-low
+        // cap leaves no room for the actual answer. Not a key/auth problem.
+        throw new AIProviderError(
+          "Gemini ran out of output tokens before answering (reasoning used the whole budget). Try again or raise the token limit — your key is fine.",
+          undefined,
+          "bad_response",
+        );
+      }
+      if (blocked) {
+        throw new AIProviderError(
+          "Gemini blocked this response on content-safety grounds.",
+          undefined,
+          "bad_response",
+        );
+      }
+      throw new AIProviderError("Empty response from Gemini", undefined, "bad_response");
+    }
     return text;
   }
 }

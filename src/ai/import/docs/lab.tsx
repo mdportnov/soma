@@ -12,7 +12,8 @@
 
 import * as React from "react";
 import { AlertTriangle, Plus, TestTubes } from "lucide-react";
-import type { Biomarker } from "@/db/schema";
+import type { Biomarker, SampleType } from "@/db/schema";
+import { SAMPLE_TYPES } from "@/db/schema";
 import { EXTRACTION_PROMPT } from "../../prompts";
 import type { LabExtraction, RawExtraction } from "../../types";
 import {
@@ -39,7 +40,7 @@ import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { SelectMenu } from "@/components/ui/select-menu";
+import { ChipSelect } from "@/components/ui/chip-select";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,17 +58,87 @@ import { allKnownUnits } from "@/lib/units";
 import { rememberUnit, recallUnit } from "@/lib/unit-memory";
 import { useI18n } from "@/lib/i18n";
 
-type PanelType = "blood" | "urine" | "other";
-
 type ReviewRow = MappedRow & { include: boolean; key: number };
 
 export type LabDraft = {
   rows: ReviewRow[];
-  meta: { date: string; labName: string; city: string; country: string; panelType: PanelType };
+  meta: {
+    date: string;
+    labName: string;
+    city: string;
+    country: string;
+    /** A check-up can mix specimens (blood + urine + stool). */
+    sampleTypes: SampleType[];
+    /** Raw cost input (USD) kept as a string so the field can be empty/partial. */
+    cost: string;
+  };
   skipped: { label: string; rawValue: string }[];
   /** Collection date couldn't be read and we fell back to today — warn the user. */
   dateGuessed: boolean;
 };
+
+/** Parses the free-text cost field into a non-negative USD number, or null. */
+function parseCost(raw: string): number | null {
+  const n = Number.parseFloat(raw.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** Trust order for picking the survivor when rows collide on one biomarker. */
+const CONFIDENCE_RANK: Record<MappedRow["confidence"], number> = {
+  exact: 0,
+  translated: 1,
+  fuzzy: 2,
+  ai: 3,
+  none: 4,
+};
+
+/** The strongest row in a same-biomarker group: best confidence, then candidate
+ *  score, then a row whose unit actually converts cleanly. */
+function bestRowKey(group: ReviewRow[]): number {
+  return [...group].sort((a, b) => {
+    const rank = CONFIDENCE_RANK[a.confidence] - CONFIDENCE_RANK[b.confidence];
+    if (rank !== 0) return rank;
+    const score = (b.candidates[0]?.score ?? 0) - (a.candidates[0]?.score ?? 0);
+    if (score !== 0) return score;
+    return Number(b.conversion?.ok ?? false) - Number(a.conversion?.ok ?? false);
+  })[0].key;
+}
+
+/** Groups mapped rows by biomarker; only collisions (size > 1) are returned. */
+function duplicateGroups(rows: ReviewRow[]): Map<number, ReviewRow[]> {
+  const byBio = new Map<number, ReviewRow[]>();
+  for (const r of rows) {
+    if (r.biomarkerId == null) continue;
+    (byBio.get(r.biomarkerId) ?? byBio.set(r.biomarkerId, []).get(r.biomarkerId)!).push(r);
+  }
+  return new Map([...byBio].filter(([, g]) => g.length > 1));
+}
+
+/** Default the duplicate decision: keep only the strongest row of each colliding
+ *  group selected, so the user starts from a clean, save-ready state. */
+function autoResolveDuplicates(rows: ReviewRow[]): void {
+  for (const [, group] of duplicateGroups(rows)) {
+    const keep = bestRowKey(group);
+    for (const r of group) r.include = r.key === keep && r.biomarkerId != null;
+  }
+}
+
+/** Render order that clusters colliding rows adjacently at the group's first
+ *  appearance, leaving everything else in document order. */
+function clusterForDisplay(rows: ReviewRow[]): ReviewRow[] {
+  const firstIdx = new Map<number, number>();
+  rows.forEach((r, i) => {
+    if (r.biomarkerId != null && !firstIdx.has(r.biomarkerId)) firstIdx.set(r.biomarkerId, i);
+  });
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => {
+      const ka = a.r.biomarkerId != null ? firstIdx.get(a.r.biomarkerId)! : a.i;
+      const kb = b.r.biomarkerId != null ? firstIdx.get(b.r.biomarkerId)! : b.i;
+      return ka - kb || a.i - b.i;
+    })
+    .map((x) => x.r);
+}
 
 /** Hard cap on surfaced skipped rows — a runaway report shouldn't bloat state. */
 const MAX_SKIPPED_ROWS = 50;
@@ -159,8 +230,16 @@ export const labModule: DocTypeModule<LabDraft> = {
         }
       }
     }
+    const rows: ReviewRow[] = mapped.map((m, i) => ({
+      ...m,
+      include: m.biomarkerId != null,
+      key: i,
+    }));
+    // Start the user from a save-ready state: when several rows hit one biomarker,
+    // keep only the strongest selected instead of flagging an error to untangle.
+    autoResolveDuplicates(rows);
     return {
-      rows: mapped.map((m, i) => ({ ...m, include: m.biomarkerId != null, key: i })),
+      rows,
       meta: {
         // An old report imported today keeps its real collection date — essential
         // for the trend; fall back to today and flag it when illegible.
@@ -168,7 +247,8 @@ export const labModule: DocTypeModule<LabDraft> = {
         labName: extraction.labName ?? "",
         city: "",
         country: "",
-        panelType: "blood",
+        sampleTypes: ["blood"],
+        cost: "",
       },
       skipped: extraction.skipped ?? [],
       dateGuessed: extraction.collectionDate == null,
@@ -212,7 +292,8 @@ export const labModule: DocTypeModule<LabDraft> = {
         labName: draft.meta.labName.trim() || null,
         city: draft.meta.city.trim() || null,
         country: draft.meta.country.trim() || null,
-        panelType: draft.meta.panelType,
+        sampleTypes: draft.meta.sampleTypes.length ? draft.meta.sampleTypes : ["blood"],
+        cost: parseCost(draft.meta.cost),
         importMethod: "ai",
         sourceFileId,
       },
@@ -259,7 +340,17 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
   const { rows, meta, skipped, dateGuessed } = draft;
 
   const includedCount = rows.filter((r) => r.include && r.biomarkerId != null).length;
-  const duplicates = rows.filter((r) => r.include && r.duplicate).length;
+  // Clusters colliding rows together; flagged rows are styled as a group.
+  const orderedRows = React.useMemo(() => clusterForDisplay(rows), [rows]);
+  // Only groups where the user still has MORE THAN ONE row selected are a real
+  // problem — the auto-resolve leaves zero of these, so this is normally 0.
+  const unresolvedDups = React.useMemo(() => {
+    let n = 0;
+    for (const [, group] of duplicateGroups(rows)) {
+      if (group.filter((r) => r.include).length > 1) n++;
+    }
+    return n;
+  }, [rows]);
 
   const biomarkerOptions: ComboboxOption[] = React.useMemo(() => {
     const byCategory = new Map<string, Biomarker[]>();
@@ -345,10 +436,10 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((row) => {
+              {orderedRows.map((row) => {
                 const bio = row.biomarkerId != null ? index.byId.get(row.biomarkerId) : undefined;
                 return (
-                  <TableRow key={row.key}>
+                  <TableRow key={row.key} className={row.duplicate ? "bg-warning/5" : undefined}>
                     <TableCell>
                       <input
                         type="checkbox"
@@ -412,8 +503,13 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
                     <TableCell>
                       <div className="flex flex-col items-start gap-1">
                         <ConfidenceBadge confidence={row.confidence} />
-                        {row.duplicate && row.include && (
-                          <Badge variant="destructive">duplicate</Badge>
+                        {row.duplicate && (
+                          <Badge
+                            variant={row.include ? "warning" : "secondary"}
+                            title={t("importWizard.duplicateGroupHint")}
+                          >
+                            {t("importWizard.duplicateBadge")}
+                          </Badge>
                         )}
                       </div>
                     </TableCell>
@@ -481,28 +577,38 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
               onChange={(e) => setDraft({ ...draft, meta: { ...meta, country: e.target.value } })}
             />
           </Field>
-          <Field label={t("fields.type")}>
-            <SelectMenu
-              value={meta.panelType}
-              onChange={(v) => setDraft({ ...draft, meta: { ...meta, panelType: v as PanelType } })}
-              options={[
-                { value: "blood", label: t("types.blood") },
-                { value: "urine", label: t("types.urine") },
-                { value: "other", label: t("types.other") },
-              ]}
+          <Field label={t("fields.cost")} hint={t("fields.costHint")}>
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-sm text-muted-foreground">
+                $
+              </span>
+              <Input
+                inputMode="decimal"
+                placeholder="0.00"
+                className="pl-6"
+                value={meta.cost}
+                onChange={(e) => setDraft({ ...draft, meta: { ...meta, cost: e.target.value } })}
+              />
+            </div>
+          </Field>
+          <Field label={t("fields.sampleTypes")} className="sm:col-span-2 lg:col-span-5">
+            <ChipSelect<SampleType>
+              value={meta.sampleTypes}
+              onChange={(next) => setDraft({ ...draft, meta: { ...meta, sampleTypes: next } })}
+              options={SAMPLE_TYPES.map((s) => ({ value: s, label: t(`types.${s}`) }))}
             />
           </Field>
         </CardContent>
       </Card>
 
       <div className="mt-5 flex items-center justify-end gap-3">
-        {duplicates > 0 && (
+        {unresolvedDups > 0 && (
           <p className="flex items-center gap-1.5 text-xs text-destructive">
-            <AlertTriangle className="size-3.5" /> {duplicates} duplicate mapping
-            {duplicates > 1 ? "s" : ""} selected
+            <AlertTriangle className="size-3.5" />
+            {t("importWizard.duplicatesUnresolved", { count: String(unresolvedDups) })}
           </p>
         )}
-        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date || duplicates > 0}>
+        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date || unresolvedDups > 0}>
           Confirm & save {includedCount} result{includedCount === 1 ? "" : "s"}
         </Button>
       </div>

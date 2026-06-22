@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1781892311693,
-      "tag": "0000_massive_kylun",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1782081913287,
-      "tag": "0001_bouncy_archangel",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1782083276178,
-      "tag": "0002_nifty_vapor",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1782091981954,
-      "tag": "0003_sudden_jackal",
+      "when": 1782102862682,
+      "tag": "0000_abandoned_scream",
       "breakpoints": true
     }
   ]

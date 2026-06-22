@@ -221,9 +221,19 @@ async function main() {
     }
 
     db.prepare(
-      `INSERT INTO lab_panel (profile_id, date, lab_name, city, country, panel_type, fasting, source_file_id, import_method, created_at)
-       VALUES (?, ?, ?, ?, ?, 'blood', 1, ?, ?, ?)`,
-    ).run(profileId, date, lab, city, country, sourceFileId, isAi ? "ai" : "manual", nowISO());
+      `INSERT INTO lab_panel (profile_id, date, lab_name, city, country, sample_types, cost, fasting, source_file_id, import_method, created_at)
+       VALUES (?, ?, ?, ?, ?, '["blood"]', ?, 1, ?, ?, ?)`,
+    ).run(
+      profileId,
+      date,
+      lab,
+      city,
+      country,
+      Math.round(rand(40, 320)),
+      sourceFileId,
+      isAi ? "ai" : "manual",
+      nowISO(),
+    );
     const panelId = Number(
       (db.prepare("SELECT last_insert_rowid() AS id").get() as { id: number }).id,
     );

@@ -13,6 +13,8 @@ import { SectionToggles } from "@/components/app/SectionToggles";
 import { RestoreDialog } from "@/components/app/BackupCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AutoHeight } from "@/components/ui/auto-height";
+import { PoweredBy } from "@/components/app/PoweredBy";
 import logo from "@/assets/logo.svg";
 
 type StepId = "welcome" | "core" | "interests" | "optional" | "done";
@@ -90,24 +92,28 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
         }}
       />
 
+      {/* Language is a setting, not part of the centered flow — pin it to the corner. */}
+      <div
+        className="absolute right-6 top-6 z-10 flex rounded-lg border bg-card/60 p-0.5 backdrop-blur"
+        aria-label={t("onboarding.language")}
+      >
+        {(["en", "ru"] as const).map((l) => (
+          <Button
+            key={l}
+            size="sm"
+            variant={lang === l ? "secondary" : "ghost"}
+            className="h-7 px-2.5 text-xs"
+            onClick={() => setLang(l)}
+          >
+            {l.toUpperCase()}
+          </Button>
+        ))}
+      </div>
+
       <div className="animate-rise-in relative w-full max-w-xl">
         <div className="mb-6 flex items-center justify-center gap-2.5">
           <img src={logo} alt="" className="size-9" />
           <span className="text-lg font-semibold tracking-tight">Soma</span>
-          {/* Language toggle stays reachable on every step, not just welcome. */}
-          <div className="ml-3 flex rounded-lg border p-0.5" aria-label={t("onboarding.language")}>
-            {(["en", "ru"] as const).map((l) => (
-              <Button
-                key={l}
-                size="sm"
-                variant={lang === l ? "secondary" : "ghost"}
-                className="h-7 px-2.5 text-xs"
-                onClick={() => setLang(l)}
-              >
-                {l.toUpperCase()}
-              </Button>
-            ))}
-          </div>
         </div>
 
         <div className="mb-5 flex items-center justify-center gap-1.5">
@@ -128,140 +134,167 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
           </div>
         )}
 
-        {/* key={step} re-mounts the card so each step slides in */}
-        <form key={step} onSubmit={onSubmit} className="animate-step-in">
-          {step === "welcome" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">{t("onboarding.welcomeTitle")}</CardTitle>
-                <CardDescription className="text-sm">
-                  {t("onboarding.welcomeDescription")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
-                  {t("onboarding.privacyNote")}
-                </p>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t("onboarding.disclaimer")}
-                </p>
-                <div className="flex items-center justify-between gap-2">
-                  <Button type="button" variant="ghost" onClick={() => setRestoreOpen(true)}>
-                    <RotateCcw /> {t("onboarding.restore")}
-                  </Button>
-                  <Button type="submit">
-                    {t("onboarding.getStarted")} <ArrowRight />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+        {/* AutoHeight eases the card between sizes; key={step} re-mounts so each
+            step slides in, and a language change reflows the copy smoothly too. */}
+        <AutoHeight>
+          <form key={step} onSubmit={onSubmit} className="animate-step-in">
+            {step === "welcome" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">{t("onboarding.welcomeTitle")}</CardTitle>
+                  <CardDescription className="text-sm">
+                    {t("onboarding.welcomeDescription")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
+                    {t("onboarding.privacyNote")}
+                  </p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {t("onboarding.disclaimer")}
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-muted-foreground"
+                      onClick={() => setRestoreOpen(true)}
+                    >
+                      <RotateCcw /> {t("onboarding.restore")}
+                    </Button>
+                    <Button type="submit">
+                      {t("onboarding.getStarted")} <ArrowRight />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-          {step === "core" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("onboarding.aboutYouTitle")}</CardTitle>
-                <CardDescription className="text-sm">
-                  {t("onboarding.aboutYouDescription")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <CoreFields draft={draft} patch={patch} />
-                <div className="flex items-center justify-between">
-                  <Button type="button" variant="ghost" onClick={() => go("welcome")}>
-                    <ArrowLeft /> {t("common.back")}
-                  </Button>
-                  <Button type="submit" disabled={!coreValid}>
-                    {t("common.continue")} <ArrowRight />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            {step === "core" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("onboarding.aboutYouTitle")}</CardTitle>
+                  <CardDescription className="text-sm">
+                    {t("onboarding.aboutYouDescription")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <CoreFields draft={draft} patch={patch} />
+                  <div className="flex items-center justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-muted-foreground"
+                      onClick={() => go("welcome")}
+                    >
+                      <ArrowLeft /> {t("common.back")}
+                    </Button>
+                    <Button type="submit" disabled={!coreValid}>
+                      {t("common.continue")} <ArrowRight />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-          {step === "interests" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("onboarding.interestsTitle")}</CardTitle>
-                <CardDescription className="text-sm">
-                  {t("onboarding.interestsDescription")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <SectionToggles enabled={groups} onToggle={toggleGroup} />
-                <p className="text-xs text-muted-foreground">{t("onboarding.interestsHint")}</p>
-                <div className="flex items-center justify-between">
-                  <Button type="button" variant="ghost" onClick={() => go("core")}>
-                    <ArrowLeft /> {t("common.back")}
-                  </Button>
-                  <Button type="submit">
-                    {t("common.continue")} <ArrowRight />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            {step === "interests" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("onboarding.interestsTitle")}</CardTitle>
+                  <CardDescription className="text-sm">
+                    {t("onboarding.interestsDescription")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <SectionToggles enabled={groups} onToggle={toggleGroup} />
+                  <p className="text-xs text-muted-foreground">{t("onboarding.interestsHint")}</p>
+                  <div className="flex items-center justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-muted-foreground"
+                      onClick={() => go("core")}
+                    >
+                      <ArrowLeft /> {t("common.back")}
+                    </Button>
+                    <Button type="submit">
+                      {t("common.continue")} <ArrowRight />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-          {step === "optional" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("onboarding.fineTuningTitle")}</CardTitle>
-                <CardDescription className="text-sm">
-                  {t("onboarding.fineTuningDescription")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <OptionalFields draft={draft} patch={patch} />
-                <div className="flex items-center justify-between">
-                  <Button type="button" variant="ghost" onClick={() => go("interests")}>
-                    <ArrowLeft /> {t("common.back")}
-                  </Button>
-                  {/* Fields are optional, so Continue doubles as Skip. */}
-                  <Button type="submit">
-                    {t("common.continue")} <ArrowRight />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            {step === "optional" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("onboarding.fineTuningTitle")}</CardTitle>
+                  <CardDescription className="text-sm">
+                    {t("onboarding.fineTuningDescription")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <OptionalFields draft={draft} patch={patch} />
+                  <div className="flex items-center justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-muted-foreground"
+                      onClick={() => go("interests")}
+                    >
+                      <ArrowLeft /> {t("common.back")}
+                    </Button>
+                    {/* Fields are optional, so Continue doubles as Skip. */}
+                    <Button type="submit">
+                      {t("common.continue")} <ArrowRight />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-          {step === "done" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  {firstName
-                    ? t("onboarding.allSetTitleWithName", { name: firstName })
-                    : t("onboarding.allSetTitle")}
-                </CardTitle>
-                <CardDescription className="text-sm">
-                  {t("onboarding.allSetDescription")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
-                  {t("onboarding.tip")}
-                </p>
-                <div className="flex items-center justify-between">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => go("optional")}
-                    disabled={saving}
-                  >
-                    <ArrowLeft /> {t("common.back")}
-                  </Button>
-                  <Button type="submit" disabled={saving}>
-                    {saving ? <Loader2 className="animate-spin" /> : null}
-                    {t("onboarding.openDashboard")}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </form>
+            {step === "done" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    {firstName
+                      ? t("onboarding.allSetTitleWithName", { name: firstName })
+                      : t("onboarding.allSetTitle")}
+                  </CardTitle>
+                  <CardDescription className="text-sm">
+                    {t("onboarding.allSetDescription")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
+                    {t("onboarding.tip")}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-muted-foreground"
+                      onClick={() => go("optional")}
+                      disabled={saving}
+                    >
+                      <ArrowLeft /> {t("common.back")}
+                    </Button>
+                    <Button type="submit" disabled={saving}>
+                      {saving ? <Loader2 className="animate-spin" /> : null}
+                      {t("onboarding.openDashboard")}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </form>
+        </AutoHeight>
       </div>
+
+      {/* Quiet brand signature, present on every step without pulling focus. */}
+      <PoweredBy className="absolute bottom-6 left-1/2 -translate-x-1/2" />
 
       {restoreOpen && <RestoreDialog onClose={() => setRestoreOpen(false)} />}
     </div>

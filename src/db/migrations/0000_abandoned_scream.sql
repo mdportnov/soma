@@ -36,7 +36,8 @@ CREATE TABLE `biomarker` (
 	`optimal_low` real,
 	`optimal_high` real,
 	`direction` text DEFAULT 'range' NOT NULL,
-	`is_custom` integer DEFAULT false NOT NULL
+	`is_custom` integer DEFAULT false NOT NULL,
+	`is_user_modified` integer DEFAULT false NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `biomarker_name_idx` ON `biomarker` (`canonical_name`);--> statement-breakpoint
@@ -112,7 +113,8 @@ CREATE TABLE `lab_panel` (
 	`lab_name` text,
 	`city` text,
 	`country` text,
-	`panel_type` text DEFAULT 'blood' NOT NULL,
+	`sample_types` text DEFAULT '["blood"]' NOT NULL,
+	`cost` real,
 	`collection_time` text,
 	`fasting` integer,
 	`menstrual_cycle_day` integer,
@@ -145,6 +147,25 @@ CREATE TABLE `lab_result` (
 --> statement-breakpoint
 CREATE INDEX `lab_result_panel_idx` ON `lab_result` (`panel_id`);--> statement-breakpoint
 CREATE INDEX `lab_result_biomarker_idx` ON `lab_result` (`biomarker_id`);--> statement-breakpoint
+CREATE TABLE `lifestyle_log` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`profile_id` integer NOT NULL,
+	`date` text NOT NULL,
+	`sleep_hours` real,
+	`sleep_quality` integer,
+	`training_minutes` integer,
+	`training_intensity` text,
+	`steps` integer,
+	`resting_heart_rate` integer,
+	`stress_level` integer,
+	`energy_level` integer,
+	`notes` text,
+	`source` text DEFAULT 'manual' NOT NULL,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')) NOT NULL,
+	FOREIGN KEY (`profile_id`) REFERENCES `profile`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `lifestyle_log_profile_date_uq` ON `lifestyle_log` (`profile_id`,`date`);--> statement-breakpoint
 CREATE TABLE `medication` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`profile_id` integer NOT NULL,
@@ -219,9 +240,25 @@ CREATE TABLE `profile` (
 	`code_status` text,
 	`organ_donor` integer,
 	`onboarded_at` text,
+	`ui_prefs` text,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')) NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE `retest_schedule` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`profile_id` integer NOT NULL,
+	`label` text NOT NULL,
+	`biomarker_id` integer,
+	`interval_months` integer NOT NULL,
+	`last_tested_date` text,
+	`notes` text,
+	`active` integer DEFAULT true NOT NULL,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')) NOT NULL,
+	FOREIGN KEY (`profile_id`) REFERENCES `profile`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`biomarker_id`) REFERENCES `biomarker`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `retest_schedule_profile_idx` ON `retest_schedule` (`profile_id`);--> statement-breakpoint
 CREATE TABLE `symptom_log` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`profile_id` integer NOT NULL,
@@ -279,14 +316,4 @@ CREATE TABLE `weight_log` (
 	FOREIGN KEY (`profile_id`) REFERENCES `profile`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE INDEX `weight_log_profile_date_idx` ON `weight_log` (`profile_id`,`date`);--> statement-breakpoint
-CREATE VIRTUAL TABLE IF NOT EXISTS fts_records USING fts5(
-  entity_type UNINDEXED,
-  entity_id UNINDEXED,
-  profile_id UNINDEXED,
-  title UNINDEXED,
-  subtitle UNINDEXED,
-  date UNINDEXED,
-  content,
-  tokenize='unicode61'
-);
+CREATE INDEX `weight_log_profile_date_idx` ON `weight_log` (`profile_id`,`date`);

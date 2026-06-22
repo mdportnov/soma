@@ -43,3 +43,8 @@ export function restoreHint(id: string): void {
 export function isHintDismissed(id: string): boolean {
   return loadDismissedHints().has(id);
 }
+
+/** Forget every dismissed hint so first-run coachmarks reappear. */
+export function clearDismissedHints(): void {
+  persist(new Set());
+}

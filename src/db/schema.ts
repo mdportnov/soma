@@ -11,6 +11,18 @@ import { sqliteTable, integer, text, real, index, uniqueIndex } from "drizzle-or
  * - JSON columns use `text` with `{ mode: "json" }` and a typed shape.
  */
 
+/**
+ * Identity-level UI personalization persisted on the profile so it travels with
+ * a backup. Stores the HIDDEN complements (so a card/section added in a future
+ * version is visible by default) plus explicit notification mutes. See
+ * `src/lib/personalization.ts` for how it mirrors localStorage.
+ */
+export type UiPrefs = {
+  sectionsHidden?: string[];
+  dashboardHidden?: string[];
+  notifications?: { medication?: boolean; retest?: boolean; retestUpcoming?: boolean };
+};
+
 // ── profile ────────────────────────────────────────────────────────────────
 // Single-user in MVP; multi-profile ready (family / sharing).
 export const profile = sqliteTable("profile", {
@@ -68,6 +80,15 @@ export const profile = sqliteTable("profile", {
   organDonor: integer("organ_donor", { mode: "boolean" }),
   /** Set when onboarding is completed; null = onboarding not done. */
   onboardedAt: text("onboarded_at"),
+  /**
+   * Durable copy of identity-level personalization (hidden sidebar sections,
+   * hidden dashboard cards, notification mutes). The live source of truth is
+   * still localStorage for synchronous reads, but mirroring it here lets the
+   * choices travel in a backup and survive a reinstall / new device. Hydrated
+   * once per device on boot; per-device chrome (theme, dismissed hints) stays
+   * out of here on purpose. Null until the user customizes anything.
+   */
+  uiPrefs: text("ui_prefs", { mode: "json" }).$type<UiPrefs>(),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),

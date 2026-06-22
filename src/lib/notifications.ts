@@ -150,10 +150,80 @@ export function restoreNotification(id: string): void {
   persistDismissed(ids);
 }
 
+/** Forget every dismissal so all current feed items resurface. */
+export function clearDismissedNotifications(): void {
+  persistDismissed(new Set());
+}
+
 /** Feed minus dismissed items — the list the bell badge and feed page render. */
 export function visibleNotifications(
   items: NotificationItem[],
   dismissed: Set<string>,
 ): NotificationItem[] {
   return items.filter((i) => !dismissed.has(i.id));
+}
+
+// ── per-category preferences (localStorage; applied by the UI) ───────────────
+
+/**
+ * Fine-grained mutes for the feed. A user who only cares about overdue re-tests
+ * can silence medication nudges and "due soon" reminders without losing the
+ * loud overdue ones. Per-device UI preference, deliberately outside backups.
+ *
+ * Every flag defaults to ON, and unknown/absent storage means "all on", so a new
+ * install (or a category added in a future version) surfaces by default.
+ */
+export type NotificationPrefs = {
+  /** Daily intake nudges for standing medications not yet logged. */
+  medication: boolean;
+  /** Re-test reminders from a `retest_schedule` cadence. */
+  retest: boolean;
+  /** Include re-tests that are merely due soon (not yet due / overdue). */
+  retestUpcoming: boolean;
+};
+
+const DEFAULT_PREFS: NotificationPrefs = {
+  medication: true,
+  retest: true,
+  retestUpcoming: true,
+};
+
+const PREFS_KEY = "soma.notifications.prefs";
+
+/** Fires after prefs change so the bell badge can re-read without navigation. */
+export const NOTIFICATION_PREFS_EVENT = "soma:notification-prefs";
+
+export function loadNotificationPrefs(): NotificationPrefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return { ...DEFAULT_PREFS };
+    return { ...DEFAULT_PREFS, ...(JSON.parse(raw) as Partial<NotificationPrefs>) };
+  } catch {
+    return { ...DEFAULT_PREFS };
+  }
+}
+
+export function saveNotificationPrefs(prefs: NotificationPrefs): void {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(NOTIFICATION_PREFS_EVENT));
+  } catch {
+    /* storage unavailable — selection just won't persist this session */
+  }
+}
+
+/** Drop feed items the user muted via {@link NotificationPrefs}. */
+export function filterByPrefs(
+  items: NotificationItem[],
+  prefs: NotificationPrefs,
+): NotificationItem[] {
+  return items.filter((i) => {
+    if (i.kind === "medication") return prefs.medication;
+    if (i.kind === "retest") {
+      if (!prefs.retest) return false;
+      // "Upcoming" = anchored but not yet due. Overdue/due-today always pass.
+      if (!prefs.retestUpcoming && !i.noAnchor && i.overdueDays < 0) return false;
+    }
+    return true;
+  });
 }

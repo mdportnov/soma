@@ -22,6 +22,13 @@
       "when": 1782083276178,
       "tag": "0002_nifty_vapor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1782091981954,
+      "tag": "0003_sudden_jackal",
+      "breakpoints": true
     }
   ]
 }

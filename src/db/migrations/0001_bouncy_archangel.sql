@@ -1,1 +1,0 @@
-ALTER TABLE `biomarker` ADD `is_user_modified` integer DEFAULT false NOT NULL;

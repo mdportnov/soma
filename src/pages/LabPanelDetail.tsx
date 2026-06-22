@@ -79,6 +79,7 @@ export function LabPanelDetail() {
           outOfRange
             ? `${outOfRange} ${t("labPanelDetail.outOfRange")}`
             : t("labPanelDetail.allInRange"),
+          panel.cost != null ? `$${panel.cost.toLocaleString()}` : null,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -89,7 +90,11 @@ export function LabPanelDetail() {
                 <Sparkles className="size-3" /> {t("labPanelDetail.aiImported")}
               </Badge>
             )}
-            <Badge variant="secondary">{t(`types.${panel.panelType}`)}</Badge>
+            {(panel.sampleTypes ?? []).map((s) => (
+              <Badge key={s} variant="secondary">
+                {t(`types.${s}`)}
+              </Badge>
+            ))}
             <SourceFileButton attachment={source} />
             <Button
               variant="outline"

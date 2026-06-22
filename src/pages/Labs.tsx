@@ -93,7 +93,13 @@ export function Labs() {
                     {[p.city, p.country].filter(Boolean).join(", ") || "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{t(`types.${p.panelType}`)}</Badge>
+                    <div className="flex flex-wrap gap-1">
+                      {(p.sampleTypes ?? []).map((s) => (
+                        <Badge key={s} variant="secondary">
+                          {t(`types.${s}`)}
+                        </Badge>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell className="tabular-nums">{p.resultCount}</TableCell>
                   <TableCell>

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { SelectMenu } from "@/components/ui/select-menu";
+import { ChipSelect } from "@/components/ui/chip-select";
 import { Combobox } from "@/components/ui/combobox";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,14 @@ import { todayISO } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 import { allKnownUnits, convertibleUnits, convertToDefaultUnit, normalizeUnit } from "@/lib/units";
-import type { Biomarker } from "@/db/schema";
+import type { Biomarker, SampleType } from "@/db/schema";
+import { SAMPLE_TYPES } from "@/db/schema";
+
+/** Parses a free-text USD cost field into a non-negative number, or null. */
+function parseCostUsd(raw: string): number | null {
+  const n = Number.parseFloat(raw.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
 
 type Row = { key: number; biomarkerId: number | ""; value: string; unit: string };
 
@@ -36,7 +44,8 @@ export function LabPanelNew() {
   const [labName, setLabName] = React.useState("");
   const [city, setCity] = React.useState("");
   const [country, setCountry] = React.useState("");
-  const [panelType, setPanelType] = React.useState<"blood" | "urine" | "other">("blood");
+  const [sampleTypes, setSampleTypes] = React.useState<SampleType[]>(["blood"]);
+  const [cost, setCost] = React.useState("");
   const [collectionTime, setCollectionTime] = React.useState("");
   const [fasting, setFasting] = React.useState("");
   const [cycleDay, setCycleDay] = React.useState("");
@@ -97,7 +106,8 @@ export function LabPanelNew() {
           labName: labName.trim() || null,
           city: city.trim() || null,
           country: country.trim() || null,
-          panelType,
+          sampleTypes: sampleTypes.length ? sampleTypes : ["blood"],
+          cost: parseCostUsd(cost),
           collectionTime: collectionTime.trim() || null,
           fasting: fasting === "" ? null : fasting === "yes",
           menstrualCycleDay: cycleDay.trim() ? Number(cycleDay) : null,
@@ -151,15 +161,25 @@ export function LabPanelNew() {
           <Field label={t("fields.country")}>
             <Input value={country} onChange={(e) => setCountry(e.target.value)} />
           </Field>
-          <Field label={t("fields.type")}>
-            <SelectMenu
-              value={panelType}
-              onChange={(v) => setPanelType(v as typeof panelType)}
-              options={[
-                { value: "blood", label: t("types.blood") },
-                { value: "urine", label: t("types.urine") },
-                { value: "other", label: t("types.other") },
-              ]}
+          <Field label={t("fields.cost")} hint={t("fields.costHint")}>
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-sm text-muted-foreground">
+                $
+              </span>
+              <Input
+                inputMode="decimal"
+                placeholder="0.00"
+                className="pl-6"
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+              />
+            </div>
+          </Field>
+          <Field label={t("fields.sampleTypes")} className="sm:col-span-2 lg:col-span-3">
+            <ChipSelect<SampleType>
+              value={sampleTypes}
+              onChange={setSampleTypes}
+              options={SAMPLE_TYPES.map((s) => ({ value: s, label: t(`types.${s}`) }))}
             />
           </Field>
           <Field label={t("labPanelNew.fields.collectionTime")}>

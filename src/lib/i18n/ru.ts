@@ -110,6 +110,10 @@ export const ru = {
     },
   },
 
+  poweredBy: {
+    prefix: "Powered by",
+  },
+
   // Common field labels
   fields: {
     date: "Дата",

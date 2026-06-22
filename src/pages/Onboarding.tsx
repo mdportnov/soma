@@ -14,6 +14,7 @@ import { RestoreDialog } from "@/components/app/BackupCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AutoHeight } from "@/components/ui/auto-height";
+import { PoweredBy } from "@/components/app/PoweredBy";
 import logo from "@/assets/logo.svg";
 
 type StepId = "welcome" | "core" | "interests" | "optional" | "done";
@@ -291,6 +292,9 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
           </form>
         </AutoHeight>
       </div>
+
+      {/* Quiet brand signature, present on every step without pulling focus. */}
+      <PoweredBy className="absolute bottom-6 left-1/2 -translate-x-1/2" />
 
       {restoreOpen && <RestoreDialog onClose={() => setRestoreOpen(false)} />}
     </div>

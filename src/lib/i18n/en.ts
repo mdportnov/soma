@@ -110,6 +110,10 @@ export const en = {
   },
 
   // Common field labels
+  poweredBy: {
+    prefix: "Powered by",
+  },
+
   fields: {
     date: "Date",
     name: "Name",

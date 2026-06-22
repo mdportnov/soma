@@ -13,6 +13,7 @@ import { SectionToggles } from "@/components/app/SectionToggles";
 import { RestoreDialog } from "@/components/app/BackupCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AutoHeight } from "@/components/ui/auto-height";
 import logo from "@/assets/logo.svg";
 
 type StepId = "welcome" | "core" | "interests" | "optional" | "done";
@@ -90,24 +91,28 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
         }}
       />
 
+      {/* Language is a setting, not part of the centered flow — pin it to the corner. */}
+      <div
+        className="absolute right-6 top-6 z-10 flex rounded-lg border bg-card/60 p-0.5 backdrop-blur"
+        aria-label={t("onboarding.language")}
+      >
+        {(["en", "ru"] as const).map((l) => (
+          <Button
+            key={l}
+            size="sm"
+            variant={lang === l ? "secondary" : "ghost"}
+            className="h-7 px-2.5 text-xs"
+            onClick={() => setLang(l)}
+          >
+            {l.toUpperCase()}
+          </Button>
+        ))}
+      </div>
+
       <div className="animate-rise-in relative w-full max-w-xl">
         <div className="mb-6 flex items-center justify-center gap-2.5">
           <img src={logo} alt="" className="size-9" />
           <span className="text-lg font-semibold tracking-tight">Soma</span>
-          {/* Language toggle stays reachable on every step, not just welcome. */}
-          <div className="ml-3 flex rounded-lg border p-0.5" aria-label={t("onboarding.language")}>
-            {(["en", "ru"] as const).map((l) => (
-              <Button
-                key={l}
-                size="sm"
-                variant={lang === l ? "secondary" : "ghost"}
-                className="h-7 px-2.5 text-xs"
-                onClick={() => setLang(l)}
-              >
-                {l.toUpperCase()}
-              </Button>
-            ))}
-          </div>
         </div>
 
         <div className="mb-5 flex items-center justify-center gap-1.5">
@@ -128,8 +133,10 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
           </div>
         )}
 
-        {/* key={step} re-mounts the card so each step slides in */}
-        <form key={step} onSubmit={onSubmit} className="animate-step-in">
+        {/* AutoHeight eases the card between sizes; key={step} re-mounts so each
+            step slides in, and a language change reflows the copy smoothly too. */}
+        <AutoHeight>
+          <form key={step} onSubmit={onSubmit} className="animate-step-in">
           {step === "welcome" && (
             <Card>
               <CardHeader>
@@ -147,7 +154,12 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                   {t("onboarding.disclaimer")}
                 </p>
                 <div className="flex items-center justify-between gap-2">
-                  <Button type="button" variant="ghost" onClick={() => setRestoreOpen(true)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="-ml-4 text-muted-foreground"
+                    onClick={() => setRestoreOpen(true)}
+                  >
                     <RotateCcw /> {t("onboarding.restore")}
                   </Button>
                   <Button type="submit">
@@ -169,7 +181,12 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
               <CardContent className="space-y-5">
                 <CoreFields draft={draft} patch={patch} />
                 <div className="flex items-center justify-between">
-                  <Button type="button" variant="ghost" onClick={() => go("welcome")}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="-ml-4 text-muted-foreground"
+                    onClick={() => go("welcome")}
+                  >
                     <ArrowLeft /> {t("common.back")}
                   </Button>
                   <Button type="submit" disabled={!coreValid}>
@@ -192,7 +209,12 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 <SectionToggles enabled={groups} onToggle={toggleGroup} />
                 <p className="text-xs text-muted-foreground">{t("onboarding.interestsHint")}</p>
                 <div className="flex items-center justify-between">
-                  <Button type="button" variant="ghost" onClick={() => go("core")}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="-ml-4 text-muted-foreground"
+                    onClick={() => go("core")}
+                  >
                     <ArrowLeft /> {t("common.back")}
                   </Button>
                   <Button type="submit">
@@ -214,7 +236,12 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
               <CardContent className="space-y-5">
                 <OptionalFields draft={draft} patch={patch} />
                 <div className="flex items-center justify-between">
-                  <Button type="button" variant="ghost" onClick={() => go("interests")}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="-ml-4 text-muted-foreground"
+                    onClick={() => go("interests")}
+                  >
                     <ArrowLeft /> {t("common.back")}
                   </Button>
                   {/* Fields are optional, so Continue doubles as Skip. */}
@@ -247,6 +274,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                   <Button
                     type="button"
                     variant="ghost"
+                    className="-ml-4 text-muted-foreground"
                     onClick={() => go("optional")}
                     disabled={saving}
                   >
@@ -260,7 +288,8 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
               </CardContent>
             </Card>
           )}
-        </form>
+          </form>
+        </AutoHeight>
       </div>
 
       {restoreOpen && <RestoreDialog onClose={() => setRestoreOpen(false)} />}

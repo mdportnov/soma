@@ -19,11 +19,19 @@ export function PoweredBy({ className }: { className?: string }) {
       )}
     >
       {t("poweredBy.prefix")}{" "}
-      <button type="button" className={link} onClick={() => void openUrl("https://puntocero.space")}>
+      <button
+        type="button"
+        className={link}
+        onClick={() => void openUrl("https://puntocero.space")}
+      >
         Punto Cero
       </button>
       <span className="mx-1 opacity-60">&amp;</span>
-      <button type="button" className={link} onClick={() => void openUrl("https://mikeportnov.com")}>
+      <button
+        type="button"
+        className={link}
+        onClick={() => void openUrl("https://mikeportnov.com")}
+      >
         Mike Portnov
       </button>
       <span className="ml-1.5 opacity-60">w/ ❤️</span>

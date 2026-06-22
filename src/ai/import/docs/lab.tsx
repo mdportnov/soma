@@ -439,10 +439,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
               {orderedRows.map((row) => {
                 const bio = row.biomarkerId != null ? index.byId.get(row.biomarkerId) : undefined;
                 return (
-                  <TableRow
-                    key={row.key}
-                    className={row.duplicate ? "bg-warning/5" : undefined}
-                  >
+                  <TableRow key={row.key} className={row.duplicate ? "bg-warning/5" : undefined}>
                     <TableCell>
                       <input
                         type="checkbox"
@@ -611,10 +608,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
             {t("importWizard.duplicatesUnresolved", { count: String(unresolvedDups) })}
           </p>
         )}
-        <Button
-          onClick={onSave}
-          disabled={includedCount === 0 || !meta.date || unresolvedDups > 0}
-        >
+        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date || unresolvedDups > 0}>
           Confirm & save {includedCount} result{includedCount === 1 ? "" : "s"}
         </Button>
       </div>

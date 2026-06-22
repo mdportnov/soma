@@ -144,9 +144,11 @@ export async function buildHealthContext(profileId: number): Promise<string> {
     if (abnormal.length >= MAX_ABNORMAL) break;
   }
   lines.push(
-    abnormal.length
-      ? `Latest out-of-range markers: ${abnormal.join("; ")}`
-      : "Latest labs: no out-of-range markers in the most recent values.",
+    latest.size === 0
+      ? "Labs: no lab results have been recorded yet."
+      : abnormal.length
+        ? `Latest out-of-range markers: ${abnormal.join("; ")}`
+        : "Latest labs: all recorded markers are within range in their most recent values.",
   );
 
   const lifestyleLine = lifestyleSummaryLine(lifestyle);

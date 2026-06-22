@@ -61,8 +61,10 @@ export abstract class BaseProvider implements AIProvider {
   ): Promise<number | null> {
     if (!candidates.length) return null;
     const text = await this.complete({
+      // Headroom over the tiny JSON payload so a thinking model's reasoning
+      // tokens don't starve the actual answer (else MAX_TOKENS → empty reply).
       parts: [{ type: "text", text: buildMappingPrompt(rawLabel, unit, candidates) }],
-      maxTokens: 200,
+      maxTokens: 1024,
     });
     const parsed = extractJson<{ biomarker_id: unknown }>(text);
     const id = parsed.biomarker_id;
@@ -89,7 +91,10 @@ export abstract class BaseProvider implements AIProvider {
   }
 
   async testKey(): Promise<void> {
-    await this.complete({ parts: [{ type: "text", text: TEST_PROMPT }], maxTokens: 16 });
+    // Budget must comfortably exceed any reasoning tokens a thinking model (e.g.
+    // Gemini 2.5/3) burns before emitting visible text — a tight cap returns an
+    // empty, MAX_TOKENS-truncated reply and looks like a dead key when it isn't.
+    await this.complete({ parts: [{ type: "text", text: TEST_PROMPT }], maxTokens: 1024 });
   }
 
   /**

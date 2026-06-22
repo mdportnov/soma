@@ -156,8 +156,8 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 <div className="flex items-center justify-between gap-2">
                   <Button
                     type="button"
-                    variant="ghost"
-                    className="-ml-4 text-muted-foreground"
+                    variant="outline"
+                    className="text-muted-foreground"
                     onClick={() => setRestoreOpen(true)}
                   >
                     <RotateCcw /> {t("onboarding.restore")}
@@ -183,8 +183,8 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 <div className="flex items-center justify-between">
                   <Button
                     type="button"
-                    variant="ghost"
-                    className="-ml-4 text-muted-foreground"
+                    variant="outline"
+                    className="text-muted-foreground"
                     onClick={() => go("welcome")}
                   >
                     <ArrowLeft /> {t("common.back")}
@@ -211,8 +211,8 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 <div className="flex items-center justify-between">
                   <Button
                     type="button"
-                    variant="ghost"
-                    className="-ml-4 text-muted-foreground"
+                    variant="outline"
+                    className="text-muted-foreground"
                     onClick={() => go("core")}
                   >
                     <ArrowLeft /> {t("common.back")}
@@ -238,8 +238,8 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 <div className="flex items-center justify-between">
                   <Button
                     type="button"
-                    variant="ghost"
-                    className="-ml-4 text-muted-foreground"
+                    variant="outline"
+                    className="text-muted-foreground"
                     onClick={() => go("interests")}
                   >
                     <ArrowLeft /> {t("common.back")}
@@ -273,8 +273,8 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 <div className="flex items-center justify-between">
                   <Button
                     type="button"
-                    variant="ghost"
-                    className="-ml-4 text-muted-foreground"
+                    variant="outline"
+                    className="text-muted-foreground"
                     onClick={() => go("optional")}
                     disabled={saving}
                   >

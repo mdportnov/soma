@@ -80,8 +80,15 @@ export function initDatabase(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
       const conn = await getSqlite();
-      await conn.execute("PRAGMA foreign_keys = ON");
+      // Wait out a transient lock (a backup VACUUM INTO, a WAL checkpoint) instead
+      // of failing the whole launch with "database is locked".
+      await conn.execute("PRAGMA busy_timeout = 5000");
+      // Run migrations with FK enforcement OFF: a future column change that drizzle
+      // implements as a table rebuild (create → copy → drop → rename) would
+      // otherwise trip referential checks mid-flight. Re-enabled before any data.
+      await conn.execute("PRAGMA foreign_keys = OFF");
       await runMigrations(conn);
+      await conn.execute("PRAGMA foreign_keys = ON");
       await seedBiomarkersIfEmpty(conn);
       // Reconcile the dictionary with the current SEED on every launch so
       // library expansions + new aliases reach existing installs (idempotent).

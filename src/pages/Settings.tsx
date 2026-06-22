@@ -37,6 +37,7 @@ import { applyThemePreference, loadThemePreference, type ThemePreference } from 
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
+import { EncryptionCard } from "@/components/app/EncryptionCard";
 import { McpCard } from "@/components/app/McpCard";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
@@ -69,6 +70,7 @@ export function Settings() {
         <AiSettingsCard />
         <McpCard />
         <BackupCard />
+        <EncryptionCard />
         <ExportCard />
         <LogsCard />
       </div>

@@ -13,14 +13,56 @@ import { ageYearsFrom } from "@/lib/units";
 import {
   getLatestResults,
   getProfile,
+  getRecentLifestyle,
   listAllergies,
   listBiomarkers,
   listDiagnoses,
   listMedications,
 } from "@/db/repos";
+import type { LifestyleLog } from "@/db/schema";
 
 /** Cap on listed abnormal markers, to bound the prompt token cost. */
 const MAX_ABNORMAL = 25;
+
+/** Window (days) of lifestyle entries folded into the AI context summary. */
+const LIFESTYLE_WINDOW_DAYS = 30;
+
+/** Mean of the defined numeric values, or null when none are present. */
+function mean(values: (number | null)[]): number | null {
+  const nums = values.filter((v): v is number => v != null);
+  if (!nums.length) return null;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+/** Rounds to one decimal for compact prompt text. */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * Compact one-line lifestyle summary over the recent window: average sleep,
+ * training load, stress/energy and resting HR. Returns null when nothing is
+ * logged, so the context line is only added when there is signal.
+ */
+function lifestyleSummaryLine(rows: LifestyleLog[]): string | null {
+  if (!rows.length) return null;
+  const parts: string[] = [];
+  const sleep = mean(rows.map((r) => r.sleepHours));
+  if (sleep != null) parts.push(`avg sleep ${round1(sleep)}h`);
+  const sleepQ = mean(rows.map((r) => r.sleepQuality));
+  if (sleepQ != null) parts.push(`sleep quality ${round1(sleepQ)}/5`);
+  const trainingDays = rows.filter((r) => (r.trainingMinutes ?? 0) > 0).length;
+  const trainingMin = rows.reduce((a, r) => a + (r.trainingMinutes ?? 0), 0);
+  if (trainingMin > 0) parts.push(`${trainingMin} training min over ${trainingDays} day(s)`);
+  const stress = mean(rows.map((r) => r.stressLevel));
+  if (stress != null) parts.push(`avg stress ${round1(stress)}/5`);
+  const energy = mean(rows.map((r) => r.energyLevel));
+  if (energy != null) parts.push(`avg energy ${round1(energy)}/5`);
+  const rhr = mean(rows.map((r) => r.restingHeartRate));
+  if (rhr != null) parts.push(`avg resting HR ${Math.round(rhr)} bpm`);
+  if (!parts.length) return null;
+  return `Lifestyle (last ${LIFESTYLE_WINDOW_DAYS}d, ${rows.length} day(s) logged): ${parts.join(", ")}.`;
+}
 
 const SEVERITY_ORDER = { anaphylactic: 0, severe: 1, moderate: 2, mild: 3 } as const;
 
@@ -39,14 +81,16 @@ function bloodTypeLabel(
  * handed an empty context that invites speculation.
  */
 export async function buildHealthContext(profileId: number): Promise<string> {
-  const [profile, allergies, diagnoses, medications, latest, biomarkers] = await Promise.all([
-    getProfile(profileId),
-    listAllergies(profileId),
-    listDiagnoses(profileId),
-    listMedications(profileId),
-    getLatestResults(profileId),
-    listBiomarkers(),
-  ]);
+  const [profile, allergies, diagnoses, medications, latest, biomarkers, lifestyle] =
+    await Promise.all([
+      getProfile(profileId),
+      listAllergies(profileId),
+      listDiagnoses(profileId),
+      listMedications(profileId),
+      getLatestResults(profileId),
+      listBiomarkers(),
+      getRecentLifestyle(profileId, LIFESTYLE_WINDOW_DAYS),
+    ]);
   if (!profile) return "No profile data is available yet.";
 
   const lines: string[] = [];
@@ -104,6 +148,9 @@ export async function buildHealthContext(profileId: number): Promise<string> {
       ? `Latest out-of-range markers: ${abnormal.join("; ")}`
       : "Latest labs: no out-of-range markers in the most recent values.",
   );
+
+  const lifestyleLine = lifestyleSummaryLine(lifestyle);
+  if (lifestyleLine) lines.push(lifestyleLine);
 
   return lines.join("\n");
 }

@@ -296,12 +296,17 @@ export function Shell() {
                 type="button"
                 onClick={() => setShowAll((v) => !v)}
                 title={showAll ? t("nav.showFewer") : t("nav.showAll")}
-                className="mt-1 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="mt-1 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <SlidersHorizontal className="size-4 shrink-0" />
-                <span className="hidden md:block">
-                  {showAll ? t("nav.showFewer") : `${t("nav.showAll")} (+${hiddenCount})`}
+                <span className="hidden truncate md:block">
+                  {showAll ? t("nav.showFewer") : t("nav.showAll")}
                 </span>
+                {!showAll && (
+                  <span className="ml-auto hidden rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none md:inline-block">
+                    +{hiddenCount}
+                  </span>
+                )}
               </button>
               {/* When peeking at hidden sections, point to where the choice sticks. */}
               {showAll && (

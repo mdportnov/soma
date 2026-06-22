@@ -23,6 +23,7 @@ export const en = {
     showAll: "Show all sections",
     showFewer: "Show fewer",
     manageSections: "Manage sections",
+    aiNeedsSetup: "Set up",
   },
 
   // AI analysis (v0.3)
@@ -173,6 +174,57 @@ export const en = {
     sections: {
       title: "Sidebar sections",
       description: "Choose which areas appear in the sidebar.",
+    },
+    dashboard: {
+      title: "Dashboard layout",
+      description:
+        "Choose which cards appear on your home screen. Hidden cards stay reachable from the sidebar — this only changes the dashboard.",
+      widgets: {
+        safetyBanner: {
+          label: "Critical allergy banner",
+          desc: "The red strip warning of severe or life-threatening allergies.",
+        },
+        verdict: {
+          label: "Health verdict",
+          desc: 'The "all calm" / "needs attention" summary line.',
+        },
+        stats: {
+          label: "Quick stats",
+          desc: "Lab panels, out-of-range count, active meds and last draw.",
+        },
+        attention: {
+          label: "Needs attention",
+          desc: "Rolled-up biomarker, diagnosis, medication and vaccine alerts.",
+        },
+        review: {
+          label: "Review queue",
+          desc: "Imported lab panels still waiting for you to confirm.",
+        },
+        changes: {
+          label: "Notable changes",
+          desc: "What moved since your previous lab panel.",
+        },
+        activity: {
+          label: "Recent activity",
+          desc: "Your latest records across labs, meds, diagnoses and more.",
+        },
+      },
+      safetyConfirm: {
+        title: "Hide the critical-allergy banner?",
+        body: "This banner warns of severe, life-threatening allergies at a glance. It will still appear on your Emergency Card — but it won't show on the dashboard anymore.",
+        confirm: "Hide it",
+      },
+    },
+    reset: {
+      title: "Reset personalization",
+      description:
+        "Bring back every sidebar section and dashboard card, unmute all notifications, and restore dismissed reminders and tips. Your health data is not touched.",
+      action: "Reset personalization",
+      done: "Personalization reset to defaults.",
+      confirm: {
+        title: "Reset personalization?",
+        body: "Sidebar sections, dashboard cards, notification preferences, and dismissed reminders and tips all return to their defaults. This doesn't affect any of your records.",
+      },
     },
     appearance: {
       title: "Appearance",
@@ -1265,6 +1317,11 @@ export const en = {
     fullTimeline: "Full timeline",
     addLabResults: "Add lab results",
     importLab: "Import lab report",
+    empty: {
+      title: "Your dashboard is hidden",
+      description: "You've turned off every dashboard card. Turn some back on to fill this screen.",
+      cta: "Choose cards",
+    },
     stats: {
       labPanels: "Lab panels",
       outOfRangeLatest: "Out of range (latest panel)",
@@ -1789,6 +1846,22 @@ export const en = {
     emptyTitle: "You're all caught up",
     emptyDescription: "Medication reminders and due re-tests will appear here.",
     feedTitle: "Feed",
+    prefs: {
+      title: "What you get notified about",
+      description: "Mute categories you don't want. Applies to the feed and the bell badge.",
+      medication: {
+        label: "Medication reminders",
+        desc: "Daily nudge for standing medications you haven't logged yet.",
+      },
+      retest: {
+        label: "Re-test reminders",
+        desc: "Alerts when a scheduled marker or panel is due to be re-checked.",
+      },
+      retestUpcoming: {
+        label: "Include upcoming re-tests",
+        desc: "Show re-tests due soon too — turn off to only get due and overdue ones.",
+      },
+    },
     dismiss: "Dismiss",
     dismissed: "Dismissed",
     showDismissed: "Show dismissed ({{count}})",

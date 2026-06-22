@@ -9,6 +9,7 @@ import {
   Pill,
   Play,
   Plus,
+  SlidersHorizontal,
   TestTubes,
   Trash2,
 } from "lucide-react";
@@ -27,17 +28,23 @@ import type { Biomarker, NewRetestSchedule, RetestSchedule } from "@/db/schema";
 import {
   buildNotificationFeed,
   dismissNotification,
+  filterByPrefs,
   loadDismissedIds,
+  loadNotificationPrefs,
+  NOTIFICATION_PREFS_EVENT,
   restoreNotification,
   retestDueDate,
+  saveNotificationPrefs,
   visibleNotifications,
   type NotificationItem,
+  type NotificationPrefs,
   type NotificationSeverity,
 } from "@/lib/notifications";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
+import { ToggleRow } from "@/components/app/ToggleRow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -85,6 +92,7 @@ export function Notifications() {
   return (
     <>
       <PageHeader title={t("notifications.title")} description={t("notifications.description")} />
+      <PrefsSection />
       <FeedSection feedData={data.feedData} />
       <SchedulesSection
         profileId={profileId}
@@ -93,6 +101,58 @@ export function Notifications() {
         reload={reload}
       />
     </>
+  );
+}
+
+// ── Preferences ──────────────────────────────────────────────────────────────
+
+function PrefsSection() {
+  const { t } = useI18n();
+  const [prefs, setPrefs] = React.useState<NotificationPrefs>(() => loadNotificationPrefs());
+
+  const set = (patch: Partial<NotificationPrefs>) =>
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      saveNotificationPrefs(next);
+      return next;
+    });
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="size-4 text-muted-foreground" />
+          <CardTitle>{t("notifications.prefs.title")}</CardTitle>
+        </div>
+        <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted-foreground">
+          {t("notifications.prefs.description")}
+        </p>
+      </CardHeader>
+      <CardContent className="divide-y py-0">
+        <ToggleRow
+          icon={Pill}
+          label={t("notifications.prefs.medication.label")}
+          description={t("notifications.prefs.medication.desc")}
+          checked={prefs.medication}
+          onChange={(v) => set({ medication: v })}
+        />
+        <ToggleRow
+          icon={FlaskConical}
+          label={t("notifications.prefs.retest.label")}
+          description={t("notifications.prefs.retest.desc")}
+          checked={prefs.retest}
+          onChange={(v) => set({ retest: v })}
+        />
+        <ToggleRow
+          icon={TestTubes}
+          label={t("notifications.prefs.retestUpcoming.label")}
+          description={t("notifications.prefs.retestUpcoming.desc")}
+          checked={prefs.retestUpcoming && prefs.retest}
+          disabled={!prefs.retest}
+          onChange={(v) => set({ retestUpcoming: v })}
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -108,8 +168,18 @@ function FeedSection({
   const navigate = useNavigate();
   const [dismissed, setDismissed] = React.useState<Set<string>>(() => loadDismissedIds());
   const [showDismissed, setShowDismissed] = React.useState(false);
+  // Re-read prefs when the toggles above change so the feed reflects mutes live.
+  const [prefs, setPrefs] = React.useState<NotificationPrefs>(() => loadNotificationPrefs());
+  React.useEffect(() => {
+    const onChange = () => setPrefs(loadNotificationPrefs());
+    window.addEventListener(NOTIFICATION_PREFS_EVENT, onChange);
+    return () => window.removeEventListener(NOTIFICATION_PREFS_EVENT, onChange);
+  }, []);
 
-  const items = React.useMemo(() => buildNotificationFeed(feedData), [feedData]);
+  const items = React.useMemo(
+    () => filterByPrefs(buildNotificationFeed(feedData), prefs),
+    [feedData, prefs],
+  );
   const visible = visibleNotifications(items, dismissed);
   const hidden = items.filter((i) => dismissed.has(i.id));
 

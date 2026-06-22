@@ -26,7 +26,15 @@ import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getNotificationFeedData } from "@/db/repos";
 import { INTERESTS_EVENT, isRouteEnabled, loadInterests } from "@/lib/interests";
-import { buildNotificationFeed, loadDismissedIds, visibleNotifications } from "@/lib/notifications";
+import {
+  buildNotificationFeed,
+  filterByPrefs,
+  loadDismissedIds,
+  loadNotificationPrefs,
+  NOTIFICATION_PREFS_EVENT,
+  visibleNotifications,
+} from "@/lib/notifications";
+import { isAiConfigured, SETUP_STATE_EVENT } from "@/lib/setup-state";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/app/CommandPalette";
 import logo from "@/assets/logo.svg";
@@ -68,12 +76,20 @@ function NotificationBell() {
   const { t } = useI18n();
   const { profileId } = useApp();
   const location = useLocation();
+  // Re-run on navigation and on a live prefs change so muting a category drops
+  // the badge count without a manual reload.
+  const [prefsTick, setPrefsTick] = React.useState(0);
+  React.useEffect(() => {
+    const onChange = () => setPrefsTick((n) => n + 1);
+    window.addEventListener(NOTIFICATION_PREFS_EVENT, onChange);
+    return () => window.removeEventListener(NOTIFICATION_PREFS_EVENT, onChange);
+  }, []);
   const { data: count } = useQuery(async () => {
     const data = await getNotificationFeedData(profileId);
-    const items = visibleNotifications(buildNotificationFeed(data), loadDismissedIds());
+    const feed = filterByPrefs(buildNotificationFeed(data), loadNotificationPrefs());
+    const items = visibleNotifications(feed, loadDismissedIds());
     return items.length;
-    // Re-run on navigation so the badge stays fresh across the session.
-  }, [profileId, location.key]);
+  }, [profileId, location.key, prefsTick]);
 
   const n = count ?? 0;
   return (
@@ -104,6 +120,19 @@ export function Shell() {
   const { t } = useI18n();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const location = useLocation();
+  // Flag the AI-assistant nav item when no provider/key is configured yet, so the
+  // user knows the section needs a one-time setup (the page links to Settings).
+  // Re-checked on navigation and on the setup-state event so it clears the moment
+  // a key is saved, even without navigating away.
+  const [setupTick, setSetupTick] = React.useState(0);
+  React.useEffect(() => {
+    const onChange = () => setSetupTick((n) => n + 1);
+    window.addEventListener(SETUP_STATE_EVENT, onChange);
+    return () => window.removeEventListener(SETUP_STATE_EVENT, onChange);
+  }, []);
+  // location.key + setupTick are intended re-run triggers (the closure reads no
+  // other reactive values).
+  const { data: aiConfigured } = useQuery(() => isAiConfigured(), [location.key, setupTick]);
   const navType = useNavigationType();
   const mainRef = React.useRef<HTMLElement>(null);
   // Per-history-entry scroll offsets, keyed by location.key (unique per entry).
@@ -230,12 +259,13 @@ export function Shell() {
               );
             }
             const label = t(item.labelKey);
+            const needsSetup = item.to === "/assistant" && aiConfigured === false;
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                title={label}
+                title={needsSetup ? `${label} — ${t("nav.aiNeedsSetup")}` : label}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
@@ -245,8 +275,18 @@ export function Shell() {
                   )
                 }
               >
-                <item.icon className="size-4 shrink-0" />
+                <span className="relative shrink-0">
+                  <item.icon className="size-4" />
+                  {needsSetup && (
+                    <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-warning ring-2 ring-card" />
+                  )}
+                </span>
                 <span className="hidden md:block">{label}</span>
+                {needsSetup && (
+                  <span className="ml-auto hidden rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning md:inline-block">
+                    {t("nav.aiNeedsSetup")}
+                  </span>
+                )}
               </NavLink>
             );
           })}

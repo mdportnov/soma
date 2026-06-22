@@ -11,6 +11,10 @@ import {
   type VaultState,
 } from "@/lib/db-encryption";
 import { useI18n } from "@/lib/i18n";
+import { INTERESTS_EVENT } from "@/lib/interests";
+import { DASHBOARD_PREFS_EVENT } from "@/lib/dashboard-prefs";
+import { NOTIFICATION_PREFS_EVENT } from "@/lib/notifications";
+import { hydratePersonalizationFromDb, syncPersonalizationToDb } from "@/lib/personalization";
 import { Loading } from "@/components/app/Loading";
 import { UnlockScreen } from "@/components/app/UnlockScreen";
 import { Onboarding } from "@/pages/Onboarding";
@@ -46,6 +50,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const boot = async () => {
       await initDatabase();
       const profileId = await ensureActiveProfile();
+      // Pull layout/notification prefs from a restored profile before the shell
+      // renders, so the sidebar and dashboard come up already personalized.
+      await hydratePersonalizationFromDb(profileId);
       const onboardedNow = await isOnboarded(profileId);
       if (cancelled) return;
       setOnboarded(onboardedNow);
@@ -90,6 +97,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       stopScheduler?.();
     };
   }, []);
+
+  // Mirror any personalization change up to the profile so it survives a backup
+  // restore / new device. One subscriber covers every screen that edits prefs.
+  React.useEffect(() => {
+    const profileId = state?.profileId;
+    if (profileId == null) return;
+    const sync = () => void syncPersonalizationToDb(profileId);
+    window.addEventListener(INTERESTS_EVENT, sync);
+    window.addEventListener(DASHBOARD_PREFS_EVENT, sync);
+    window.addEventListener(NOTIFICATION_PREFS_EVENT, sync);
+    return () => {
+      window.removeEventListener(INTERESTS_EVENT, sync);
+      window.removeEventListener(DASHBOARD_PREFS_EVENT, sync);
+      window.removeEventListener(NOTIFICATION_PREFS_EVENT, sync);
+    };
+  }, [state?.profileId]);
 
   // Called by the unlock screen. A rejection propagates so it can show "wrong
   // passphrase"; once unlocked, boot errors are surfaced as app errors instead.

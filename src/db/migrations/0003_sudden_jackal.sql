@@ -1,0 +1,1 @@
+ALTER TABLE `profile` ADD `ui_prefs` text;

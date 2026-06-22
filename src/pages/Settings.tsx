@@ -8,8 +8,10 @@ import {
   Sun,
   HeartPulse,
   KeyRound,
+  LayoutDashboard,
   Lightbulb,
   Loader2,
+  RotateCcw,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -23,7 +25,13 @@ import { useQuery } from "@/hooks/useQuery";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { getProfile, updateProfile } from "@/db/repos";
-import { loadInterests, saveInterests, type SectionGroup } from "@/lib/interests";
+import { loadInterests, saveInterests, SECTION_GROUPS, type SectionGroup } from "@/lib/interests";
+import {
+  DASHBOARD_WIDGETS,
+  loadDashboardWidgets,
+  saveDashboardWidgets,
+  type DashboardWidget,
+} from "@/lib/dashboard-prefs";
 import {
   buildProvider,
   effectiveModelId,
@@ -43,7 +51,11 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { BackupCard } from "@/components/app/BackupCard";
 import { EncryptionCard } from "@/components/app/EncryptionCard";
 import { McpCard } from "@/components/app/McpCard";
-import { SectionToggles } from "@/components/app/SectionToggles";
+import { GROUP_META } from "@/components/app/SectionToggles";
+import { resetPersonalization } from "@/lib/personalization";
+import { notifySetupChanged } from "@/lib/setup-state";
+import { ToggleRow } from "@/components/app/ToggleRow";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import {
@@ -74,6 +86,8 @@ export function Settings() {
       <div className="space-y-4">
         <AppearanceCard />
         <SectionsCard />
+        <DashboardCard />
+        <ResetPersonalizationCard />
         <ProfileCard />
         <EmergencyContactCard />
         <AiSettingsCard defaultOpen={openAi} />
@@ -198,9 +212,172 @@ function SectionsCard() {
         </div>
         <CardDescription>{t("settings.sections.description")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <SectionToggles enabled={groups} onToggle={toggle} />
+      <CardContent className="divide-y py-0">
+        {SECTION_GROUPS.map((id) => (
+          <ToggleRow
+            key={id}
+            icon={GROUP_META[id].icon}
+            label={t(GROUP_META[id].labelKey)}
+            description={t(GROUP_META[id].descKey)}
+            checked={groups.has(id)}
+            onChange={() => toggle(id)}
+          />
+        ))}
       </CardContent>
+    </Card>
+  );
+}
+
+// ── dashboard widgets ─────────────────────────────────────────────────────────
+
+/** Stable order + i18n keys for the dashboard widget toggles. */
+const WIDGET_KEYS: Record<DashboardWidget, { labelKey: string; descKey: string }> = {
+  safetyBanner: {
+    labelKey: "settings.dashboard.widgets.safetyBanner.label",
+    descKey: "settings.dashboard.widgets.safetyBanner.desc",
+  },
+  verdict: {
+    labelKey: "settings.dashboard.widgets.verdict.label",
+    descKey: "settings.dashboard.widgets.verdict.desc",
+  },
+  stats: {
+    labelKey: "settings.dashboard.widgets.stats.label",
+    descKey: "settings.dashboard.widgets.stats.desc",
+  },
+  attention: {
+    labelKey: "settings.dashboard.widgets.attention.label",
+    descKey: "settings.dashboard.widgets.attention.desc",
+  },
+  review: {
+    labelKey: "settings.dashboard.widgets.review.label",
+    descKey: "settings.dashboard.widgets.review.desc",
+  },
+  changes: {
+    labelKey: "settings.dashboard.widgets.changes.label",
+    descKey: "settings.dashboard.widgets.changes.desc",
+  },
+  activity: {
+    labelKey: "settings.dashboard.widgets.activity.label",
+    descKey: "settings.dashboard.widgets.activity.desc",
+  },
+};
+
+function DashboardCard() {
+  const { t } = useI18n();
+  const location = useLocation();
+  const [enabled, setEnabled] = React.useState<Set<DashboardWidget>>(() => loadDashboardWidgets());
+  // Confirm before hiding the safety banner: it's a life-safety surface, so a
+  // stray toggle shouldn't silently bury it (the Emergency Card still has it).
+  const [confirmSafety, setConfirmSafety] = React.useState(false);
+
+  // Deep-linked from the dashboard's "dashboard is empty" nudge: scroll to and
+  // briefly highlight this card (mirrors SectionsCard).
+  const [glow, setGlow] = React.useState(false);
+  React.useEffect(() => {
+    if ((location.state as { openDashboard?: boolean } | null)?.openDashboard !== true) return;
+    document
+      .getElementById("settings-dashboard")
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setGlow(true);
+    const timer = setTimeout(() => setGlow(false), 2000);
+    return () => clearTimeout(timer);
+  }, [location.state]);
+
+  const apply = (w: DashboardWidget, on: boolean) =>
+    setEnabled((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(w);
+      else next.delete(w);
+      saveDashboardWidgets(next);
+      return next;
+    });
+
+  const toggle = (w: DashboardWidget) => {
+    // Intercept only the off-switch of the safety banner.
+    if (w === "safetyBanner" && enabled.has(w)) {
+      setConfirmSafety(true);
+      return;
+    }
+    apply(w, !enabled.has(w));
+  };
+
+  return (
+    <Card
+      id="settings-dashboard"
+      className={cn("transition-shadow", glow && "ring-2 ring-primary/40")}
+    >
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <LayoutDashboard className="size-4 text-muted-foreground" />
+          <CardTitle>{t("settings.dashboard.title")}</CardTitle>
+        </div>
+        <CardDescription>{t("settings.dashboard.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="divide-y py-0">
+        {DASHBOARD_WIDGETS.map((w) => (
+          <ToggleRow
+            key={w}
+            label={t(WIDGET_KEYS[w].labelKey)}
+            description={t(WIDGET_KEYS[w].descKey)}
+            checked={enabled.has(w)}
+            onChange={() => toggle(w)}
+          />
+        ))}
+      </CardContent>
+      <ConfirmDialog
+        open={confirmSafety}
+        title={t("settings.dashboard.safetyConfirm.title")}
+        description={t("settings.dashboard.safetyConfirm.body")}
+        confirmLabel={t("settings.dashboard.safetyConfirm.confirm")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          apply("safetyBanner", false);
+          setConfirmSafety(false);
+        }}
+        onClose={() => setConfirmSafety(false)}
+      />
+    </Card>
+  );
+}
+
+// ── reset ──────────────────────────────────────────────────────────────────
+
+function ResetPersonalizationCard() {
+  const { t } = useI18n();
+  const toast = useToast();
+  const { profileId } = useApp();
+  const [open, setOpen] = React.useState(false);
+
+  const reset = async () => {
+    await resetPersonalization(profileId);
+    setOpen(false);
+    toast.show(t("settings.reset.done"));
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <RotateCcw className="size-4 text-muted-foreground" />
+          <CardTitle>{t("settings.reset.title")}</CardTitle>
+        </div>
+        <CardDescription>{t("settings.reset.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          <RotateCcw /> {t("settings.reset.action")}
+        </Button>
+      </CardContent>
+      <ConfirmDialog
+        open={open}
+        title={t("settings.reset.confirm.title")}
+        description={t("settings.reset.confirm.body")}
+        confirmLabel={t("settings.reset.action")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={reset}
+        onClose={() => setOpen(false)}
+      />
     </Card>
   );
 }
@@ -244,6 +421,7 @@ function AiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
     setSettings(next);
     saveAiSettings(next);
     setTestState({ kind: "idle" });
+    notifySetupChanged();
   };
 
   const saveKey = async () => {
@@ -253,6 +431,7 @@ function AiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
       setKeyInput("");
       setHasStoredKey(true);
       setTestState({ kind: "idle" });
+      notifySetupChanged();
     } catch {
       // Keychain probe passed but the write still failed (e.g. a locked keyring
       // the user dismissed). Re-probe so the notice + guidance appear.
@@ -268,6 +447,7 @@ function AiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
     await deleteApiKey(settings.providerId);
     setHasStoredKey(false);
     setTestState({ kind: "idle" });
+    notifySetupChanged();
     toast.show(t("toasts.apiKeyRemoved"));
   };
 

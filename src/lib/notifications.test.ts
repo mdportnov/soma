@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Medication, RetestSchedule } from "@/db/schema";
 import type { NotificationFeedData } from "@/db/repos";
-import { buildNotificationFeed, retestDueDate, visibleNotifications } from "./notifications";
+import {
+  buildNotificationFeed,
+  filterByPrefs,
+  retestDueDate,
+  visibleNotifications,
+  type NotificationPrefs,
+} from "./notifications";
+
+const ALL_ON: NotificationPrefs = { medication: true, retest: true, retestUpcoming: true };
 
 function med(over: Partial<Medication> = {}): Medication {
   return {
@@ -143,5 +151,54 @@ describe("ordering & visibility", () => {
     const items = buildNotificationFeed(data({ medications: [med()] }));
     const visible = visibleNotifications(items, new Set(["med:1:2026-06-21"]));
     expect(visible).toHaveLength(0);
+  });
+});
+
+describe("filterByPrefs", () => {
+  it("passes everything through when all categories are enabled", () => {
+    const items = buildNotificationFeed(
+      data({
+        medications: [med()],
+        retestSchedules: [schedule({ lastTestedDate: "2026-03-10", intervalMonths: 3 })],
+      }),
+    );
+    expect(filterByPrefs(items, ALL_ON)).toHaveLength(items.length);
+  });
+
+  it("mutes medication nudges when medication is off", () => {
+    const items = buildNotificationFeed(data({ medications: [med()] }));
+    expect(filterByPrefs(items, { ...ALL_ON, medication: false })).toHaveLength(0);
+  });
+
+  it("mutes all re-tests when retest is off", () => {
+    const items = buildNotificationFeed(
+      data({ retestSchedules: [schedule({ lastTestedDate: "2026-03-10", intervalMonths: 3 })] }),
+    );
+    expect(filterByPrefs(items, { ...ALL_ON, retest: false })).toHaveLength(0);
+  });
+
+  it("drops only upcoming (not-yet-due) re-tests when retestUpcoming is off", () => {
+    const items = buildNotificationFeed(
+      data({
+        retestSchedules: [
+          // upcoming: due 2026-06-25 → 4 days out
+          schedule({ id: 1, label: "Ferritin", lastTestedDate: "2026-03-25", intervalMonths: 3 }),
+          // overdue: due 2026-06-10 → 11 days overdue
+          schedule({ id: 2, label: "TSH", lastTestedDate: "2026-03-10", intervalMonths: 3 }),
+        ],
+      }),
+    );
+    const filtered = filterByPrefs(items, { ...ALL_ON, retestUpcoming: false });
+    expect(filtered).toHaveLength(1);
+    const item = filtered[0];
+    if (item.kind !== "retest") throw new Error("expected retest");
+    expect(item.label).toBe("TSH");
+  });
+
+  it("keeps no-anchor re-tests even with retestUpcoming off", () => {
+    const items = buildNotificationFeed(
+      data({ retestSchedules: [schedule({ lastTestedDate: null })] }),
+    );
+    expect(filterByPrefs(items, { ...ALL_ON, retestUpcoming: false })).toHaveLength(1);
   });
 });

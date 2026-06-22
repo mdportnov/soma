@@ -1,5 +1,6 @@
 import * as React from "react";
-import { Pencil, Plus, Syringe } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Pencil, Plus, Sparkles, Syringe } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createVaccine, getAttachment, getProfile, listVaccines, updateVaccine } from "@/db/repos";
@@ -72,9 +73,16 @@ export function Vaccines() {
         title={t("vaccines.title")}
         description={t("vaccines.description")}
         actions={
-          <Button onClick={openNew}>
-            <Plus /> {t("common.add")}
-          </Button>
+          <>
+            <Link to="/labs/import?type=vaccine">
+              <Button variant="outline">
+                <Sparkles /> {t("labs.aiImport")}
+              </Button>
+            </Link>
+            <Button onClick={openNew}>
+              <Plus /> {t("common.add")}
+            </Button>
+          </>
         }
       />
 
@@ -87,9 +95,16 @@ export function Vaccines() {
             title={t("vaccines.emptyTitle")}
             description={t("vaccines.emptyDescription")}
             action={
-              <Button size="sm" onClick={openNew}>
-                {t("vaccines.addFirst")}
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={openNew}>
+                  {t("vaccines.addFirst")}
+                </Button>
+                <Link to="/labs/import?type=vaccine">
+                  <Button size="sm" variant="outline">
+                    <Sparkles /> {t("labs.aiImport")}
+                  </Button>
+                </Link>
+              </div>
             }
           />
         ) : (

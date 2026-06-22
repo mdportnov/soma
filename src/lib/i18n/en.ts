@@ -1168,10 +1168,14 @@ export const en = {
       choose: "Choose a vaccination certificate",
       extracting: "Reading the certificate…",
       title: "Review extracted vaccines",
-      description: "Tick the doses to keep and correct any field against the original.",
+      description:
+        "Each dose is matched to a vaccine in your calendar — confirm the match, tick the doses to keep, and correct any field against the original.",
       saving: "Saving vaccines…",
+      selectAll: "Select all",
+      noMatch: "No match",
       columns: {
-        vaccine: "Vaccine name",
+        vaccine: "Printed name",
+        match: "Matched vaccine",
         dose: "Dose #",
         manufacturer: "Manufacturer",
         batch: "Batch",

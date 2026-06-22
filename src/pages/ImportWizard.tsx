@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   FileText,
@@ -47,11 +47,37 @@ type Step =
   | { name: "review"; module: AnyDocTypeModule; draft: any }
   | { name: "saving" };
 
+/**
+ * Where the wizard returns to (back link + breadcrumb parent) when launched from
+ * a section page via `?type=`. Lets "Import from the Vaccines page" feel like it
+ * belongs to vaccines, not labs. Falls back to labs for the generic entry point.
+ */
+const SECTIONS: Record<DocType, { to: string; navKey: string }> = {
+  lab: { to: "/labs", navKey: "nav.labResults" },
+  vaccine: { to: "/vaccines", navKey: "nav.vaccines" },
+  discharge: { to: "/visits", navKey: "nav.visits" },
+  imaging: { to: "/imaging", navKey: "nav.imaging" },
+  prescription: { to: "/medications", navKey: "nav.medications" },
+  allergy: { to: "/allergies", navKey: "nav.allergies" },
+};
+
 export function ImportWizard() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // A `?type=` query param preselects the document type and skips the picker,
+  // so a section page (e.g. Vaccines) can deep-link straight into its own import.
+  const preselectParam = searchParams.get("type");
+  const preselect = React.useMemo<DocType | null>(
+    () =>
+      preselectParam && getDocTypeModule(preselectParam as DocType)
+        ? (preselectParam as DocType)
+        : null,
+    [preselectParam],
+  );
 
   const {
     data: boot,
@@ -66,10 +92,16 @@ export function ImportWizard() {
     return { provider, biomarkers, medications };
   }, [profileId]);
 
-  const [docType, setDocType] = React.useState<DocType | null>(null);
+  const [docType, setDocType] = React.useState<DocType | null>(preselect);
   const [filePath, setFilePath] = React.useState<string | null>(null);
-  const [step, setStep] = React.useState<Step>({ name: "selectType" });
+  const [step, setStep] = React.useState<Step>(
+    preselect ? { name: "pick" } : { name: "selectType" },
+  );
   const [error, setError] = React.useState<ImportError | null>(null);
+
+  // The section this import belongs to — drives the back link + breadcrumb.
+  const section = SECTIONS[docType ?? preselect ?? "lab"];
+  const sectionCrumb = { label: t(section.navKey), to: section.to };
 
   if (booting || !boot) return <Loading />;
 
@@ -78,11 +110,8 @@ export function ImportWizard() {
     return (
       <>
         <PageHeader
-          back="/labs"
-          breadcrumbs={crumbs(
-            { label: t("nav.labResults"), to: "/labs" },
-            { label: t("breadcrumb.importWizard") },
-          )}
+          back={section.to}
+          breadcrumbs={crumbs(sectionCrumb, { label: t("breadcrumb.importWizard") })}
           title={t("importWizard.title")}
         />
         <Card className="mx-auto max-w-lg">
@@ -212,11 +241,8 @@ export function ImportWizard() {
   return (
     <>
       <PageHeader
-        back="/labs"
-        breadcrumbs={crumbs(
-          { label: t("nav.labResults"), to: "/labs" },
-          { label: t("breadcrumb.importWizard") },
-        )}
+        back={section.to}
+        breadcrumbs={crumbs(sectionCrumb, { label: t("breadcrumb.importWizard") })}
         title={t("importWizard.title")}
         description={t("importWizard.description")}
       />

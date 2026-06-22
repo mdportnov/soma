@@ -33,12 +33,13 @@ export const VACCINE_EXTRACTION_PROMPT = `You are a data-extraction engine for v
 
 Extract EVERY administered vaccine dose and return ONLY a JSON array, with one object per dose:
 
-[{"vaccineName": string, "date": string | null, "doseNumber": number | null, "manufacturer": string | null, "batchNumber": string | null, "expiresAt": string | null}]
+[{"vaccineName": string, "disease": string | null, "date": string | null, "doseNumber": number | null, "manufacturer": string | null, "batchNumber": string | null, "expiresAt": string | null}]
 
 Strict rules:
-- "vaccineName" is the vaccine or disease name as printed (e.g. "COVID-19", "Hepatitis B", "Yellow fever"). Keep it readable; do not invent a name.
+- "vaccineName" is the vaccine or product name exactly as printed, in its original language (e.g. "ОПВ", "АКДС", "ЖКВ", "COVID-19", "Engerix"). Keep it as written; do not invent or translate it.
+- "disease" is the disease / antigen the dose protects against, in clinical ENGLISH (e.g. "Poliomyelitis", "Diphtheria, Tetanus, Pertussis", "Measles", "Hepatitis B", "Yellow fever"). This is the most important field for matching, so always fill it when you can tell what the vaccine is for — including from a section heading or a well-known abbreviation. Records are often grouped under a disease heading (e.g. "Полиомиелит (ОПВ)", "Корь (ЖКВ)"): use that heading's disease for every dose listed beneath it. Map common abbreviations: БЦЖ→Tuberculosis, ОПВ/ИПВ→Poliomyelitis, АКДС/АДС-М→Diphtheria, Tetanus, Pertussis, ЖКВ→Measles, ЖПВ→Mumps, Краснуха→Rubella, ДНК (in a Hepatitis B section)→Hepatitis B. Use null only if the antigen is genuinely unclear.
 - "date" is the administration date as ISO "YYYY-MM-DD". If the day/month/year is not fully legible, use null. Never guess.
-- "doseNumber" is the dose's position in its series as an integer (1, 2, 3…), or null if not stated.
+- "doseNumber" is the dose's position in its series as an integer (1, 2, 3…). For codes like "V1"/"V2"/"V3" (vaccination) use 1/2/3; for "R1"/"R2" (revaccination/booster) use the number after the R. Use null if not stated.
 - "manufacturer" is the vaccine manufacturer or product brand, or null.
 - "batchNumber" is the lot / batch / series number exactly as printed, or null.
 - "expiresAt" is the certificate or protection validity end date as ISO "YYYY-MM-DD", or null.

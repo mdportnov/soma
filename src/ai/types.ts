@@ -45,11 +45,14 @@ export type LabExtraction = {
 };
 
 /**
- * Vaccination-certificate extraction. No dictionary fallback exists, so every
- * row is reviewed manually before it reaches the database.
+ * Vaccination-certificate extraction. Each row is matched against the antigen
+ * library (`vaccine-vocab.ts`) and reviewed before it reaches the database.
  */
 export type RawVaccineExtraction = {
   vaccineName: string;
+  /** Disease/antigen the dose targets, in clinical English — the strongest
+   * signal for matching the dose to a calendar antigen. Null when unclear. */
+  disease: string | null;
   /** ISO `YYYY-MM-DD` administration date, or null when not legible. */
   date: string | null;
   /** Dose number within a series (1 of 3), or null. */

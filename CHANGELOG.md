@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Attachments are backed up and encrypted**: imported PDFs/photos are now
+  bundled into the encrypted backup (new v3 `.somabk` archive format; v1/v2 files
+  still restore) and sealed alongside the database under at-rest encryption (a
+  sibling `attachments.vault`), instead of being left out of backups and in
+  cleartext on disk.
 - **Failed loads no longer spin forever**: a rejected data query now surfaces an
   inline "couldn't load — retry" card (via a new per-route error boundary) instead
   of an endless spinner, and `reload()` resolves only after the refetch settles.

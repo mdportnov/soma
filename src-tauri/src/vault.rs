@@ -22,6 +22,12 @@
 //!
 //! The frontend always hands Rust a clean `VACUUM INTO` snapshot to encrypt, so
 //! the vault is a consistent database image with no separate WAL to replay.
+//!
+//! Imported attachment files (PDFs/photos) are sealed alongside the database in
+//! a sibling `attachments.vault` (an encrypted [`crate::archive`] of the
+//! attachments folder), so at-rest encryption covers them too instead of
+//! leaving the most sensitive documents in cleartext. They are restored to
+//! cleartext on unlock and re-sealed on the next lock.
 
 use std::fs;
 use std::path::PathBuf;
@@ -56,6 +62,11 @@ const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
 const VAULT_FILE: &str = "soma.db.vault";
 const DB_FILE: &str = "soma.db";
 const SNAPSHOT_STAGING: &str = "vault-snapshot-staging.db";
+/// Imported PDFs/photos live here in cleartext while the app runs; on lock they
+/// are packed and encrypted into `ATTACHMENTS_VAULT` so at-rest encryption
+/// covers the most sensitive documents too, not just the database.
+const ATTACHMENTS_DIR: &str = "attachments";
+const ATTACHMENTS_VAULT: &str = "attachments.vault";
 
 fn key_entry() -> Result<Entry, String> {
     Entry::new(KEYCHAIN_SERVICE, KEY_USER).map_err(|e| e.to_string())
@@ -156,13 +167,11 @@ fn read_keychain_key() -> Result<[u8; 32], String> {
         .map_err(|_| "stored key has the wrong length".to_string())
 }
 
-/// Encrypts a plaintext SQLite snapshot into the current (v2) `.vault` byte
-/// layout. Pure over its inputs apart from the random salt/nonce, so it is
-/// unit-tested without any filesystem or keychain access.
-fn encrypt_snapshot(plain: &[u8], source: KeySource, mode: u8) -> Result<Vec<u8>, String> {
-    if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
-        return Err("Snapshot is not a valid SQLite database".into());
-    }
+/// Encrypts arbitrary bytes into the current (v2) `.vault` byte layout. Pure
+/// over its inputs apart from the random salt/nonce, so it is unit-tested
+/// without any filesystem or keychain access. Used for both the database
+/// snapshot and the attachments archive (which share the key/format).
+fn seal(plain: &[u8], source: KeySource, mode: u8) -> Result<Vec<u8>, String> {
     let mut salt = [0u8; 16];
     let mut nonce = [0u8; 12];
     OsRng.fill_bytes(&mut salt);
@@ -190,6 +199,14 @@ fn encrypt_snapshot(plain: &[u8], source: KeySource, mode: u8) -> Result<Vec<u8>
     out.extend_from_slice(&nonce);
     out.extend_from_slice(&ciphertext);
     Ok(out)
+}
+
+/// Seals a database snapshot, asserting it really is a SQLite image first.
+fn encrypt_snapshot(plain: &[u8], source: KeySource, mode: u8) -> Result<Vec<u8>, String> {
+    if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
+        return Err("Snapshot is not a valid SQLite database".into());
+    }
+    seal(plain, source, mode)
 }
 
 /// Parsed vault header fields needed to derive the key and decrypt.
@@ -263,13 +280,19 @@ fn derive_key_for_header(passphrase: &str, header: &Header) -> Result<[u8; 32], 
     )
 }
 
-/// Decrypts a `.vault` blob with an already-resolved key, asserting the result
-/// is a SQLite database. A wrong key/passphrase fails the AES-GCM auth tag.
-fn decrypt_snapshot(raw: &[u8], header: &Header, key: &[u8; 32]) -> Result<Vec<u8>, String> {
+/// Decrypts a sealed `.vault` blob with an already-resolved key. A wrong
+/// key/passphrase fails the AES-GCM auth tag. Returns the raw plaintext without
+/// asserting its shape (the caller knows whether it's a DB or an archive).
+fn open(raw: &[u8], header: &Header, key: &[u8; 32]) -> Result<Vec<u8>, String> {
     let cipher = Aes256Gcm::new(key.into());
-    let plain = cipher
+    cipher
         .decrypt(Nonce::from_slice(&header.nonce), &raw[header.body_offset..])
-        .map_err(|_| "Wrong passphrase, or the vault is corrupted".to_string())?;
+        .map_err(|_| "Wrong passphrase, or the vault is corrupted".to_string())
+}
+
+/// Decrypts a `.vault` blob, asserting the result is a SQLite database.
+fn decrypt_snapshot(raw: &[u8], header: &Header, key: &[u8; 32]) -> Result<Vec<u8>, String> {
+    let plain = open(raw, header, key)?;
     if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
         return Err("Decrypted data is not a SQLite database".into());
     }
@@ -353,6 +376,97 @@ fn write_vault_from_snapshot(
     Ok(())
 }
 
+// ── attachments (sealed alongside the DB, in a sibling file) ──────────────────
+
+/// How to obtain the attachments-vault key on restore.
+enum Unlock<'a> {
+    Keychain,
+    Passphrase(&'a str),
+}
+
+fn attachments_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(config_dir(app)?.join(ATTACHMENTS_DIR))
+}
+
+fn attachments_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(config_dir(app)?.join(ATTACHMENTS_VAULT))
+}
+
+/// Reads every regular file in the attachments dir as an archive entry.
+fn read_attachment_entries(dir: &std::path::Path) -> Result<Vec<archive::Entry>, String> {
+    let mut entries = Vec::new();
+    if !dir.is_dir() {
+        return Ok(entries);
+    }
+    for e in fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let path = e.map_err(|e| e.to_string())?.path();
+        if path.is_file() {
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or("attachment has a non-UTF-8 name")?
+                .to_string();
+            let data = fs::read(&path).map_err(|e| format!("read attachment: {e}"))?;
+            entries.push(archive::Entry {
+                name: format!("{ATTACHMENTS_DIR}/{name}"),
+                data,
+            });
+        }
+    }
+    Ok(entries)
+}
+
+/// Packs the attachments into an encrypted sibling vault and removes the
+/// cleartext files. A no-op (clearing any stale vault) when there are none.
+fn seal_attachments(app: &tauri::AppHandle, source: KeySource, mode: u8) -> Result<(), String> {
+    let dir = attachments_dir(app)?;
+    let entries = read_attachment_entries(&dir)?;
+    let target = attachments_vault_path(app)?;
+    if entries.is_empty() {
+        if target.exists() {
+            let _ = fs::remove_file(&target);
+        }
+        return Ok(());
+    }
+    let packed = archive::pack(&entries);
+    let out = seal(&packed, source, mode)?;
+    atomic_write(&target, &out)?;
+    // Only now, with the encrypted copy durably written, remove the plaintext.
+    for e in &entries {
+        let name = e.name.trim_start_matches(&format!("{ATTACHMENTS_DIR}/"));
+        let _ = fs::remove_file(dir.join(name));
+    }
+    Ok(())
+}
+
+/// Decrypts the attachments vault back into cleartext files and removes it.
+fn restore_attachments(app: &tauri::AppHandle, unlock: Unlock) -> Result<(), String> {
+    let vault = attachments_vault_path(app)?;
+    if !vault.exists() {
+        return Ok(());
+    }
+    let raw = fs::read(&vault).map_err(|e| format!("read attachments vault: {e}"))?;
+    let header = parse_header(&raw)?;
+    let key = match unlock {
+        Unlock::Keychain => read_keychain_key()?,
+        Unlock::Passphrase(p) => derive_key_for_header(p, &header)?,
+    };
+    let plain = open(&raw, &header, &key)?;
+    let entries = archive::unpack(&plain)?;
+    let dir = attachments_dir(app)?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    for e in entries {
+        let name = e.name.trim_start_matches(&format!("{ATTACHMENTS_DIR}/"));
+        // Reject a tampered archive that tries to escape the attachments dir.
+        if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
+            continue;
+        }
+        atomic_write(&dir.join(name), &e.data)?;
+    }
+    let _ = fs::remove_file(&vault);
+    Ok(())
+}
+
 /// Turns on keychain-mode encryption: mints/loads the keychain key and writes an
 /// initial vault from the snapshot. The app keeps running on the plaintext DB;
 /// the plaintext is only removed on the next clean exit (lock).
@@ -402,7 +516,8 @@ pub fn vault_unlock_keychain(app: tauri::AppHandle) -> Result<(), String> {
     let header = parse_header(&raw)?;
     let key = read_keychain_key()?;
     let plain = decrypt_snapshot(&raw, &header, &key)?;
-    write_plaintext_db(&app, &plain)
+    write_plaintext_db(&app, &plain)?;
+    restore_attachments(&app, Unlock::Keychain)
 }
 
 /// Decrypts the vault into `soma.db` using a passphrase. A wrong passphrase is
@@ -413,7 +528,8 @@ pub fn vault_unlock_passphrase(app: tauri::AppHandle, passphrase: String) -> Res
     let header = parse_header(&raw)?;
     let key = derive_key_for_header(&passphrase, &header)?;
     let plain = decrypt_snapshot(&raw, &header, &key)?;
-    write_plaintext_db(&app, &plain)
+    write_plaintext_db(&app, &plain)?;
+    restore_attachments(&app, Unlock::Passphrase(&passphrase))
 }
 
 /// Verifies a passphrase against the vault WITHOUT writing `soma.db`. Used on an
@@ -450,6 +566,7 @@ fn remove_plaintext(app: &tauri::AppHandle) -> Result<(), String> {
 pub fn vault_lock_keychain(app: tauri::AppHandle, snapshot_path: String) -> Result<(), String> {
     let key = read_keychain_key()?;
     write_vault_from_snapshot(&app, &snapshot_path, KeySource::Raw(&key), MODE_KEYCHAIN)?;
+    seal_attachments(&app, KeySource::Raw(&key), MODE_KEYCHAIN)?;
     remove_plaintext(&app)
 }
 
@@ -466,6 +583,7 @@ pub fn vault_lock_passphrase(
         KeySource::Passphrase(&passphrase),
         MODE_PASSPHRASE,
     )?;
+    seal_attachments(&app, KeySource::Passphrase(&passphrase), MODE_PASSPHRASE)?;
     remove_plaintext(&app)
 }
 

@@ -81,14 +81,20 @@ export function JournalOverview({
   onEditGoal: () => void;
 }) {
   const { t, lang } = useI18n();
-  const { data, loading } = useQuery(async () => {
-    const [weight, bp, symptoms] = await Promise.all([
-      listWeightLog(profileId),
-      listBpLog(profileId),
-      listSymptomLog(profileId),
-    ]);
-    return { weight, bp, symptoms };
-  }, [profileId]);
+  const { data, loading } = useQuery(
+    async () => {
+      const [weight, bp, symptoms] = await Promise.all([
+        listWeightLog(profileId),
+        listBpLog(profileId),
+        listSymptomLog(profileId),
+      ]);
+      return { weight, bp, symptoms };
+    },
+    [profileId],
+    // Self-contained overview chart — keep its own empty/loading handling
+    // rather than escalating a failure to the page error boundary.
+    { throwOnError: false },
+  );
   const [range, setRange] = React.useState<RangeKey>("all");
 
   if (loading || !data) return <Loading />;

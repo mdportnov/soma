@@ -174,6 +174,7 @@ export function VisitForm({
       title={editing ? t("visits.addDialog.titleEdit") : t("visits.addDialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !date}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-3">

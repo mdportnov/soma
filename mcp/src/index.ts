@@ -18,6 +18,7 @@ import {
 import { computeFlag, convertToDefaultUnit } from "../../src/lib/units";
 import { openDb, resolveDbPath } from "./db";
 import { describeCandidates, matchBiomarker } from "./mapping";
+import { WRITES_DISABLED_MESSAGE, writesAllowed } from "./guard";
 
 const INSTRUCTIONS = `Soma is a local-first personal health database (labs, medications, visits, diagnoses, allergies, vaccines, symptoms, weight and blood pressure).
 Domain rules you must follow:
@@ -26,7 +27,7 @@ Domain rules you must follow:
 - Values are stored in the biomarker's default unit; out-of-range flags are computed against the reference range in that unit.
 - All dates are ISO 8601 (YYYY-MM-DD). Medications have intake periods (startDate, endDate; endDate=null means currently taking) — when interpreting a biomarker, symptom or BP trend, correlate changes with overlapping medication periods returned by get_biomarker_trend / get_symptom_trend.
 - Trends: get_symptom_trend (severity over time + overlapping meds), get_weight_trend (kg vs target), get_bp_trend (systolic/diastolic with normal/stage2/crisis flags).
-- Writes are validated strictly: add_lab_panel, add_allergy, add_vaccine and log_symptom validate dates (no future dates) and enums, refuse instead of guessing, and support dryRun=true to preview the exact row. log_symptom reuses the existing spelling of a known symptom when it matches case-insensitively.
+- Writes are validated strictly: add_lab_panel, add_allergy, add_vaccine and log_symptom validate dates (no future dates) and enums, refuse instead of guessing, and support dryRun=true to preview the exact row. log_symptom reuses the existing spelling of a known symptom when it matches case-insensitively. Write tools are disabled unless the user set SOMA_MCP_ALLOW_WRITES=1 for this server; if a write is refused for that reason, tell the user to enable it in their MCP client config rather than retrying.
 - This is personal medical data. Be precise, never fabricate values, and do not write anything the user did not explicitly provide.`;
 
 const dbPath = resolveDbPath();
@@ -49,6 +50,14 @@ function ok(data: unknown): ToolResult {
 function fail(message: string): ToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
+
+/**
+ * Write tools are opt-in via SOMA_MCP_ALLOW_WRITES. Any local client can reach
+ * this server, so inserting health records is gated behind an explicit env flag
+ * the user sets in their MCP client config, not left to whichever model calls a
+ * tool. Read tools are always available.
+ */
+const WRITES_ENABLED = writesAllowed(process.env);
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -518,6 +527,7 @@ server.registerTool(
     },
   },
   async ({ profileId, date, labName, city, country, panelType, results, dryRun }) => {
+    if (!WRITES_ENABLED) return fail(WRITES_DISABLED_MESSAGE);
     if (!db.writable) {
       return fail(`Database is read-only for this server: ${db.schemaNote}`);
     }
@@ -618,8 +628,8 @@ server.registerTool(
           labName: labName ?? null,
           city: city ?? null,
           country: country ?? null,
-          panelType,
-          importMethod: "manual",
+          sampleTypes: [panelType],
+          importMethod: "mcp",
         })
         .returning({ id: labPanel.id })
         .get();
@@ -676,6 +686,7 @@ server.registerTool(
     },
   },
   async ({ profileId, allergen, category, severity, reaction, onsetDate, notes, dryRun }) => {
+    if (!WRITES_ENABLED) return fail(WRITES_DISABLED_MESSAGE);
     if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
     const pid = resolveProfileId(profileId);
     if ("error" in pid) return fail(pid.error);
@@ -732,6 +743,7 @@ server.registerTool(
     notes,
     dryRun,
   }) => {
+    if (!WRITES_ENABLED) return fail(WRITES_DISABLED_MESSAGE);
     if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
     const pid = resolveProfileId(profileId);
     if ("error" in pid) return fail(pid.error);
@@ -782,6 +794,7 @@ server.registerTool(
     },
   },
   async ({ profileId, symptomName, severity, date, time, notes, dryRun }) => {
+    if (!WRITES_ENABLED) return fail(WRITES_DISABLED_MESSAGE);
     if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
     const pid = resolveProfileId(profileId);
     if ("error" in pid) return fail(pid.error);

@@ -34,9 +34,11 @@ export class OpenRouterProvider extends BaseProvider {
         max_tokens: req.maxTokens,
         messages: [
           ...(req.system ? [{ role: "system", content: req.system }] : []),
+          ...(req.history ?? []).map((m) => ({ role: m.role, content: m.content })),
           { role: "user", content },
         ],
       },
+      req.signal,
     );
 
     const text = data.choices?.[0]?.message?.content ?? "";

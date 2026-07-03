@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Attachments are backed up and encrypted**: imported PDFs/photos are now
+  bundled into the encrypted backup (new v3 `.somabk` archive format; v1/v2 files
+  still restore) and sealed alongside the database under at-rest encryption (a
+  sibling `attachments.vault`), instead of being left out of backups and in
+  cleartext on disk.
+- **Failed loads no longer spin forever**: a rejected data query now surfaces an
+  inline "couldn't load — retry" card (via a new per-route error boundary) instead
+  of an endless spinner, and `reload()` resolves only after the refetch settles.
+- **Failed writes are no longer silent**: added an error-toast variant and a global
+  safety net that surfaces otherwise-swallowed write failures (DB locked, disk
+  full, guard rejections) instead of leaving the UI silently stale.
+- **AI import — large documents**: oversized files are rejected before the API
+  call with clear guidance; a response the model truncated at the token cap now
+  salvages its complete rows instead of failing the whole import; provider 413/400
+  errors map to actionable messages.
+- **AI import — discharge allergies** are categorised (drug/food/environmental/
+  other) instead of all being saved as drug allergies.
+- **AI import — biomarker mapping** runs with bounded concurrency and surfaces a
+  retryable error on rate-limit/network failures instead of silently leaving rows
+  unmapped.
+- **Full-text search restored**: the `fts_records` FTS5 table (lost in a migration
+  squash) is now created by a real migration, so global search and the ⌘K palette
+  return results on fresh installs again; the "no such table" error is no longer
+  swallowed silently.
+- **Crash-safe at-rest encryption and backups**: the vault lock, the vault→plaintext
+  unlock and the backup/staging writes now write to a temp file, fsync, and rename
+  atomically before removing any source — a power loss mid-write can no longer leave
+  a truncated vault with the plaintext already deleted.
+- **Backups survive an Argon2 default change**: the vault and backup formats (now v2)
+  store their Argon2id parameters in the header; older v1 files still decrypt under
+  the pinned legacy parameters. Previously a crate-default change would have made
+  every existing backup and vault permanently unreadable.
+- **Restore of older backups**: `schemaVersion` is now an explicit constant instead
+  of the count of migration files, so backups written by pre-squash builds are no
+  longer wrongly rejected as "newer than the app".
+- **Attachment files are deleted with their records**: removing a record now removes
+  the backing imported PDF/photo from disk instead of leaking it forever.
+
+### Security
+
+- **MCP write tools are opt-in**: `add_lab_panel`, `add_allergy`, `add_vaccine` and
+  `log_symptom` are disabled unless `SOMA_MCP_ALLOW_WRITES=1` is set for the server,
+  so a connected assistant can no longer silently insert safety-critical health
+  records. Rows written via MCP are stamped `import_method = "mcp"` for provenance,
+  and a locked (encrypted) database now reports "unlock the app" instead of "not
+  found".
+
 ### Added
 
 - **Lifestyle context** (v0.3): a dedicated `/lifestyle` page with daily sleep / training /

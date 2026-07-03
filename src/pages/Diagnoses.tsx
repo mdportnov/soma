@@ -529,6 +529,7 @@ export function DiagnosisForm({
       title={editing ? t("diagnoses.addDialog.titleEdit") : t("diagnoses.addDialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !canSave}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <Field label={t("fields.name")}>

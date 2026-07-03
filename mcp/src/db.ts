@@ -5,6 +5,7 @@ import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "../../src/db/schema";
 import journal from "../../src/db/migrations/meta/_journal.json";
+import { missingDbMessage, vaultLockedMessage } from "./guard";
 
 const APP_IDENTIFIER = "com.soma.health";
 const DB_FILE = "soma.db";
@@ -93,9 +94,13 @@ function checkSchema(sqlite: Database): { writable: boolean; note: string | null
 
 export function openDb(dbPath: string): SomaDb {
   if (!fs.existsSync(dbPath)) {
-    throw new Error(
-      `Soma database not found at ${dbPath}. Run the Soma app once to create it, or pass --db <path> / set SOMA_DB.`,
-    );
+    // With at-rest encryption enabled the app replaces soma.db by an
+    // encrypted soma.db.vault on exit (src-tauri/src/vault.rs) — tell the
+    // user to unlock instead of claiming the database doesn't exist.
+    if (fs.existsSync(`${dbPath}.vault`)) {
+      throw new Error(vaultLockedMessage(dbPath));
+    }
+    throw new Error(missingDbMessage(dbPath));
   }
   const sqlite = new Database(dbPath);
   sqlite.exec("PRAGMA journal_mode = WAL;");

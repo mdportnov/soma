@@ -25,8 +25,16 @@ const migrationFiles = import.meta.glob<string>("./migrations/*.sql", {
 
 const BREAKPOINT = "--> statement-breakpoint";
 
-/** Schema version = number of bundled migrations; stamped into backup files. */
-export const schemaVersion = Object.keys(migrationFiles).length;
+/**
+ * Schema version stamped into backup files and compared on restore.
+ *
+ * This is an explicit constant, NOT the count of bundled migration files: the
+ * pre-squash history reached 6 (backups written by those builds carry 6), and
+ * squashing the migrations into one file would have reset a count-based version
+ * to 1 — wrongly rejecting every older backup as "newer than the app". Bump it
+ * by hand whenever a new migration is added (0001_fts_records → 7).
+ */
+export const schemaVersion = 7;
 
 /** Minimal connection surface the migrator needs — lets it be unit-tested with
  *  a stub instead of a real SQLite handle. */

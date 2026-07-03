@@ -39,6 +39,10 @@ type ImportError = {
   message: string;
 };
 
+/** Upper bound on a document sent to a provider. Vision models cap request size
+ *  (typically ~20–30 MB incl. base64 overhead); reject earlier with guidance. */
+const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
+
 type Step =
   | { name: "selectType" }
   | { name: "pick" }
@@ -170,6 +174,18 @@ export function ImportWizard() {
             affordance: "retry",
             message: t("importErrors.parseFailed"),
           };
+        case "too_large":
+          return {
+            kind: "too_large",
+            affordance: "switchType",
+            message: t("importErrors.tooLarge"),
+          };
+        case "bad_request":
+          return {
+            kind: "bad_request",
+            affordance: "none",
+            message: t("importErrors.badRequest"),
+          };
         default:
           return { kind: "unknown", affordance: "none", message: e.message };
       }
@@ -200,6 +216,19 @@ export function ImportWizard() {
     setError(null);
     try {
       const bytes = await readFile(filePath);
+      // Guard before spending an API call: an oversized file is rejected by the
+      // provider (413) after a slow upload, so fail fast with clear guidance.
+      if (bytes.byteLength > MAX_IMPORT_BYTES) {
+        setError({
+          kind: "too_large",
+          affordance: "switchType",
+          message: t("importErrors.fileTooLarge", {
+            limit: String(Math.round(MAX_IMPORT_BYTES / (1024 * 1024))),
+          }),
+        });
+        setStep({ name: "pick" });
+        return;
+      }
       const doc = {
         base64: toBase64(bytes),
         mimeType: mimeFromPath(filePath),
@@ -338,6 +367,9 @@ export function ImportWizard() {
                   </Button>
                 </>
               )}
+              <p className="mt-5 max-w-sm text-[11px] leading-snug text-muted-foreground">
+                {t("importWizard.privacyNotice")}
+              </p>
             </CardContent>
           </Card>
         )}

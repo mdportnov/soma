@@ -19,6 +19,10 @@ export class AnthropicProvider extends BaseProvider {
             },
     );
 
+    const messages = [
+      ...(req.history ?? []).map((m) => ({ role: m.role, content: m.content })),
+      { role: "user", content },
+    ];
     const data = await this.postJson(
       "https://api.anthropic.com/v1/messages",
       {
@@ -29,8 +33,9 @@ export class AnthropicProvider extends BaseProvider {
         model: this.model,
         max_tokens: req.maxTokens,
         ...(req.system ? { system: req.system } : {}),
-        messages: [{ role: "user", content }],
+        messages,
       },
+      req.signal,
     );
 
     const text = (data.content ?? [])

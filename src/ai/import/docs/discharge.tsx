@@ -13,7 +13,12 @@ import type { RawDischargeExtraction } from "../../types";
 import type { DocTypeModule, ReviewProps } from "../registry";
 import { asArray, asObject, expectObject, isoDateOrNull, nullableStr } from "../validate";
 import { resolveEnum, parseDose } from "../resolve";
-import { ALLERGY_SEVERITY_VOCAB, type AllergySeverity } from "../vocab";
+import {
+  ALLERGY_SEVERITY_VOCAB,
+  ALLERGY_CATEGORY_VOCAB,
+  type AllergySeverity,
+  type AllergyCategory,
+} from "../vocab";
 import { ReviewBanner } from "../ReviewBanner";
 import { storeSourceAttachment } from "../save-helpers";
 import {
@@ -53,6 +58,7 @@ type DischargeRow =
       name: string;
       reaction: string | null;
       severity: AllergySeverity;
+      category: AllergyCategory;
     };
 
 export type DischargeDraft = { meta: DischargeMeta; rows: DischargeRow[] };
@@ -82,12 +88,19 @@ function validateDischarge(parsed: unknown): RawDischargeExtraction {
             allergen,
             reaction: nullableStr(r!.reaction, 200),
             severity: nullableStr(r!.severity, 40),
+            category: nullableStr(r!.category, 40),
           }
         : null;
     })
     .filter(
-      (a): a is { allergen: string; reaction: string | null; severity: string | null } =>
-        a !== null,
+      (
+        a,
+      ): a is {
+        allergen: string;
+        reaction: string | null;
+        severity: string | null;
+        category: string | null;
+      } => a !== null,
     );
   return {
     visitDate: isoDateOrNull(o.visitDate),
@@ -136,6 +149,10 @@ export const dischargeModule: DocTypeModule<DischargeDraft> = {
           name: a.allergen,
           reaction: a.reaction,
           severity: resolveEnum(a.severity, ALLERGY_SEVERITY_VOCAB, "moderate").value,
+          // Resolve the category from the summary; never assume "drug" — a
+          // mis-categorised food/environmental allergy would feed the
+          // drug-interaction warnings incorrectly.
+          category: resolveEnum(a.category, ALLERGY_CATEGORY_VOCAB, "other").value,
         }),
       ),
     ];
@@ -206,7 +223,7 @@ export const dischargeModule: DocTypeModule<DischargeDraft> = {
         await createAllergy({
           profileId: ctx.profileId,
           allergen: r.name.trim(),
-          category: "drug",
+          category: r.category,
           severity: r.severity,
           reaction: r.reaction?.trim() || null,
           onsetDate: null,

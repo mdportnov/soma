@@ -84,6 +84,7 @@ export function EditBiomarkerDialog({
       description={biomarker ? `${biomarker.canonicalName} · ${biomarker.defaultUnit}` : undefined}
       onSubmit={submit}
       submitDisabled={saving}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-3">

@@ -70,11 +70,35 @@ Migrations are owned by the app. On startup the server compares the
 `__migrations` table against `src/db/migrations/`; on any mismatch it degrades
 to **read-only** and write tools explain why.
 
+## Write access
+
+Write tools (`add_lab_panel`, `add_allergy`, `add_vaccine`, `log_symptom`) are
+**disabled by default**. Any local process can talk to a stdio MCP server, so
+inserting health records — including safety-critical allergy and vaccine rows —
+requires an explicit opt-in: set `SOMA_MCP_ALLOW_WRITES=1` in the environment of
+the server process. In an MCP client config, add it to the `soma` server entry:
+
+```json
+{
+  "mcpServers": {
+    "soma": {
+      "command": "soma-mcp",
+      "env": { "SOMA_MCP_ALLOW_WRITES": "1" }
+    }
+  }
+}
+```
+
+Without the flag every write tool refuses with an explanation and all read tools
+keep working. Rows written via MCP are stamped `import_method = "mcp"` so their
+provenance is distinguishable from hand-entered and AI-imported data.
+
 ## Notes
 
 - No raw SQL is exposed — only typed, validated tools.
 - `add_lab_panel` reuses the app's unit-conversion (`src/lib/units.ts`) and
   fuzzy-matching (`src/lib/fuzzy.ts`) code paths; unmapped or inconvertible
   rows reject the whole panel atomically.
-- Panels written via MCP currently get `import_method = "manual"`; a dedicated
-  `mcp` source value needs a schema migration (TODO).
+- If at-rest encryption is enabled and the app is closed, only an encrypted
+  `soma.db.vault` exists on disk; the server reports that the database is locked
+  and asks you to open the app, rather than claiming it is missing.

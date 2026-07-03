@@ -419,6 +419,7 @@ function LifestyleForm({
       title={editing ? t("lifestyle.dialog.titleEdit") : t("lifestyle.dialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <Field label={t("lifestyle.fields.date")}>

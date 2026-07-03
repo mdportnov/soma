@@ -62,9 +62,7 @@ function asMatch(entry: ScheduleEntry, confidence: VaccineMatchConfidence): Vacc
 /** True when `token` appears as a whole word (or word run) inside `text`. */
 function wordContains(text: string, token: string): boolean {
   if (text === token) return true;
-  return (
-    text.startsWith(`${token} `) || text.endsWith(` ${token}`) || text.includes(` ${token} `)
-  );
+  return text.startsWith(`${token} `) || text.endsWith(` ${token}`) || text.includes(` ${token} `);
 }
 
 /**
@@ -100,7 +98,10 @@ export function resolveVaccine(
   for (const idx of INDEX) {
     for (const token of [...idx.primary, ...idx.aliases]) {
       if (token.length < MIN_LOOSE_TOKEN) continue;
-      if (inputs.some((inp) => wordContains(inp, token)) && token.length > (bestContain?.len ?? 0)) {
+      if (
+        inputs.some((inp) => wordContains(inp, token)) &&
+        token.length > (bestContain?.len ?? 0)
+      ) {
         bestContain = { entry: idx.entry, len: token.length };
       }
     }

@@ -214,7 +214,10 @@ export const labPanel = sqliteTable(
     /** Free-text panel context: assay/method, "2h post-meal", lab certification… */
     notes: text("notes"),
     sourceFileId: integer("source_file_id").references(() => attachment.id),
-    importMethod: text("import_method", { enum: ["manual", "ai"] })
+    // "mcp" = written by the local MCP server (provenance for AI-assistant
+    // writes). No DB CHECK constraint backs this enum, so no migration is
+    // needed to add a value; the app UI treats anything but "ai" as manual.
+    importMethod: text("import_method", { enum: ["manual", "ai", "mcp"] })
       .notNull()
       .default("manual"),
     createdAt: text("created_at")

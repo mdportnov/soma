@@ -21,6 +21,10 @@ export class OpenAIProvider extends BaseProvider {
             },
     );
 
+    const history = (req.history ?? []).map((m) => ({
+      role: m.role,
+      content: [{ type: m.role === "assistant" ? "output_text" : "input_text", text: m.content }],
+    }));
     const data = await this.postJson(
       "https://api.openai.com/v1/responses",
       { Authorization: `Bearer ${this.apiKey}` },
@@ -28,8 +32,9 @@ export class OpenAIProvider extends BaseProvider {
         model: this.model,
         max_output_tokens: req.maxTokens,
         ...(req.system ? { instructions: req.system } : {}),
-        input: [{ role: "user", content }],
+        input: [...history, { role: "user", content }],
       },
+      req.signal,
     );
 
     const text = (data.output ?? [])

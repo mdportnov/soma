@@ -301,6 +301,7 @@ function VaccineForm({
       title={editing ? t("vaccines.addDialog.titleEdit") : t("vaccines.addDialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !canSave}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-[1fr_9rem] gap-3">

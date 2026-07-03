@@ -194,12 +194,23 @@ describe("mapExtractions — narrow AI disambiguation fallback", () => {
     ).rejects.toBeInstanceOf(AIProviderError);
   });
 
-  it("swallows a non-auth provider error and leaves the row unmapped", async () => {
-    const flaky = new AIProviderError("overloaded", 503, "overloaded");
+  it("aborts on a systemic transient error (rate-limit/overloaded/network) rather than silently unmapping", async () => {
+    // These fail identically on every remaining row, so a swallowed error would
+    // hand back a review screen full of unmapped rows with no explanation.
+    for (const kind of ["rate_limit", "overloaded", "network"] as const) {
+      const err = new AIProviderError(kind, 503, kind);
+      await expect(
+        mapExtractions([raw({ raw_label: "Cholesterol" })], dict, fakeProvider(null, err)),
+      ).rejects.toBeInstanceOf(AIProviderError);
+    }
+  });
+
+  it("swallows a genuinely per-row/unexpected error and leaves that row unmapped", async () => {
+    const oddball = new AIProviderError("weird one-off", 500, "unknown");
     const rows = await mapExtractions(
       [raw({ raw_label: "Cholesterol" })],
       dict,
-      fakeProvider(null, flaky),
+      fakeProvider(null, oddball),
     );
     expect(rows[0].biomarkerId).toBe(null);
   });

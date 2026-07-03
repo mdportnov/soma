@@ -2,6 +2,7 @@ import { fetch } from "@tauri-apps/plugin-http";
 import {
   AIProviderError,
   isRetryableError,
+  type AIErrorKind,
   type AIProvider,
   type ChatMessage,
   type DocumentInput,
@@ -13,8 +14,18 @@ export type UserPart = { type: "text"; text: string } | { type: "document"; doc:
 
 export type CompletionRequest = {
   system?: string;
+  /**
+   * Prior conversation turns, sent as native role messages before `parts`.
+   * Chat uses this so multi-turn context keeps real user/assistant roles
+   * instead of being flattened into one text blob (better instruction-following
+   * and prompt caching). Extraction/mapping leave it empty.
+   */
+  history?: ChatMessage[];
   parts: UserPart[];
   maxTokens: number;
+  /** Caller-supplied cancellation (e.g. a chat "Stop" button). Combined with
+   *  the internal timeout so either can abort the request. */
+  signal?: AbortSignal;
 };
 
 /**
@@ -73,20 +84,22 @@ export abstract class BaseProvider implements AIProvider {
     return candidates.some((c) => c.biomarker_id === id) ? id : null;
   }
 
-  async chat(messages: ChatMessage[], systemPrompt?: string): Promise<string> {
+  async chat(
+    messages: ChatMessage[],
+    systemPrompt?: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
     const last = messages[messages.length - 1];
     if (!last || last.role !== "user") {
       throw new AIProviderError("Chat requires a trailing user message");
     }
-    const history = messages
-      .slice(0, -1)
-      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-      .join("\n\n");
-    const text = history ? `${history}\n\nUser: ${last.content}` : last.content;
     return this.complete({
       system: systemPrompt,
-      parts: [{ type: "text", text }],
+      // Real role messages for the prior turns; the final user turn is `parts`.
+      history: messages.slice(0, -1),
+      parts: [{ type: "text", text: last.content }],
       maxTokens: 4096,
+      signal,
     });
   }
 
@@ -108,9 +121,16 @@ export abstract class BaseProvider implements AIProvider {
     url: string,
     headers: Record<string, string>,
     body: unknown,
+    externalSignal?: AbortSignal,
   ): Promise<any> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.transport.timeoutMs);
+    // Forward a caller cancellation (chat "Stop") onto the fetch controller.
+    const onExternalAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort();
+      else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
     let res: Response;
     try {
       res = await fetch(url, {
@@ -120,6 +140,10 @@ export abstract class BaseProvider implements AIProvider {
         signal: controller.signal,
       });
     } catch (e) {
+      // A caller-initiated cancel is not an error to report or retry.
+      if (externalSignal?.aborted) {
+        throw new AIProviderError("Request cancelled", undefined, "cancelled");
+      }
       // An aborted fetch is our timeout firing, not a generic transport error —
       // label it as such (still "network", so it is retried) for a clear message.
       if (controller.signal.aborted) {
@@ -136,6 +160,7 @@ export abstract class BaseProvider implements AIProvider {
       );
     } finally {
       clearTimeout(timer);
+      if (externalSignal) externalSignal.removeEventListener("abort", onExternalAbort);
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -160,11 +185,12 @@ export abstract class BaseProvider implements AIProvider {
     url: string,
     headers: Record<string, string>,
     body: unknown,
+    signal?: AbortSignal,
   ): Promise<any> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.transport.retryDelaysMs.length; attempt++) {
       try {
-        return await this.postJsonOnce(url, headers, body);
+        return await this.postJsonOnce(url, headers, body, signal);
       } catch (e) {
         lastError = e;
         const delay = this.nextDelayMs(e, attempt);
@@ -259,9 +285,11 @@ function parseModelJson(text: string): unknown {
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Maps an HTTP status onto the coarse error taxonomy the UI branches on. */
-function classifyStatus(status: number): "auth" | "rate_limit" | "overloaded" | "unknown" {
+function classifyStatus(status: number): AIErrorKind {
   if (status === 401 || status === 403) return "auth";
   if (status === 429) return "rate_limit";
   if (status === 503 || status === 529) return "overloaded";
+  if (status === 413) return "too_large";
+  if (status === 400 || status === 404) return "bad_request";
   return "unknown";
 }

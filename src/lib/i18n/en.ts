@@ -41,6 +41,11 @@ export const en = {
     inputHint: "Enter to send, Shift+Enter for a new line. Not medical advice.",
     thinking: "Thinking…",
     retry: "Retry",
+    stop: "Stop",
+    clear: "Clear chat",
+    viewContext: "What the assistant can see",
+    contextExplainer:
+      "This summary of your record is sent with each question. Names are omitted. Nothing else leaves your device.",
   },
   aiInterpretation: {
     title: "AI interpretation",
@@ -49,6 +54,7 @@ export const en = {
     loading: "Analyzing…",
     retry: "Retry",
     regenerate: "Regenerate",
+    cached: "Saved from your last run",
     errorAuth: "API key was rejected. Check your AI settings.",
     errorGeneric: "Couldn't get a response. Please try again.",
   },
@@ -75,6 +81,19 @@ export const en = {
   },
 
   // Common actions
+  dialog: {
+    discardTitle: "Discard changes?",
+    discardBody: "You have unsaved changes. Closing now will lose them.",
+    discard: "Discard",
+    keepEditing: "Keep editing",
+  },
+  errors: {
+    pageTitle: "This page couldn't load",
+    pageBody:
+      "Something went wrong while loading your data. The error was written to the log file (Settings → Open logs).",
+    retry: "Retry",
+    actionFailed: "That action couldn't be completed. Please try again.",
+  },
   common: {
     save: "Save",
     cancel: "Cancel",
@@ -1122,6 +1141,8 @@ export const en = {
     extractResults: "Extract results",
     fileFormats: "PDF, JPG, PNG or WebP",
     chooseFile: "Choose file",
+    privacyNotice:
+      "The selected document is sent in full to your configured AI provider for extraction. Everything else stays on your device.",
     extractingMapping: "Extracting and mapping…",
     extractingMappingDetail:
       "Phase 1: structured extraction. Phase 2: matching against your biomarker dictionary (exact → alias → fuzzy → AI disambiguation).",
@@ -1321,6 +1342,12 @@ export const en = {
     truncatedBody:
       "The response was cut off, so some results may be missing. Review carefully or split the file.",
     parseFailed: "The AI returned an unreadable response. Try again.",
+    tooLarge:
+      "The document is too large for the AI provider. Try splitting the PDF or importing fewer pages at a time.",
+    fileTooLarge:
+      "This file is larger than {{limit}} MB — too big to send to the AI provider. Split the PDF or use a smaller scan.",
+    badRequest:
+      "The AI provider rejected the request. The selected model may not accept PDFs or images — pick a vision-capable model in Settings.",
     droppedRows: "{{count}} non-numeric row(s) were skipped (e.g. positive/negative, titres).",
     showDropped: "Show skipped rows",
     dateNotRecognized: "Couldn't read the collection date — defaulted to today. Please set it.",

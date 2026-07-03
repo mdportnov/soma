@@ -6,7 +6,7 @@ import { bpStageColor } from "@/lib/vitals";
 import { useI18n } from "@/lib/i18n";
 import { Tooltip } from "@/components/ui/tooltip";
 import { OVERLAY_COLORS } from "./TrendChart";
-import { cn, formatDate, formatValue } from "@/lib/utils";
+import { cn, formatDate, formatValue, uiLocale } from "@/lib/utils";
 
 /** Medications shown before the lane collapses behind a "show more" toggle. */
 const MED_LIMIT = 5;
@@ -121,7 +121,7 @@ export function EnrichedTimeline({
     if (cursor.getUTCMonth() % step === 0) {
       ticks.push({
         t: cursor.getTime(),
-        label: cursor.toLocaleDateString("en-GB", {
+        label: cursor.toLocaleDateString(uiLocale(), {
           month: "short",
           ...(step >= 3 || cursor.getUTCMonth() === 0 ? { year: "2-digit" } : {}),
         }),

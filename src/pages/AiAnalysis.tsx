@@ -1,12 +1,22 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Loader2, Send, Settings as SettingsIcon, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  Loader2,
+  Send,
+  Settings as SettingsIcon,
+  Sparkles,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getConfiguredProvider } from "@/ai";
 import { buildHealthContext } from "@/ai/context";
 import { buildHealthChatSystem } from "@/ai/prompts";
-import type { ChatMessage } from "@/ai/types";
+import { AIProviderError, type ChatMessage } from "@/ai/types";
+import { clearChat, loadChat, MAX_CHAT_MESSAGES, saveChat } from "@/lib/chat-store";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
@@ -29,15 +39,30 @@ export function AiAnalysis() {
     [profileId],
   );
 
-  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
+  const [messages, setMessages] = React.useState<ChatMessage[]>(() => loadChat(profileId));
   const [input, setInput] = React.useState("");
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [showContext, setShowContext] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const abortRef = React.useRef<AbortController | null>(null);
+
+  // Reload the persisted thread when the active profile changes.
+  React.useEffect(() => {
+    setMessages(loadChat(profileId));
+  }, [profileId]);
+
+  // Persist on every change so navigation away never loses the conversation.
+  React.useEffect(() => {
+    saveChat(profileId, messages);
+  }, [profileId, messages]);
 
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, pending]);
+
+  // Abort any in-flight request if the page unmounts.
+  React.useEffect(() => () => abortRef.current?.abort(), []);
 
   if (loading || !boot) return <Loading />;
 
@@ -71,12 +96,24 @@ export function AiAnalysis() {
   const complete = async (history: ChatMessage[]) => {
     setPending(true);
     setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const reply = await provider.chat(history, system);
+      // Cap the turns sent so a long thread can't overflow the context window
+      // (the full thread is still shown and stored).
+      const reply = await provider.chat(
+        history.slice(-MAX_CHAT_MESSAGES),
+        system,
+        controller.signal,
+      );
       setMessages([...history, { role: "assistant", content: reply }]);
     } catch (e) {
+      // A user-initiated Stop is not an error — leave the unanswered user turn
+      // in place so they can retry or edit.
+      if (e instanceof AIProviderError && e.kind === "cancelled") return;
       setError(aiErrorMessage(e, t));
     } finally {
+      abortRef.current = null;
       setPending(false);
     }
   };
@@ -88,6 +125,15 @@ export function AiAnalysis() {
     setMessages(next);
     setInput("");
     void complete(next);
+  };
+
+  const stop = () => abortRef.current?.abort();
+
+  const clear = () => {
+    if (pending) return;
+    setMessages([]);
+    setError(null);
+    clearChat(profileId);
   };
 
   // Retry re-runs the model on the existing history (which ends in the
@@ -104,6 +150,39 @@ export function AiAnalysis() {
       <PageHeader title={t("aiAnalysis.title")} description={t("aiAnalysis.description")} />
 
       <div className="mx-auto flex max-w-3xl flex-col" style={{ height: "calc(100vh - 12rem)" }}>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setShowContext((v) => !v)}
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            <ChevronDown
+              className={cn("size-3 transition-transform", showContext && "rotate-180")}
+            />
+            {t("aiAnalysis.viewContext")}
+          </button>
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={clear}
+              disabled={pending}
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+            >
+              <Trash2 className="size-3" />
+              {t("aiAnalysis.clear")}
+            </button>
+          )}
+        </div>
+        {showContext && (
+          <div className="mb-2 rounded-lg border bg-muted/40 p-3">
+            <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+              {t("aiAnalysis.contextExplainer")}
+            </p>
+            <pre className="max-h-40 overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-muted-foreground">
+              {boot.context}
+            </pre>
+          </div>
+        )}
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pr-1">
           {messages.length === 0 && !pending && (
             <div className="flex flex-col items-center gap-4 py-10 text-center">
@@ -140,15 +219,24 @@ export function AiAnalysis() {
                 )}
               >
                 {m.content}
-                {m.role === "assistant" && i === messages.length - 1 && <AiDisclaimer />}
+                {m.role === "assistant" && <AiDisclaimer />}
               </div>
             </div>
           ))}
 
           {pending && (
             <div className="flex justify-start">
-              <div className="flex items-center gap-2 rounded-2xl border bg-card px-4 py-2.5 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" /> {t("aiAnalysis.thinking")}
+              <div className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-2.5 text-sm text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" /> {t("aiAnalysis.thinking")}
+                </span>
+                <button
+                  type="button"
+                  onClick={stop}
+                  className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs hover:bg-muted"
+                >
+                  <Square className="size-3" /> {t("aiAnalysis.stop")}
+                </button>
               </div>
             </div>
           )}
@@ -181,9 +269,15 @@ export function AiAnalysis() {
               rows={2}
               className="max-h-40 min-h-[2.5rem] flex-1 resize-none"
             />
-            <Button onClick={() => send(input)} disabled={pending || !input.trim()} size="icon">
-              <Send className="size-4" />
-            </Button>
+            {pending ? (
+              <Button onClick={stop} size="icon" variant="outline" title={t("aiAnalysis.stop")}>
+                <Square className="size-4" />
+              </Button>
+            ) : (
+              <Button onClick={() => send(input)} disabled={!input.trim()} size="icon">
+                <Send className="size-4" />
+              </Button>
+            )}
           </div>
           <p className="mt-1.5 text-[11px] text-muted-foreground">{t("aiAnalysis.inputHint")}</p>
         </div>

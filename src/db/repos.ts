@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, isNull, like, sql } from "drizzle-orm";
 import { db } from "./client";
 import { assertAllergyDeletable } from "./guards";
+import { deleteAttachmentFile } from "../lib/attachments";
 import {
   allergy,
   attachment,
@@ -405,13 +406,27 @@ export async function createPanelWithResults(
   return panelRow.id;
 }
 
-/** Removes attachment rows polymorphically linked to a now-deleted entity. */
+/**
+ * Removes attachment rows polymorphically linked to a now-deleted entity, and
+ * deletes their backing files from disk. The file paths are read before the
+ * rows are dropped; file removal is best-effort (a leaked file is only wasted
+ * disk space, whereas a dangling row would keep pointing at a stale document).
+ */
 async function deleteLinkedAttachments(entityType: string, entityId: number) {
+  const rows = await db
+    .select({ filePath: attachment.filePath })
+    .from(attachment)
+    .where(
+      and(eq(attachment.linkedEntityType, entityType), eq(attachment.linkedEntityId, entityId)),
+    );
   await db
     .delete(attachment)
     .where(
       and(eq(attachment.linkedEntityType, entityType), eq(attachment.linkedEntityId, entityId)),
     );
+  for (const row of rows) {
+    if (row.filePath) await deleteAttachmentFile(row.filePath);
+  }
 }
 
 export async function deletePanel(panelId: number) {

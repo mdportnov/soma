@@ -64,7 +64,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn, formatDate, formatValue, todayISO } from "@/lib/utils";
+import { cn, formatDate, formatValue, todayISO, uiLocale } from "@/lib/utils";
 import { kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
 import { isCrisis, isStage2 } from "@/lib/vitals";
 import { useToast } from "@/components/app/Toast";
@@ -533,6 +533,7 @@ function WeightForm({
       title={editing ? t("weight.dialog.titleEdit") : t("weight.dialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-3">
@@ -872,6 +873,7 @@ function BpForm({
       title={editing ? t("bp.dialog.titleEdit") : t("bp.dialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-3">
@@ -1147,7 +1149,7 @@ function SymptomStrip({ rows }: { rows: SymptomLog[] }) {
                 )}
               </div>
               <span className="absolute bottom-0 text-[10px] text-muted-foreground">
-                {new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", {
+                {new Date(`${date}T00:00:00`).toLocaleDateString(uiLocale(), {
                   day: "numeric",
                   month: "short",
                 })}
@@ -1229,6 +1231,7 @@ function SymptomForm({
       title={editing ? t("symptoms.dialog.titleEdit") : t("symptoms.dialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <Field label={t("symptoms.fields.symptomName")}>

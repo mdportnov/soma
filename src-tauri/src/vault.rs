@@ -39,6 +39,7 @@ use keyring::Entry;
 use serde::Serialize;
 use tauri::Manager;
 
+use crate::archive;
 use crate::fsutil::atomic_write;
 use crate::kdf;
 

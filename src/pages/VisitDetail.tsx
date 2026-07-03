@@ -366,6 +366,7 @@ function PrescriptionDialog({
       title={t("visitDetail.addPrescription")}
       onSubmit={addPrescription}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <Field label={t("visitDetail.fields.drugName")}>

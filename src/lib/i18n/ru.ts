@@ -82,6 +82,12 @@ export const ru = {
   },
 
   // Common actions
+  dialog: {
+    discardTitle: "Отменить изменения?",
+    discardBody: "Есть несохранённые изменения. Если закрыть сейчас, они будут потеряны.",
+    discard: "Отменить",
+    keepEditing: "Продолжить редактирование",
+  },
   errors: {
     pageTitle: "Не удалось загрузить страницу",
     pageBody:

@@ -533,6 +533,7 @@ function WeightForm({
       title={editing ? t("weight.dialog.titleEdit") : t("weight.dialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-3">
@@ -872,6 +873,7 @@ function BpForm({
       title={editing ? t("bp.dialog.titleEdit") : t("bp.dialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-3">
@@ -1229,6 +1231,7 @@ function SymptomForm({
       title={editing ? t("symptoms.dialog.titleEdit") : t("symptoms.dialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <Field label={t("symptoms.fields.symptomName")}>

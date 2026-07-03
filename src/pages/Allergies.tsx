@@ -296,6 +296,7 @@ function AllergyForm({
       title={editing ? t("allergies.addDialog.titleEdit") : t("allergies.addDialog.titleAdd")}
       onSubmit={save}
       submitDisabled={saving || !allergen.trim()}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-[1fr_9rem] gap-3">

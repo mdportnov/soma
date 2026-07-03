@@ -81,6 +81,12 @@ export const en = {
   },
 
   // Common actions
+  dialog: {
+    discardTitle: "Discard changes?",
+    discardBody: "You have unsaved changes. Closing now will lose them.",
+    discard: "Discard",
+    keepEditing: "Keep editing",
+  },
   errors: {
     pageTitle: "This page couldn't load",
     pageBody:

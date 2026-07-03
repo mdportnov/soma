@@ -133,6 +133,7 @@ export function WeightGoalDialog({
       description={t("weightGoal.description")}
       onSubmit={save}
       submitDisabled={saving || !valid}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <div className="grid grid-cols-2 gap-3">

@@ -2,6 +2,7 @@ import { fetch } from "@tauri-apps/plugin-http";
 import {
   AIProviderError,
   isRetryableError,
+  type AIErrorKind,
   type AIProvider,
   type ChatMessage,
   type DocumentInput,
@@ -259,9 +260,11 @@ function parseModelJson(text: string): unknown {
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Maps an HTTP status onto the coarse error taxonomy the UI branches on. */
-function classifyStatus(status: number): "auth" | "rate_limit" | "overloaded" | "unknown" {
+function classifyStatus(status: number): AIErrorKind {
   if (status === 401 || status === 403) return "auth";
   if (status === 429) return "rate_limit";
   if (status === 503 || status === 529) return "overloaded";
+  if (status === 413) return "too_large";
+  if (status === 400 || status === 404) return "bad_request";
   return "unknown";
 }

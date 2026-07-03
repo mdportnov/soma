@@ -1129,6 +1129,8 @@ export const en = {
     extractResults: "Extract results",
     fileFormats: "PDF, JPG, PNG or WebP",
     chooseFile: "Choose file",
+    privacyNotice:
+      "The selected document is sent in full to your configured AI provider for extraction. Everything else stays on your device.",
     extractingMapping: "Extracting and mapping…",
     extractingMappingDetail:
       "Phase 1: structured extraction. Phase 2: matching against your biomarker dictionary (exact → alias → fuzzy → AI disambiguation).",
@@ -1328,6 +1330,12 @@ export const en = {
     truncatedBody:
       "The response was cut off, so some results may be missing. Review carefully or split the file.",
     parseFailed: "The AI returned an unreadable response. Try again.",
+    tooLarge:
+      "The document is too large for the AI provider. Try splitting the PDF or importing fewer pages at a time.",
+    fileTooLarge:
+      "This file is larger than {{limit}} MB — too big to send to the AI provider. Split the PDF or use a smaller scan.",
+    badRequest:
+      "The AI provider rejected the request. The selected model may not accept PDFs or images — pick a vision-capable model in Settings.",
     droppedRows: "{{count}} non-numeric row(s) were skipped (e.g. positive/negative, titres).",
     showDropped: "Show skipped rows",
     dateNotRecognized: "Couldn't read the collection date — defaulted to today. Please set it.",

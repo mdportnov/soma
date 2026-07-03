@@ -54,7 +54,7 @@ export const DISCHARGE_EXTRACTION_PROMPT = `You are a data-extraction engine for
 
 Extract its structured content and return ONLY a single JSON object:
 
-{"visitDate": string | null, "clinic": string | null, "doctorName": string | null, "diagnoses": [{"name": string, "icdCode": string | null}], "medications": [{"name": string, "dose": string | null}], "allergies": [{"allergen": string, "reaction": string | null, "severity": string | null}], "notes": string}
+{"visitDate": string | null, "clinic": string | null, "doctorName": string | null, "diagnoses": [{"name": string, "icdCode": string | null}], "medications": [{"name": string, "dose": string | null}], "allergies": [{"allergen": string, "reaction": string | null, "severity": string | null, "category": string | null}], "notes": string}
 
 Strict rules:
 - "visitDate" is the discharge (or admission, if discharge is absent) date as ISO "YYYY-MM-DD". If not fully legible, use null. Never guess.
@@ -62,7 +62,7 @@ Strict rules:
 - "doctorName" is the discharging/attending physician's name as printed, or null.
 - "diagnoses" lists each diagnosis with "name" as printed and "icdCode" (the ICD-10 or ICD-11 code, e.g. "E11.9", "I10") exactly as printed, or null when no code is given. Do not invent or infer codes. Use [] if none.
 - "medications" lists each prescribed medication with "name" as printed and "dose" (the dose/strength text as printed, e.g. "500 mg"), or null. Use [] if none.
-- "allergies" lists each allergy or adverse drug reaction stated in the document: "allergen" is the substance (drug/food/etc.) as printed; "reaction" is the described reaction (e.g. "rash", "anaphylaxis") or null; "severity" is one of "mild", "moderate", "severe", "anaphylactic" if stated or clearly implied, else null. Use [] if none. Never invent an allergy.
+- "allergies" lists each allergy or adverse drug reaction stated in the document: "allergen" is the substance (drug/food/etc.) as printed; "reaction" is the described reaction (e.g. "rash", "anaphylaxis") or null; "severity" is one of "mild", "moderate", "severe", "anaphylactic" if stated or clearly implied, else null; "category" is one of "drug", "food", "environmental", "other" based on the allergen (a medication → "drug", a food → "food", pollen/dust/animals → "environmental"), or null if genuinely unclear — do NOT default to "drug". Use [] if none. Never invent an allergy.
 - "notes" is a concise plain-text summary of recommendations and clinical course, in the document's original language. Use "" if nothing relevant.
 - Do not invent diagnoses, medications, allergies, codes, or dates. Output ONLY the JSON object. No preamble, no Markdown fences, no commentary.`;
 

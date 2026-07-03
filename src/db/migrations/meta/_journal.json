@@ -8,6 +8,13 @@
       "when": 1782102862682,
       "tag": "0000_abandoned_scream",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782102862683,
+      "tag": "0001_fts_records",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,6 @@
 mod backup;
+mod fsutil;
+mod kdf;
 mod mcp;
 mod vault;
 

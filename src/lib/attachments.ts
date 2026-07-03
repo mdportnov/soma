@@ -1,5 +1,5 @@
 import { appDataDir, basename, join } from "@tauri-apps/api/path";
-import { copyFile, mkdir } from "@tauri-apps/plugin-fs";
+import { copyFile, mkdir, remove } from "@tauri-apps/plugin-fs";
 
 export function mimeFromPath(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
@@ -21,6 +21,19 @@ export async function storeAttachmentFile(srcPath: string): Promise<string> {
   const dest = await join(dir, `${Date.now()}-${name}`);
   await copyFile(srcPath, dest);
   return dest;
+}
+
+/**
+ * Best-effort removal of a stored attachment file. Deleting the DB row is what
+ * matters for consistency; a file that can't be removed (already gone, locked,
+ * permissions) is only leaked disk space, so failures are logged, never thrown.
+ */
+export async function deleteAttachmentFile(filePath: string): Promise<void> {
+  try {
+    await remove(filePath);
+  } catch (e) {
+    console.error(`deleteAttachmentFile failed for ${filePath}`, e);
+  }
 }
 
 /** Uint8Array → base64 without blowing the call stack on large files. */

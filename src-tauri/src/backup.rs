@@ -5,10 +5,13 @@
 //! (iCloud Drive, Google Drive, Dropbox, OneDrive) already keeps in sync.
 //! The live database never leaves the device; only `.somabk` snapshots do.
 //!
-//! File format (`.somabk`):
-//! `MAGIC(8) | format_version(1) | schema_version(4, LE) | salt(16) | nonce(12) | AES-256-GCM ciphertext`
+//! File format (`.somabk`, v2):
+//! `MAGIC(8) | format_version(1) | schema_version(4, LE) | argon2 m/t/p (3 × u32 LE) | salt(16) | nonce(12) | AES-256-GCM ciphertext`
 //! The key is derived from the user passphrase with Argon2id. Without the
-//! passphrase a backup cannot be decrypted — by anyone, including us.
+//! passphrase a backup cannot be decrypted — by anyone, including us. v1 files
+//! (which stored no Argon2 parameters) are still read, keyed with the pinned
+//! legacy parameters in [`crate::kdf`], so a future argon2 default change can
+//! never orphan an existing backup.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,18 +19,25 @@ use std::path::{Path, PathBuf};
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Nonce};
-use argon2::Argon2;
 use chrono::Local;
 use keyring::Entry;
 use serde::Serialize;
 use tauri::Manager;
 
+use crate::fsutil::atomic_write;
+use crate::kdf;
+
 const KEYCHAIN_SERVICE: &str = "com.soma.health";
 const PASSPHRASE_USER: &str = "backup-passphrase";
 
 const MAGIC: &[u8; 8] = b"SOMABK1\0";
-const FORMAT_VERSION: u8 = 1;
-const HEADER_LEN: usize = 8 + 1 + 4 + 16 + 12;
+/// Current on-disk format. v1 stored no Argon2 parameters; v2 adds m/t/p after
+/// the schema version. v1 files are still read using the pinned legacy params.
+const FORMAT_VERSION: u8 = 2;
+/// v1: MAGIC(8) | version(1) | schema_version(4) | salt(16) | nonce(12).
+const HEADER_LEN_V1: usize = 8 + 1 + 4 + 16 + 12;
+/// v2: adds m_cost/t_cost/p_cost (3 × u32 LE) between schema_version and salt.
+const HEADER_LEN_V2: usize = 8 + 1 + 4 + 12 + 16 + 12;
 const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
 
 const SUBDIR: &str = "Soma Backups";
@@ -43,18 +53,11 @@ fn pass_entry() -> Result<Entry, String> {
     Entry::new(KEYCHAIN_SERVICE, PASSPHRASE_USER).map_err(|e| e.to_string())
 }
 
-fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], String> {
-    let mut key = [0u8; 32];
-    Argon2::default()
-        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
-        .map_err(|e| e.to_string())?;
-    Ok(key)
-}
-
-/// Packs a plaintext SQLite snapshot into the encrypted `.somabk` byte layout
-/// (`MAGIC | format | schema_version | salt | nonce | AES-256-GCM ciphertext`).
-/// Pure over its inputs apart from the per-call random salt/nonce, so the format
-/// is exercised by `cargo test` without touching the filesystem or keychain.
+/// Packs a plaintext SQLite snapshot into the encrypted `.somabk` v2 byte
+/// layout (`MAGIC | format | schema_version | m/t/p | salt | nonce | AES-256-GCM
+/// ciphertext`). Pure over its inputs apart from the per-call random salt/nonce,
+/// so the format is exercised by `cargo test` without touching the filesystem or
+/// keychain.
 fn encrypt_snapshot(
     plain: &[u8],
     passphrase: &str,
@@ -68,16 +71,19 @@ fn encrypt_snapshot(
     let mut nonce = [0u8; 12];
     OsRng.fill_bytes(&mut salt);
     OsRng.fill_bytes(&mut nonce);
-    let key = derive_key(passphrase, &salt)?;
+    let key = kdf::derive_key_pinned(passphrase, &salt)?;
     let cipher = Aes256Gcm::new((&key).into());
     let ciphertext = cipher
         .encrypt(Nonce::from_slice(&nonce), plain)
         .map_err(|e| format!("encrypt: {e}"))?;
 
-    let mut out = Vec::with_capacity(HEADER_LEN + ciphertext.len());
+    let mut out = Vec::with_capacity(HEADER_LEN_V2 + ciphertext.len());
     out.extend_from_slice(MAGIC);
     out.push(FORMAT_VERSION);
     out.extend_from_slice(&schema_version.to_le_bytes());
+    out.extend_from_slice(&kdf::M_COST_KIB.to_le_bytes());
+    out.extend_from_slice(&kdf::T_COST.to_le_bytes());
+    out.extend_from_slice(&kdf::P_COST.to_le_bytes());
     out.extend_from_slice(&salt);
     out.extend_from_slice(&nonce);
     out.extend_from_slice(&ciphertext);
@@ -86,22 +92,49 @@ fn encrypt_snapshot(
 
 /// Reverses [`encrypt_snapshot`]: validates the header, decrypts, and asserts the
 /// plaintext is a SQLite database, returning `(schema_version, plaintext)`. A
-/// wrong passphrase or any tampering fails the AES-GCM authentication tag.
+/// wrong passphrase or any tampering fails the AES-GCM authentication tag. Both
+/// the current v2 format and legacy v1 (no stored Argon2 params) are accepted.
 fn decrypt_snapshot(raw: &[u8], passphrase: &str) -> Result<(u32, Vec<u8>), String> {
-    if raw.len() <= HEADER_LEN || &raw[..8] != MAGIC {
+    if raw.len() < 9 || &raw[..8] != MAGIC {
         return Err("Not a Soma backup file".into());
     }
-    if raw[8] != FORMAT_VERSION {
-        return Err("This backup was created by a newer version of Soma".into());
-    }
-    let schema_version = u32::from_le_bytes(raw[9..13].try_into().unwrap());
-    let salt = &raw[13..29];
-    let nonce = &raw[29..41];
+    let schema_version = if raw.len() > 13 {
+        u32::from_le_bytes(raw[9..13].try_into().unwrap())
+    } else {
+        return Err("Not a Soma backup file".into());
+    };
 
-    let key = derive_key(passphrase, salt)?;
+    let (m_cost, t_cost, p_cost, salt, nonce, body_offset) = match raw[8] {
+        1 => {
+            if raw.len() <= HEADER_LEN_V1 {
+                return Err("Not a Soma backup file".into());
+            }
+            (
+                kdf::M_COST_KIB,
+                kdf::T_COST,
+                kdf::P_COST,
+                &raw[13..29],
+                &raw[29..41],
+                HEADER_LEN_V1,
+            )
+        }
+        2 => {
+            if raw.len() <= HEADER_LEN_V2 {
+                return Err("Not a Soma backup file".into());
+            }
+            let m = u32::from_le_bytes(raw[13..17].try_into().unwrap());
+            let t = u32::from_le_bytes(raw[17..21].try_into().unwrap());
+            let p = u32::from_le_bytes(raw[21..25].try_into().unwrap());
+            kdf::validate_params(m, t, p)?;
+            (m, t, p, &raw[25..41], &raw[41..53], HEADER_LEN_V2)
+        }
+        _ => return Err("This backup was created by a newer version of Soma".into()),
+    };
+
+    let key = kdf::derive_key(passphrase, salt, m_cost, t_cost, p_cost)?;
     let cipher = Aes256Gcm::new((&key).into());
     let plain = cipher
-        .decrypt(Nonce::from_slice(nonce), &raw[HEADER_LEN..])
+        .decrypt(Nonce::from_slice(nonce), &raw[body_offset..])
         .map_err(|_| "Wrong passphrase, or the file is corrupted".to_string())?;
     if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
         return Err("Decrypted data is not a SQLite database".into());
@@ -362,11 +395,26 @@ pub fn create_backup(
         Err(e) => return Err(e.to_string()),
     };
 
-    let plain = fs::read(&snapshot_path).map_err(|e| format!("read snapshot: {e}"))?;
-    let out = encrypt_snapshot(&plain, &passphrase, schema_version)?;
+    // On any failure below, remove the plaintext staging snapshot so it can't
+    // linger on disk (it was previously only cleared on the next backup run).
+    let finish = |result: Result<BackupInfo, String>| -> Result<BackupInfo, String> {
+        let _ = fs::remove_file(&snapshot_path);
+        result
+    };
+
+    let plain = match fs::read(&snapshot_path) {
+        Ok(p) => p,
+        Err(e) => return finish(Err(format!("read snapshot: {e}"))),
+    };
+    let out = match encrypt_snapshot(&plain, &passphrase, schema_version) {
+        Ok(o) => o,
+        Err(e) => return finish(Err(e)),
+    };
 
     let dir = Path::new(&dest_dir).join(SUBDIR);
-    fs::create_dir_all(&dir).map_err(|e| format!("create backup folder: {e}"))?;
+    if let Err(e) = fs::create_dir_all(&dir) {
+        return finish(Err(format!("create backup folder: {e}")));
+    }
 
     let readme = dir.join("README.txt");
     if !readme.exists() {
@@ -376,7 +424,11 @@ pub fn create_backup(
     let now = Local::now();
     let file_name = format!("{PREFIX}{}.{EXT}", now.format("%Y%m%d-%H%M%S"));
     let target = dir.join(&file_name);
-    fs::write(&target, &out).map_err(|e| format!("write backup: {e}"))?;
+    // Atomic write so a crash or disk-full mid-write can't leave a truncated
+    // snapshot that rotation would keep as the "newest" (and only) backup.
+    if let Err(e) = atomic_write(&target, &out) {
+        return finish(Err(e));
+    }
     let _ = fs::remove_file(&snapshot_path);
 
     rotate(&dir);
@@ -436,7 +488,7 @@ pub fn inspect_backup(
     let (schema_version, plain) = decrypt_snapshot(&raw, &passphrase)?;
 
     let staging = config_dir(&app)?.join(RESTORE_STAGING);
-    fs::write(&staging, &plain).map_err(|e| format!("write staging: {e}"))?;
+    atomic_write(&staging, &plain)?;
 
     let file_modified_at = fs::metadata(&path)
         .and_then(|m| m.modified())
@@ -550,13 +602,49 @@ mod tests {
         assert!(decrypt_snapshot(&blob, "pass1234").is_err());
     }
 
+    /// A legacy v1 backup (no Argon2 params in the header) must still decrypt
+    /// under the pinned legacy parameters — the point of the v2 change.
+    #[test]
+    fn legacy_v1_backup_still_decrypts() {
+        let plain = fake_snapshot();
+        let pass = "an old backup from before v2";
+        let mut salt = [0u8; 16];
+        let mut nonce = [0u8; 12];
+        OsRng.fill_bytes(&mut salt);
+        OsRng.fill_bytes(&mut nonce);
+        let key = kdf::derive_key_pinned(pass, &salt).unwrap();
+        let cipher = Aes256Gcm::new((&key).into());
+        let ciphertext = cipher
+            .encrypt(Nonce::from_slice(&nonce), plain.as_slice())
+            .unwrap();
+        let mut blob = Vec::new();
+        blob.extend_from_slice(MAGIC);
+        blob.push(1); // v1
+        blob.extend_from_slice(&99u32.to_le_bytes());
+        blob.extend_from_slice(&salt);
+        blob.extend_from_slice(&nonce);
+        blob.extend_from_slice(&ciphertext);
+
+        let (schema_version, restored) = decrypt_snapshot(&blob, pass).unwrap();
+        assert_eq!(schema_version, 99);
+        assert_eq!(restored, plain);
+    }
+
+    /// A v2 header with corrupt Argon2 params is rejected before any derivation.
+    #[test]
+    fn corrupt_v2_params_are_rejected() {
+        let mut blob = encrypt_snapshot(&fake_snapshot(), "pass1234", 1).unwrap();
+        blob[13..17].copy_from_slice(&0u32.to_le_bytes()); // zero m_cost
+        assert!(decrypt_snapshot(&blob, "pass1234").is_err());
+    }
+
     #[test]
     fn each_backup_uses_a_fresh_salt_and_nonce() {
         let a = encrypt_snapshot(&fake_snapshot(), "pass1234", 1).unwrap();
         let b = encrypt_snapshot(&fake_snapshot(), "pass1234", 1).unwrap();
-        // salt(16) + nonce(12) occupy bytes 13..41 and are random per backup,
+        // salt(16) + nonce(12) occupy bytes 25..53 and are random per backup,
         // so identical plaintext never produces identical ciphertext.
-        assert_ne!(a[13..HEADER_LEN], b[13..HEADER_LEN]);
-        assert_ne!(a[HEADER_LEN..], b[HEADER_LEN..]);
+        assert_ne!(a[25..HEADER_LEN_V2], b[25..HEADER_LEN_V2]);
+        assert_ne!(a[HEADER_LEN_V2..], b[HEADER_LEN_V2..]);
     }
 }

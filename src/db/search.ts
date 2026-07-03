@@ -14,7 +14,7 @@ import {
 
 /**
  * Full-text search over the user's records, backed by the `fts_records`
- * FTS5 virtual table (migration 0006). The index is denormalized: each row
+ * FTS5 virtual table (migration 0001_fts_records). The index is denormalized: each row
  * stores its display `title`/`subtitle`/`date` as UNINDEXED columns, so a
  * search needs no joins back to the source tables.
  *
@@ -267,8 +267,17 @@ export async function rebuildSearchIndex(profileId: number): Promise<void> {
       `);
     }
   } catch (e) {
-    console.warn("rebuildSearchIndex failed", e);
+    console.error("rebuildSearchIndex failed", e);
+    // A missing virtual table means the FTS migration never ran — a setup bug
+    // that must surface loudly, not vanish into a silently empty search.
+    if (isMissingTable(e)) throw e;
   }
+}
+
+/** True when the error is SQLite's "no such table" (FTS migration not applied). */
+function isMissingTable(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return msg.includes("no such table");
 }
 
 /** Rebuilds the index only if it currently has no rows for this profile. */
@@ -281,7 +290,7 @@ export async function ensureSearchIndex(profileId: number): Promise<void> {
     if (count === 0) await rebuildSearchIndex(profileId);
   } catch (e) {
     // Table may not exist yet (migration not applied) — try a full rebuild.
-    console.warn("ensureSearchIndex check failed; rebuilding", e);
+    console.error("ensureSearchIndex check failed; rebuilding", e);
     await rebuildSearchIndex(profileId);
   }
 }
@@ -305,8 +314,9 @@ function toMatchQuery(query: string): string {
 
 /**
  * Runs an FTS5 MATCH query, ranked by bm25, capped at ~40 rows.
- * Returns `[]` (with a console warning) if the virtual table does not exist
- * yet — e.g. before migration 0006 has been applied to the dev DB.
+ * Returns `[]` (with a console error) if the query fails — e.g. the virtual
+ * table does not exist because migration 0001_fts_records was never applied —
+ * so the palette degrades to "no results" instead of crashing.
  */
 export async function searchRecords(profileId: number, query: string): Promise<SearchResult[]> {
   const match = toMatchQuery(query);
@@ -334,7 +344,7 @@ export async function searchRecords(profileId: number, query: string): Promise<S
       date: r.date,
     }));
   } catch (e) {
-    console.warn("searchRecords MATCH failed", e);
+    console.error("searchRecords MATCH failed", e);
     return [];
   }
 }

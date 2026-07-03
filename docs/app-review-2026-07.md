@@ -16,8 +16,9 @@ The following findings have been fixed in this PR (with tests where applicable):
 - **1.2** Vault lock / unlock and backup writes made atomic (temp + fsync + rename).
 - **1.3** Argon2 parameters stored in vault/backup headers (format v2) with v1 read-back.
 - **1.4** `schemaVersion` is now an explicit constant, so older backups restore.
-- **1.5** (partial) Attachment files are deleted from disk with their records. _Still open:_
-  including attachments in backups and encrypting them in the vault.
+- **1.5** Attachment files are deleted from disk with their records, included in backups (new
+  v3 `.somabk` archive format, v1/v2 still restore) and sealed under at-rest encryption
+  (sibling `attachments.vault`).
 - **2.1 / 2.4** `useQuery` surfaces load failures to a new per-route error boundary (retry card)
   instead of an infinite spinner.
 - **2.2** `toast.error` variant + a global `unhandledrejection` bridge surface silent write failures.
@@ -30,9 +31,19 @@ The following findings have been fixed in this PR (with tests where applicable):
 - **5.1 / 5.2** MCP writes gated behind `SOMA_MCP_ALLOW_WRITES`; MCP writes stamped
   `import_method = "mcp"`; locked-vault reported clearly; guard unit tests added.
 
-Everything below remains as originally audited; open items include the remaining data-layer
-hardening (1.6 transactions, attachments-in-backups), AI assistant streaming/caching (4.x), the
-i18n/localization gaps (6.1), dialog focus/dirty-state (6.2), and the validation/perf items (§7).
+- **4.1/4.2** Chat cancellation (Stop button), per-profile history persistence, native
+  multi-turn role messages, and history truncation. _Still open:_ literal token-streaming
+  (deferred — can't be verified without live provider access).
+- **4.3** Trend interpretations are cached by an input hash; Regenerate forces a fresh call.
+- **4.4** A "what the assistant can see" disclosure surfaces the exact context sent; the
+  disclaimer renders under every assistant message.
+- **6.2** Dialogs trap focus, restore it on close, and (opt-in `guardUnsaved`, wired into the
+  form dialogs) confirm before discarding a half-filled form.
+- **6.1** (partial) Dates localize to the active UI language. _Still open:_ the hardcoded
+  form placeholders and `$` currency.
+
+Remaining open items: literal chat token-streaming (4.1), transactional multi-step writes
+(1.6), the remaining i18n placeholders/currency (6.1), and the validation/perf items (§7).
 
 ---
 

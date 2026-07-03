@@ -37,6 +37,30 @@ const MAX_CANDIDATES = 8;
 // between the top two candidates, otherwise defer to AI/manual review.
 const FUZZY_AMBIGUITY_GAP = 0.05;
 
+/** Max in-flight AI biomarker-disambiguation calls. Bounded so a big panel
+ *  doesn't hammer the provider, but no longer strictly one-at-a-time. */
+const AI_MAP_CONCURRENCY = 4;
+
+/**
+ * Runs `fn` over `items` with at most `limit` in flight. If any invocation
+ * throws, the rejection propagates (aborting the batch) — used so a systemic
+ * provider failure surfaces instead of being swallowed per row.
+ */
+async function mapConcurrently<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const idx = next++;
+      await fn(items[idx]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
 type IndexEntry = { normalized: string; biomarkerId: number };
 
 export type BiomarkerIndex = {
@@ -241,10 +265,12 @@ export async function mapExtractions(
   // an absolute-count unit (or vice versa) is sent to its compatible sibling.
   for (const row of rows) preferUnitCompatibleSibling(row, index);
 
-  // 4. Narrow AI disambiguation for leftovers that have candidates.
+  // 4. Narrow AI disambiguation for leftovers that have candidates. Run with
+  // bounded concurrency instead of one-at-a-time: a report with many ambiguous
+  // rows would otherwise be N sequential 60s-timeout round-trips.
   if (provider) {
-    for (const row of rows) {
-      if (row.biomarkerId != null || !row.candidates.length) continue;
+    const pending = rows.filter((row) => row.biomarkerId == null && row.candidates.length > 0);
+    await mapConcurrently(pending, AI_MAP_CONCURRENCY, async (row) => {
       const payload = row.candidates.map((c) => {
         const b = index.byId.get(c.biomarkerId)!;
         return {
@@ -266,13 +292,23 @@ export async function mapExtractions(
           row.conversion = conversionFor(row.raw, picked, index);
         }
       } catch (e) {
-        // A bad/revoked key fails identically on every remaining row: abort the
-        // loop and surface it, rather than firing N doomed requests and handing
-        // back a review screen full of silently-unmapped rows with no banner.
-        if (e instanceof AIProviderError && e.kind === "auth") throw e;
+        // Systemic failures (revoked key, rate limit, provider overloaded,
+        // network) fail identically on every remaining row: abort and surface a
+        // retryable error rather than returning a review screen full of
+        // silently-unmapped rows with no explanation. Only a genuinely
+        // per-row/unexpected error is swallowed, leaving that one row unmapped.
+        if (
+          e instanceof AIProviderError &&
+          (e.kind === "auth" ||
+            e.kind === "rate_limit" ||
+            e.kind === "overloaded" ||
+            e.kind === "network")
+        ) {
+          throw e;
+        }
         console.warn("AI mapping fallback failed; leaving row unmapped", e);
       }
-    }
+    });
   }
 
   markDuplicates(rows);

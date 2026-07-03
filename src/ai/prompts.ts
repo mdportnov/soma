@@ -239,6 +239,9 @@ export function extractJson<T>(text: string): T {
     const close = open === "[" ? "]" : "}";
     let depth = 0;
     let inString = false;
+    // Index just past the last complete top-level element of an array — used to
+    // salvage a response the model truncated at the token cap (no closing `]`).
+    let lastElementEnd = -1;
     for (let i = start; i < cleaned.length; i++) {
       const ch = cleaned[i];
       if (inString) {
@@ -247,15 +250,31 @@ export function extractJson<T>(text: string): T {
         continue;
       }
       if (ch === '"') inString = true;
-      else if (ch === open) depth++;
-      else if (ch === close && --depth === 0) {
-        const slice = cleaned.slice(start, i + 1);
-        try {
-          return JSON.parse(slice) as T;
-        } catch {
-          // Otherwise-valid JSON with trailing commas is a very common LLM output.
-          return JSON.parse(stripTrailingCommas(slice)) as T;
+      else if (ch === "[" || ch === "{") depth++;
+      else if (ch === "]" || ch === "}") {
+        depth--;
+        if (depth === 0 && ch === close) {
+          const slice = cleaned.slice(start, i + 1);
+          try {
+            return JSON.parse(slice) as T;
+          } catch {
+            // Otherwise-valid JSON with trailing commas is a very common LLM output.
+            return JSON.parse(stripTrailingCommas(slice)) as T;
+          }
         }
+        // Closing back to depth 1 inside an array = one element finished.
+        if (depth === 1 && open === "[") lastElementEnd = i + 1;
+      }
+    }
+    // Truncated array: recover the complete elements and close it. Every doc
+    // module reviews 100% of extracted rows, so a partial recovery surfaces on
+    // the review screen rather than failing the whole import.
+    if (open === "[" && lastElementEnd !== -1) {
+      const salvaged = cleaned.slice(start, lastElementEnd) + "]";
+      try {
+        return JSON.parse(stripTrailingCommas(salvaged)) as T;
+      } catch {
+        /* fall through to the hard error below */
       }
     }
     throw new Error("Malformed JSON in model response");

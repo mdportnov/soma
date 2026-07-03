@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Failed loads no longer spin forever**: a rejected data query now surfaces an
+  inline "couldn't load — retry" card (via a new per-route error boundary) instead
+  of an endless spinner, and `reload()` resolves only after the refetch settles.
+- **Failed writes are no longer silent**: added an error-toast variant and a global
+  safety net that surfaces otherwise-swallowed write failures (DB locked, disk
+  full, guard rejections) instead of leaving the UI silently stale.
+- **AI import — large documents**: oversized files are rejected before the API
+  call with clear guidance; a response the model truncated at the token cap now
+  salvages its complete rows instead of failing the whole import; provider 413/400
+  errors map to actionable messages.
+- **AI import — discharge allergies** are categorised (drug/food/environmental/
+  other) instead of all being saved as drug allergies.
+- **AI import — biomarker mapping** runs with bounded concurrency and surfaces a
+  retryable error on rate-limit/network failures instead of silently leaving rows
+  unmapped.
 - **Full-text search restored**: the `fts_records` FTS5 table (lost in a migration
   squash) is now created by a real migration, so global search and the ⌘K palette
   return results on fresh installs again; the "no such table" error is no longer

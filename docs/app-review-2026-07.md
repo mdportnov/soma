@@ -8,6 +8,32 @@ cross-cutting error handling. Findings are ordered by severity within each secti
 The three findings marked **[verified]** were independently re-checked against the source after
 the initial audit pass.
 
+## Addressed on this branch
+
+The following findings have been fixed in this PR (with tests where applicable):
+
+- **1.1** FTS5 `fts_records` migration added; missing-table error no longer swallowed.
+- **1.2** Vault lock / unlock and backup writes made atomic (temp + fsync + rename).
+- **1.3** Argon2 parameters stored in vault/backup headers (format v2) with v1 read-back.
+- **1.4** `schemaVersion` is now an explicit constant, so older backups restore.
+- **1.5** (partial) Attachment files are deleted from disk with their records. _Still open:_
+  including attachments in backups and encrypting them in the vault.
+- **2.1 / 2.4** `useQuery` surfaces load failures to a new per-route error boundary (retry card)
+  instead of an infinite spinner.
+- **2.2** `toast.error` variant + a global `unhandledrejection` bridge surface silent write failures.
+- **2.3** `reload()` resolves after the refetch settles; added a request-id race guard.
+- **3.2** File-size guard before upload; provider 413/400 mapped to actionable errors.
+- **3.3** Truncated-JSON salvage recovers complete rows from a capped response.
+- **3.4** AI biomarker mapping parallelized; systemic failures now abort with a retryable error.
+- **3.6** Discharge-summary allergies carry a resolved category instead of hardcoded `"drug"`.
+- **3.9** Import file-picker shows a privacy notice (the document is sent to the provider).
+- **5.1 / 5.2** MCP writes gated behind `SOMA_MCP_ALLOW_WRITES`; MCP writes stamped
+  `import_method = "mcp"`; locked-vault reported clearly; guard unit tests added.
+
+Everything below remains as originally audited; open items include the remaining data-layer
+hardening (1.6 transactions, attachments-in-backups), AI assistant streaming/caching (4.x), the
+i18n/localization gaps (6.1), dialog focus/dirty-state (6.2), and the validation/perf items (§7).
+
 ---
 
 ## 1. Critical — data integrity & availability

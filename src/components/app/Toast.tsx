@@ -1,6 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 type Toast = {
   id: number;
@@ -8,6 +9,7 @@ type Toast = {
   actionLabel?: string;
   onAction?: () => void;
   duration: number;
+  variant?: "default" | "error";
 };
 
 type ToastContextValue = {
@@ -20,6 +22,8 @@ type ToastContextValue = {
     onAction: () => void,
     opts?: { duration?: number },
   ) => void;
+  /** Failure notification: destructive styling, assertive, longer-lived. */
+  error: (message: string, opts?: { duration?: number }) => void;
 };
 
 const ToastContext = React.createContext<ToastContextValue | null>(null);
@@ -58,6 +62,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [dismiss],
   );
 
+  const { t } = useI18n();
+
   // Clear any pending auto-dismiss timers if the provider ever unmounts.
   React.useEffect(() => {
     const pending = timers.current;
@@ -72,9 +78,27 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       show: (message, opts) => push({ message, duration: opts?.duration ?? 4000 }),
       showAction: (message, actionLabel, onAction, opts) =>
         push({ message, actionLabel, onAction, duration: opts?.duration ?? 6000 }),
+      error: (message, opts) =>
+        push({ message, duration: opts?.duration ?? 7000, variant: "error" }),
     }),
     [push],
   );
+
+  // Safety net for fire-and-forget mutations: most write handlers are
+  // `await mutate(); void reload();` with no try/catch, so a rejected write
+  // (DB locked, disk full, a guard throwing) would otherwise leave the UI
+  // stale with no signal. Caught errors never reach here; genuinely unhandled
+  // ones surface a generic error toast (details still go to the log file).
+  // User-initiated aborts (AI request cancel/timeout) are intentionally quiet.
+  React.useEffect(() => {
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const reason = e.reason as { name?: string } | undefined;
+      if (reason?.name === "AbortError") return;
+      value.error(t("errors.actionFailed"));
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
+  }, [value, t]);
 
   return (
     <ToastContext.Provider value={value}>
@@ -84,8 +108,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           {toasts.map((t) => (
             <div
               key={t.id}
-              role="status"
-              className="pointer-events-auto flex items-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-xl animate-combobox-in"
+              role={t.variant === "error" ? "alert" : "status"}
+              aria-live={t.variant === "error" ? "assertive" : "polite"}
+              className={
+                t.variant === "error"
+                  ? "pointer-events-auto flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-foreground shadow-xl animate-combobox-in"
+                  : "pointer-events-auto flex items-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-xl animate-combobox-in"
+              }
             >
               <span className="min-w-0 flex-1">{t.message}</span>
               {t.actionLabel && t.onAction && (

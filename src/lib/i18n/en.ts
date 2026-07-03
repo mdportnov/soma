@@ -75,6 +75,13 @@ export const en = {
   },
 
   // Common actions
+  errors: {
+    pageTitle: "This page couldn't load",
+    pageBody:
+      "Something went wrong while loading your data. The error was written to the log file (Settings → Open logs).",
+    retry: "Retry",
+    actionFailed: "That action couldn't be completed. Please try again.",
+  },
   common: {
     save: "Save",
     cancel: "Cancel",

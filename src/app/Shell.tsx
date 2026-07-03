@@ -37,6 +37,7 @@ import {
 import { isAiConfigured, SETUP_STATE_EVENT } from "@/lib/setup-state";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/app/CommandPalette";
+import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import logo from "@/assets/logo.svg";
 
 type NavItem =
@@ -84,12 +85,17 @@ function NotificationBell() {
     window.addEventListener(NOTIFICATION_PREFS_EVENT, onChange);
     return () => window.removeEventListener(NOTIFICATION_PREFS_EVENT, onChange);
   }, []);
-  const { data: count } = useQuery(async () => {
-    const data = await getNotificationFeedData(profileId);
-    const feed = filterByPrefs(buildNotificationFeed(data), loadNotificationPrefs());
-    const items = visibleNotifications(feed, loadDismissedIds());
-    return items.length;
-  }, [profileId, location.key, prefsTick]);
+  const { data: count } = useQuery(
+    async () => {
+      const data = await getNotificationFeedData(profileId);
+      const feed = filterByPrefs(buildNotificationFeed(data), loadNotificationPrefs());
+      const items = visibleNotifications(feed, loadDismissedIds());
+      return items.length;
+    },
+    [profileId, location.key, prefsTick],
+    // Decorative badge in always-mounted chrome — a failure must not crash the app.
+    { throwOnError: false },
+  );
 
   const n = count ?? 0;
   return (
@@ -120,6 +126,9 @@ export function Shell() {
   const { t } = useI18n();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const location = useLocation();
+  // Bumped by the per-route error boundary's Retry to re-mount the page (and so
+  // re-run its queries) without a navigation.
+  const [retryNonce, setRetryNonce] = React.useState(0);
   // Flag the AI-assistant nav item when no provider/key is configured yet, so the
   // user knows the section needs a one-time setup (the page links to Settings).
   // Re-checked on navigation and on the setup-state event so it clears the moment
@@ -132,7 +141,9 @@ export function Shell() {
   }, []);
   // location.key + setupTick are intended re-run triggers (the closure reads no
   // other reactive values).
-  const { data: aiConfigured } = useQuery(() => isAiConfigured(), [location.key, setupTick]);
+  const { data: aiConfigured } = useQuery(() => isAiConfigured(), [location.key, setupTick], {
+    throwOnError: false,
+  });
   const navType = useNavigationType();
   const mainRef = React.useRef<HTMLElement>(null);
   // Per-history-entry scroll offsets, keyed by location.key (unique per entry).
@@ -344,8 +355,16 @@ export function Shell() {
       <main ref={mainRef} className="flex-1 overflow-y-auto">
         {/* key on location.key re-mounts the page so navigation fades in;
             scroll restoration is handled imperatively on <main> above. */}
-        <div key={location.key} className="animate-step-in mx-auto max-w-6xl p-6 md:p-8">
-          <Outlet />
+        <div
+          key={`${location.key}:${retryNonce}`}
+          className="animate-step-in mx-auto max-w-6xl p-6 md:p-8"
+        >
+          <RouteErrorBoundary
+            resetKey={`${location.key}:${retryNonce}`}
+            onRetry={() => setRetryNonce((n) => n + 1)}
+          >
+            <Outlet />
+          </RouteErrorBoundary>
         </div>
       </main>
       <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />

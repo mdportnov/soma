@@ -116,8 +116,9 @@ export interface AIProvider {
     unit: string,
     candidates: MappingCandidatePayload[],
   ): Promise<number | null>;
-  /** Free-form chat with health context (v1.x features). */
-  chat(messages: ChatMessage[], systemPrompt?: string): Promise<string>;
+  /** Free-form chat with health context (v1.x features). `signal` lets the UI
+   *  cancel an in-flight turn (a "Stop" button). */
+  chat(messages: ChatMessage[], systemPrompt?: string, signal?: AbortSignal): Promise<string>;
   /** Cheap round-trip to validate the API key. */
   testKey(): Promise<void>;
 }
@@ -144,6 +145,9 @@ export type AIErrorKind =
   /** Provider rejected the request as invalid (400/404) — often a model that
    *  can't accept PDFs/images, or a bad model id. */
   | "bad_request"
+  /** The caller aborted the request (e.g. a chat "Stop" button) — never retried
+   *  and never surfaced as an error to the user. */
+  | "cancelled"
   | "unknown";
 
 export class AIProviderError extends Error {

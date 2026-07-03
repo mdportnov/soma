@@ -41,6 +41,11 @@ export const en = {
     inputHint: "Enter to send, Shift+Enter for a new line. Not medical advice.",
     thinking: "Thinking…",
     retry: "Retry",
+    stop: "Stop",
+    clear: "Clear chat",
+    viewContext: "What the assistant can see",
+    contextExplainer:
+      "This summary of your record is sent with each question. Names are omitted. Nothing else leaves your device.",
   },
   aiInterpretation: {
     title: "AI interpretation",
@@ -49,6 +54,7 @@ export const en = {
     loading: "Analyzing…",
     retry: "Retry",
     regenerate: "Regenerate",
+    cached: "Saved from your last run",
     errorAuth: "API key was rejected. Check your AI settings.",
     errorGeneric: "Couldn't get a response. Please try again.",
   },

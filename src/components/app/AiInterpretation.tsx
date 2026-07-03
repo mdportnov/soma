@@ -9,6 +9,11 @@ import { Button } from "@/components/ui/button";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { useI18n } from "@/lib/i18n";
 import { formatValue } from "@/lib/utils";
+import {
+  getInterpretation,
+  interpretationKey,
+  setInterpretation,
+} from "@/lib/interpretation-cache";
 
 type Point = { date: string; value: number; flag: string | null };
 
@@ -26,7 +31,7 @@ type BioRanges = Pick<
 type State =
   | { phase: "idle" }
   | { phase: "loading" }
-  | { phase: "done"; text: string }
+  | { phase: "done"; text: string; cached: boolean }
   | { phase: "error"; message: string };
 
 /**
@@ -57,6 +62,26 @@ export function AiInterpretation({
     };
   }, []);
 
+  const range = (lo: number | null, hi: number | null) =>
+    lo != null && hi != null ? `${formatValue(lo)}–${formatValue(hi)} ${bio.defaultUnit}` : null;
+  const referenceRange = range(bio.refLow, bio.refHigh);
+  const optimalRange = range(bio.optimalLow, bio.optimalHigh);
+  const cacheKey = interpretationKey({
+    name: bio.canonicalName,
+    direction: bio.direction,
+    referenceRange,
+    optimalRange,
+    points,
+    medications,
+  });
+
+  // Show a previously-generated interpretation for this exact data instead of
+  // re-charging the API on every revisit; changing data yields a new key.
+  React.useEffect(() => {
+    const cached = getInterpretation(cacheKey);
+    setState(cached ? { phase: "done", text: cached, cached: true } : { phase: "idle" });
+  }, [cacheKey]);
+
   // AI disabled (or still resolving) → stay out of the way. A trend needs at
   // least two readings to be worth interpreting.
   if (!provider || points.length < 2) return null;
@@ -64,10 +89,6 @@ export function AiInterpretation({
   const run = async () => {
     setState({ phase: "loading" });
     try {
-      const range = (lo: number | null, hi: number | null) =>
-        lo != null && hi != null
-          ? `${formatValue(lo)}–${formatValue(hi)} ${bio.defaultUnit}`
-          : null;
       const text = await provider.chat(
         [
           {
@@ -75,8 +96,8 @@ export function AiInterpretation({
             content: buildTrendInterpretationPrompt({
               name: bio.canonicalName,
               unit: bio.defaultUnit,
-              referenceRange: range(bio.refLow, bio.refHigh),
-              optimalRange: range(bio.optimalLow, bio.optimalHigh),
+              referenceRange,
+              optimalRange,
               direction: bio.direction,
               points,
               medications,
@@ -85,7 +106,8 @@ export function AiInterpretation({
         ],
         TREND_INTERPRETATION_SYSTEM,
       );
-      setState({ phase: "done", text });
+      setInterpretation(cacheKey, text);
+      setState({ phase: "done", text, cached: false });
     } catch (e) {
       setState({ phase: "error", message: aiErrorMessage(e, t) });
     }
@@ -128,9 +150,16 @@ export function AiInterpretation({
           <div>
             <p className="whitespace-pre-wrap leading-relaxed">{state.text}</p>
             <AiDisclaimer />
-            <Button size="sm" variant="ghost" className="mt-2" onClick={run}>
-              {t("aiInterpretation.regenerate")}
-            </Button>
+            <div className="mt-2 flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={run}>
+                {t("aiInterpretation.regenerate")}
+              </Button>
+              {state.cached && (
+                <span className="text-[11px] text-muted-foreground">
+                  {t("aiInterpretation.cached")}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </CardContent>

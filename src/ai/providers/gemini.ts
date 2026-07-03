@@ -11,14 +11,20 @@ export class GeminiProvider extends BaseProvider {
         : { inline_data: { mime_type: p.doc.mimeType, data: p.doc.base64 } },
     );
 
+    const history = (req.history ?? []).map((m) => ({
+      // Gemini names the assistant role "model".
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
     const data = await this.postJson(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`,
       { "x-goog-api-key": this.apiKey },
       {
-        contents: [{ role: "user", parts }],
+        contents: [...history, { role: "user", parts }],
         ...(req.system ? { system_instruction: { parts: [{ text: req.system }] } } : {}),
         generationConfig: { maxOutputTokens: req.maxTokens },
       },
+      req.signal,
     );
 
     const candidate = data.candidates?.[0];

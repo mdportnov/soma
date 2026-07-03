@@ -64,7 +64,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn, formatDate, formatValue, todayISO } from "@/lib/utils";
+import { cn, formatDate, formatValue, todayISO, uiLocale } from "@/lib/utils";
 import { kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
 import { isCrisis, isStage2 } from "@/lib/vitals";
 import { useToast } from "@/components/app/Toast";
@@ -1147,7 +1147,7 @@ function SymptomStrip({ rows }: { rows: SymptomLog[] }) {
                 )}
               </div>
               <span className="absolute bottom-0 text-[10px] text-muted-foreground">
-                {new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", {
+                {new Date(`${date}T00:00:00`).toLocaleDateString(uiLocale(), {
                   day: "numeric",
                   month: "short",
                 })}

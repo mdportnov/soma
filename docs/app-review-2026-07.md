@@ -46,7 +46,7 @@ backup and vault becomes permanently undecryptable.
 **Fix:** persist the Argon2 parameters in the file header and use them on decrypt; pin explicit
 params on encrypt.
 
-### 1.4 `schemaVersion` is the *count* of migration files — old backups are wrongly rejected **[verified]**
+### 1.4 `schemaVersion` is the _count_ of migration files — old backups are wrongly rejected **[verified]**
 
 `export const schemaVersion = Object.keys(migrationFiles).length` (`src/db/migrate.ts:29`),
 currently **1** after the squash. It is stamped into every backup (`src/lib/backup.ts:124`,
@@ -320,7 +320,7 @@ and export live only deep in a 12-card flat Settings page (`Settings.tsx:86-99`)
 
 ### 6.4 Command palette: search-only, routes to lists (MEDIUM)
 
-`routeFor` sends `diagnosis`/`medication`/`allergy`/`symptom` matches to *list* pages instead of
+`routeFor` sends `diagnosis`/`medication`/`allergy`/`symptom` matches to _list_ pages instead of
 the record (`CommandPalette.tsx:31-54`); no command actions ("Add medication", "Import…").
 (And with 1.1 unfixed, the palette currently returns nothing at all.)
 
@@ -364,29 +364,18 @@ enforced in both repo guard and UI.
 ## Prioritized action plan
 
 **P0 — data loss / broken feature (do first):**
+
 1. Create the `fts_records` migration; stop swallowing FTS errors (1.1).
 2. Crash-safe vault lock: temp + fsync + rename before deleting plaintext (1.2).
 3. Persist Argon2 params in backup/vault headers (1.3).
 4. Fix `schemaVersion` and accept legacy backup versions (1.4).
 5. Include attachments in backup & vault; delete files on record delete (1.5).
 
-**P1 — reliability users hit weekly:**
-6. Error + Retry state for `useQuery` consumers (2.1) and a `toast.error` +
-   mutation wrapper (2.2); `reload()` returning the real promise (2.3).
-7. Duplicate-document detection on import (3.1); file-size guard + truncation salvage (3.2/3.3).
-8. Persist in-progress import drafts; cancel/abort wiring (3.5).
-9. MCP writes behind confirmation/opt-in; document the vault interaction (5.1/5.2).
-10. Fix discharge allergy category (3.6) — small, safety-relevant.
+**P1 — reliability users hit weekly:** 6. Error + Retry state for `useQuery` consumers (2.1) and a `toast.error` +
+mutation wrapper (2.2); `reload()` returning the real promise (2.3). 7. Duplicate-document detection on import (3.1); file-size guard + truncation salvage (3.2/3.3). 8. Persist in-progress import drafts; cancel/abort wiring (3.5). 9. MCP writes behind confirmation/opt-in; document the vault interaction (5.1/5.2). 10. Fix discharge allergy category (3.6) — small, safety-relevant.
 
-**P2 — experience quality:**
-11. Localize placeholders/dates/currency/aria (6.1); dialog focus trap + dirty guard (6.2).
-12. Streaming + cancel + persisted history with native multi-turn roles (4.1/4.2); cached trend
-    interpretations (4.3); "view context" transparency (4.4).
-13. Feature discovery: medication-overlay hint, palette actions + record-level routing,
-    Settings anchor nav (6.3/6.4).
-14. Shared semantic validator (dates/ranges) used by both manual forms and AI import.
+**P2 — experience quality:** 11. Localize placeholders/dates/currency/aria (6.1); dialog focus trap + dirty guard (6.2). 12. Streaming + cancel + persisted history with native multi-turn roles (4.1/4.2); cached trend
+interpretations (4.3); "view context" transparency (4.4). 13. Feature discovery: medication-overlay hint, palette actions + record-level routing,
+Settings anchor nav (6.3/6.4). 14. Shared semantic validator (dates/ranges) used by both manual forms and AI import.
 
-**P3 — hardening:**
-15. Transactional multi-step writes; WAL alignment with the sidecar; integrity_check on boot.
-16. Updater + visible app version; CSP; parallelize AI mapping fallback with a failure banner.
-17. Test the gaps: MCP tools, doc modules, context/prompt builders, component smoke tests.
+**P3 — hardening:** 15. Transactional multi-step writes; WAL alignment with the sidecar; integrity_check on boot. 16. Updater + visible app version; CSP; parallelize AI mapping fallback with a failure banner. 17. Test the gaps: MCP tools, doc modules, context/prompt builders, component smoke tests.

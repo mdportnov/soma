@@ -82,7 +82,8 @@ export const vaccineModule: DocTypeModule<VaccineDraft> = {
         const match = resolveVaccine(v.vaccineName, v.disease);
         // Pre-select rows we're confident about (named antigen + a date); leave
         // fuzzy / unmatched / undated rows for the user to confirm.
-        const include = !!v.date && (match?.confidence === "exact" || match?.confidence === "alias");
+        const include =
+          !!v.date && (match?.confidence === "exact" || match?.confidence === "alias");
         return { ...v, match, include, key: i };
       }),
     };

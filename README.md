@@ -210,7 +210,7 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 CI (`.github/workflows/ci.yml`) runs version consistency, Prettier, ESLint, TypeScript, tests, the
 frontend build, a migrations-up-to-date check, sidecar builds on all desktop operating systems,
 `rustfmt`, `clippy` and Rust tests on every push and PR. A weekly packaging smoke build tracks the
-latest GitHub macOS, Ubuntu and Windows images. A `v*` tag runs the release gates, builds one
+GitHub macOS and Windows images plus the Ubuntu 22.04 release baseline. A `v*` tag runs the release gates, builds one
 universal macOS installer plus Windows and Linux installers, adds SHA-256 checksums, and only then
 publishes the GitHub Release. See [the release runbook](docs/releasing.md).
 

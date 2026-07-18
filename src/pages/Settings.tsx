@@ -801,11 +801,7 @@ function EmergencyContactCard() {
                 insurancePhone: trimToNull(insurancePhone),
                 emergencyNotes: trimToNull(notes),
                 pregnancyStatus: (pregnancyStatus || null) as
-                  | "not_pregnant"
-                  | "pregnant"
-                  | "postpartum"
-                  | "unknown"
-                  | null,
+                  "not_pregnant" | "pregnant" | "postpartum" | "unknown" | null,
                 codeStatus: (codeStatus || null) as "full_code" | "dnr" | "dni" | null,
                 organDonor: organDonor === "" ? null : organDonor === "yes",
               });

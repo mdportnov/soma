@@ -18,9 +18,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use aes_gcm::aead::rand_core::RngCore;
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
-use aes_gcm::{Aes256Gcm, Nonce};
+use aes_gcm::aead::{Aead, Generate, KeyInit};
+use aes_gcm::Aes256Gcm;
 use chrono::Local;
 use keyring::Entry;
 use serde::Serialize;
@@ -77,14 +76,12 @@ fn seal(
     schema_version: u32,
     version: u8,
 ) -> Result<Vec<u8>, String> {
-    let mut salt = [0u8; 16];
-    let mut nonce = [0u8; 12];
-    OsRng.fill_bytes(&mut salt);
-    OsRng.fill_bytes(&mut nonce);
+    let salt = <[u8; 16]>::generate();
+    let nonce = <[u8; 12]>::generate();
     let key = kdf::derive_key_pinned(passphrase, &salt)?;
     let cipher = Aes256Gcm::new((&key).into());
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), plain)
+        .encrypt((&nonce).into(), plain)
         .map_err(|e| format!("encrypt: {e}"))?;
 
     let mut out = Vec::with_capacity(HEADER_LEN_V2 + ciphertext.len());
@@ -163,10 +160,13 @@ fn open_backup(raw: &[u8], passphrase: &str) -> Result<(u32, u8, Vec<u8>), Strin
         _ => return Err("This backup was created by a newer version of Soma".into()),
     };
 
+    let nonce: &[u8; 12] = nonce
+        .try_into()
+        .map_err(|_| "Backup nonce has the wrong length")?;
     let key = kdf::derive_key(passphrase, salt, m_cost, t_cost, p_cost)?;
     let cipher = Aes256Gcm::new((&key).into());
     let payload = cipher
-        .decrypt(Nonce::from_slice(nonce), &raw[body_offset..])
+        .decrypt(nonce.into(), &raw[body_offset..])
         .map_err(|_| "Wrong passphrase, or the file is corrupted".to_string())?;
     Ok((schema_version, version, payload))
 }
@@ -778,15 +778,11 @@ mod tests {
     fn legacy_v1_backup_still_decrypts() {
         let plain = fake_snapshot();
         let pass = "an old backup from before v2";
-        let mut salt = [0u8; 16];
-        let mut nonce = [0u8; 12];
-        OsRng.fill_bytes(&mut salt);
-        OsRng.fill_bytes(&mut nonce);
+        let salt = <[u8; 16]>::generate();
+        let nonce = <[u8; 12]>::generate();
         let key = kdf::derive_key_pinned(pass, &salt).unwrap();
         let cipher = Aes256Gcm::new((&key).into());
-        let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce), plain.as_slice())
-            .unwrap();
+        let ciphertext = cipher.encrypt((&nonce).into(), plain.as_slice()).unwrap();
         let mut blob = Vec::new();
         blob.extend_from_slice(MAGIC);
         blob.push(1); // v1

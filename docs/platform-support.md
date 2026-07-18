@@ -15,7 +15,8 @@ Windows and Linux sidecars use Bun's baseline CPU target to avoid an AVX2 requir
 The Linux release is built on Ubuntu 22.04. Tauri recommends Ubuntu 22.04 or Debian 12 as the oldest
 practical WebKitGTK 4.1 build baseline and warns that building on newer glibc raises the minimum
 runtime version. This baseline is intentional: the package runs forward on current Ubuntu,
-Debian and compatible distributions. A weekly package smoke build also runs on `ubuntu-latest`.
+Debian and compatible distributions. The weekly package smoke build uses the same Ubuntu 22.04
+baseline as the release workflow, while CI still tests the sidecar and Rust code on `ubuntu-latest`.
 
 ## Build hosts
 

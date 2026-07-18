@@ -32,9 +32,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use aes_gcm::aead::rand_core::RngCore;
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
-use aes_gcm::{Aes256Gcm, Nonce};
+use aes_gcm::aead::{Aead, Generate, KeyInit};
+use aes_gcm::Aes256Gcm;
 use keyring::Entry;
 use serde::Serialize;
 use tauri::Manager;
@@ -146,8 +145,7 @@ fn ensure_keychain_key() -> Result<[u8; 32], String> {
             Ok(arr)
         }
         Err(keyring::Error::NoEntry) => {
-            let mut key = [0u8; 32];
-            OsRng.fill_bytes(&mut key);
+            let key = <[u8; 32]>::generate();
             entry
                 .set_password(&to_hex(&key))
                 .map_err(|e| e.to_string())?;
@@ -173,10 +171,8 @@ fn read_keychain_key() -> Result<[u8; 32], String> {
 /// without any filesystem or keychain access. Used for both the database
 /// snapshot and the attachments archive (which share the key/format).
 fn seal(plain: &[u8], source: KeySource, mode: u8) -> Result<Vec<u8>, String> {
-    let mut salt = [0u8; 16];
-    let mut nonce = [0u8; 12];
-    OsRng.fill_bytes(&mut salt);
-    OsRng.fill_bytes(&mut nonce);
+    let salt = <[u8; 16]>::generate();
+    let nonce = <[u8; 12]>::generate();
 
     let params = KdfParams::PINNED;
     let key: [u8; 32] = match source {
@@ -186,7 +182,7 @@ fn seal(plain: &[u8], source: KeySource, mode: u8) -> Result<Vec<u8>, String> {
 
     let cipher = Aes256Gcm::new((&key).into());
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), plain)
+        .encrypt((&nonce).into(), plain)
         .map_err(|e| format!("encrypt: {e}"))?;
 
     let mut out = Vec::with_capacity(HEADER_LEN_V2 + ciphertext.len());
@@ -287,7 +283,7 @@ fn derive_key_for_header(passphrase: &str, header: &Header) -> Result<[u8; 32], 
 fn open(raw: &[u8], header: &Header, key: &[u8; 32]) -> Result<Vec<u8>, String> {
     let cipher = Aes256Gcm::new(key.into());
     cipher
-        .decrypt(Nonce::from_slice(&header.nonce), &raw[header.body_offset..])
+        .decrypt((&header.nonce).into(), &raw[header.body_offset..])
         .map_err(|_| "Wrong passphrase, or the vault is corrupted".to_string())
 }
 
@@ -617,13 +613,11 @@ mod tests {
     /// Builds a legacy v1 blob (no Argon2 params in the header) the way pre-v2
     /// builds did, to prove such files still decrypt under the pinned params.
     fn v1_passphrase_blob(plain: &[u8], passphrase: &str) -> Vec<u8> {
-        let mut salt = [0u8; 16];
-        OsRng.fill_bytes(&mut salt);
+        let salt = <[u8; 16]>::generate();
         let key = kdf::derive_key_pinned(passphrase, &salt).unwrap();
-        let mut nonce = [0u8; 12];
-        OsRng.fill_bytes(&mut nonce);
+        let nonce = <[u8; 12]>::generate();
         let cipher = Aes256Gcm::new((&key).into());
-        let ciphertext = cipher.encrypt(Nonce::from_slice(&nonce), plain).unwrap();
+        let ciphertext = cipher.encrypt((&nonce).into(), plain).unwrap();
         let mut out = Vec::new();
         out.extend_from_slice(MAGIC);
         out.push(1); // v1

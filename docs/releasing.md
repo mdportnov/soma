@@ -9,6 +9,8 @@
   both the application and the MCP workspace.
 - A release is published only after the web quality gates and every native platform build succeed.
 - Every release contains `SHA256SUMS.txt` generated from the uploaded installers.
+- The in-app update check reads the public stable release from GitHub and opens its release page;
+  installation remains manual on every platform.
 
 ## Prepare and publish
 

@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **In-app update check**: Settings now shows the installed version, checks the latest published
+  stable GitHub Release and opens the release page for manual download and installation.
 - **Lifestyle context** (v0.3): a dedicated `/lifestyle` page with daily sleep / training /
   stress-and-energy cards and a recent-entries table; the rolling-window summary is folded into the
   AI health context so chat and trend interpretation account for it. Ships with a forward-looking

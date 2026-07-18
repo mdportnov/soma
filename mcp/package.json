@@ -1,7 +1,7 @@
 {
   "name": "soma-mcp",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local stdio MCP server exposing the Soma health database to AI assistants",
   "type": "module",
   "scripts": {

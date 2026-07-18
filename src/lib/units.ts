@@ -228,8 +228,7 @@ const MOLAR_FACTORS: Record<string, Record<string, number>> = {
 };
 
 export type ConversionResult =
-  | { ok: true; value: number; unit: string }
-  | { ok: false; reason: "unknown_conversion" };
+  { ok: true; value: number; unit: string } | { ok: false; reason: "unknown_conversion" };
 
 /**
  * Converts `value` from `fromUnit` to the biomarker's default unit.

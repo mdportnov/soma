@@ -1486,91 +1486,75 @@ export async function getTimeline(profileId: number): Promise<TimelineEvent[]> {
     ]);
 
   const events: TimelineEvent[] = [
-    ...panels.map(
-      (p): TimelineEvent => ({
-        kind: "lab_panel",
-        id: p.id,
-        date: p.date,
-        title: p.labName ? `Labs — ${p.labName}` : "Lab panel",
-        subtitle: [p.city, p.country].filter(Boolean).join(", ") || null,
-        outOfRangeCount: p.outOfRangeCount,
-        resultCount: p.resultCount,
-      }),
-    ),
-    ...visits.map(
-      (v): TimelineEvent => ({
-        kind: "visit",
-        id: v.id,
-        date: v.date,
-        title: v.doctorName
-          ? `Visit — ${v.doctorName}`
-          : `Visit${v.specialty ? ` — ${v.specialty}` : ""}`,
-        subtitle: [v.clinic, v.city].filter(Boolean).join(", ") || v.specialty,
-      }),
-    ),
-    ...diagnoses.map(
-      (d): TimelineEvent => ({
-        kind: "diagnosis",
-        id: d.id,
-        date: d.date,
-        title: d.name,
-        subtitle: d.icdCode,
-        status: d.status,
-      }),
-    ),
-    ...meds.map(
-      (m): TimelineEvent => ({
-        kind: "medication",
-        id: m.id,
-        date: m.startDate,
-        endDate: m.endDate,
-        title: m.name,
-        subtitle: m.doseAmount ? `${m.doseAmount} ${m.doseUnit ?? ""}`.trim() : null,
-        type: m.type,
-      }),
-    ),
+    ...panels.map((p): TimelineEvent => ({
+      kind: "lab_panel",
+      id: p.id,
+      date: p.date,
+      title: p.labName ? `Labs — ${p.labName}` : "Lab panel",
+      subtitle: [p.city, p.country].filter(Boolean).join(", ") || null,
+      outOfRangeCount: p.outOfRangeCount,
+      resultCount: p.resultCount,
+    })),
+    ...visits.map((v): TimelineEvent => ({
+      kind: "visit",
+      id: v.id,
+      date: v.date,
+      title: v.doctorName
+        ? `Visit — ${v.doctorName}`
+        : `Visit${v.specialty ? ` — ${v.specialty}` : ""}`,
+      subtitle: [v.clinic, v.city].filter(Boolean).join(", ") || v.specialty,
+    })),
+    ...diagnoses.map((d): TimelineEvent => ({
+      kind: "diagnosis",
+      id: d.id,
+      date: d.date,
+      title: d.name,
+      subtitle: d.icdCode,
+      status: d.status,
+    })),
+    ...meds.map((m): TimelineEvent => ({
+      kind: "medication",
+      id: m.id,
+      date: m.startDate,
+      endDate: m.endDate,
+      title: m.name,
+      subtitle: m.doseAmount ? `${m.doseAmount} ${m.doseUnit ?? ""}`.trim() : null,
+      type: m.type,
+    })),
     // Allergies anchor on onset date; entries without one have no place on a timeline.
     ...allergies
       .filter((a) => a.onsetDate != null)
-      .map(
-        (a): TimelineEvent => ({
-          kind: "allergy",
-          id: a.id,
-          date: a.onsetDate!,
-          title: a.allergen,
-          subtitle: a.reaction,
-          severity: a.severity,
-        }),
-      ),
-    ...vaccines.map(
-      (v): TimelineEvent => ({
-        kind: "vaccine",
-        id: v.id,
-        date: v.date,
-        title: v.vaccineName,
-        subtitle: v.dose != null ? `Dose ${v.dose}` : null,
-      }),
-    ),
+      .map((a): TimelineEvent => ({
+        kind: "allergy",
+        id: a.id,
+        date: a.onsetDate!,
+        title: a.allergen,
+        subtitle: a.reaction,
+        severity: a.severity,
+      })),
+    ...vaccines.map((v): TimelineEvent => ({
+      kind: "vaccine",
+      id: v.id,
+      date: v.date,
+      title: v.vaccineName,
+      subtitle: v.dose != null ? `Dose ${v.dose}` : null,
+    })),
     // Severity filtering (≥ 6 by default) happens in the UI, not here.
-    ...symptoms.map(
-      (s): TimelineEvent => ({
-        kind: "symptom",
-        id: s.id,
-        date: s.date,
-        title: s.symptomName,
-        subtitle: s.notes,
-        severity: s.severity,
-      }),
-    ),
-    ...imaging.map(
-      (i): TimelineEvent => ({
-        kind: "imaging",
-        id: i.id,
-        date: i.date,
-        title: `${i.modalityType.toUpperCase()} — ${i.bodyArea}`,
-        subtitle: i.clinic,
-      }),
-    ),
+    ...symptoms.map((s): TimelineEvent => ({
+      kind: "symptom",
+      id: s.id,
+      date: s.date,
+      title: s.symptomName,
+      subtitle: s.notes,
+      severity: s.severity,
+    })),
+    ...imaging.map((i): TimelineEvent => ({
+      kind: "imaging",
+      id: i.id,
+      date: i.date,
+      title: `${i.modalityType.toUpperCase()} — ${i.bodyArea}`,
+      subtitle: i.clinic,
+    })),
   ];
 
   return events.sort((a, b) => b.date.localeCompare(a.date));

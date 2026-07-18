@@ -123,38 +123,32 @@ export const dischargeModule: DocTypeModule<DischargeDraft> = {
     const d = validateDischarge(parsed);
     let key = 0;
     const rows: DischargeRow[] = [
-      ...d.diagnoses.map(
-        (dx): DischargeRow => ({
-          key: key++,
-          include: false,
-          type: "diagnosis",
-          name: dx.name,
-          icdCode: dx.icdCode,
-        }),
-      ),
-      ...d.medications.map(
-        (m): DischargeRow => ({
-          key: key++,
-          include: false,
-          type: "medication",
-          name: m.name,
-          dose: m.dose,
-        }),
-      ),
-      ...d.allergies.map(
-        (a): DischargeRow => ({
-          key: key++,
-          include: false,
-          type: "allergy",
-          name: a.allergen,
-          reaction: a.reaction,
-          severity: resolveEnum(a.severity, ALLERGY_SEVERITY_VOCAB, "moderate").value,
-          // Resolve the category from the summary; never assume "drug" — a
-          // mis-categorised food/environmental allergy would feed the
-          // drug-interaction warnings incorrectly.
-          category: resolveEnum(a.category, ALLERGY_CATEGORY_VOCAB, "other").value,
-        }),
-      ),
+      ...d.diagnoses.map((dx): DischargeRow => ({
+        key: key++,
+        include: false,
+        type: "diagnosis",
+        name: dx.name,
+        icdCode: dx.icdCode,
+      })),
+      ...d.medications.map((m): DischargeRow => ({
+        key: key++,
+        include: false,
+        type: "medication",
+        name: m.name,
+        dose: m.dose,
+      })),
+      ...d.allergies.map((a): DischargeRow => ({
+        key: key++,
+        include: false,
+        type: "allergy",
+        name: a.allergen,
+        reaction: a.reaction,
+        severity: resolveEnum(a.severity, ALLERGY_SEVERITY_VOCAB, "moderate").value,
+        // Resolve the category from the summary; never assume "drug" — a
+        // mis-categorised food/environmental allergy would feed the
+        // drug-interaction warnings incorrectly.
+        category: resolveEnum(a.category, ALLERGY_CATEGORY_VOCAB, "other").value,
+      })),
     ];
     return {
       meta: {

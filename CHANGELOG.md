@@ -58,6 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **One-field GitHub releases**: maintainers can enter the next SemVer in Actions → Release; the
+  workflow updates version files and changelog, creates the commit and tag atomically, validates
+  the project, builds every desktop installer, adds checksums and publishes only after all jobs pass.
 - **In-app update check**: Settings now shows the installed version, checks the latest published
   stable GitHub Release and opens the release page for manual download and installation.
 - **Lifestyle context** (v0.3): a dedicated `/lifestyle` page with daily sleep / training /

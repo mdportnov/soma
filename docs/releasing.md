@@ -12,33 +12,38 @@
 - The in-app update check reads the public stable release from GitHub and opens its release page;
   installation remains manual on every platform.
 
-## Prepare and publish
+## Publish from GitHub
 
-Start from a clean, current `master` branch:
+1. Open [Actions → Release](https://github.com/mdportnov/soma/actions/workflows/release.yml).
+2. Select **Run workflow** and keep the branch set to `master`.
+3. Enter the next version without `v`, such as `0.2.0`.
+4. Select **Run workflow**.
+
+The workflow rejects invalid, existing or non-incrementing versions. It updates every version
+location and `CHANGELOG.md`, creates an atomic `release: v<version>` commit and annotated tag, runs
+all quality gates, and builds macOS, Windows and Linux installers. The release stays a draft until
+every native build succeeds; the final job adds `SHA256SUMS.txt` and publishes it.
+
+Use a SemVer suffix such as `0.3.0-beta.1` to publish a prerelease. A version without a suffix is a
+stable release and becomes visible to Soma's in-app update check.
+
+If a run fails after creating its commit and tag, use **Re-run failed jobs** on that run. Do not
+start a second workflow with the same version.
+
+## Local fallback
+
+The tag trigger remains available for maintainers who need a local release flow:
 
 ```sh
 git pull --ff-only
 pnpm install --frozen-lockfile
 pnpm release:prepare 0.2.0
-```
-
-The preparation command updates all version locations and moves the current Unreleased changelog
-content under the new version and date. Review the result, then run:
-
-```sh
 pnpm verify
 git add package.json mcp/package.json src-tauri/Cargo.toml src-tauri/Cargo.lock CHANGELOG.md
 git commit -m "release: v0.2.0"
 git tag -a v0.2.0 -m "Soma v0.2.0"
-git push origin master v0.2.0
+git push --atomic origin master v0.2.0
 ```
-
-The tag starts `.github/workflows/release.yml`. It creates a draft release, builds the complete
-matrix, uploads installers, generates checksums and publishes the release. A failed job leaves the
-release as a draft; fix the cause and rerun the failed jobs or replace the tag before publishing.
-
-Prerelease versions use SemVer suffixes such as `0.3.0-beta.1`. Their GitHub releases are marked as
-prereleases automatically.
 
 ## Artifacts
 

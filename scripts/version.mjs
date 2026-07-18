@@ -8,7 +8,10 @@ const rootPackage = readJson("package.json");
 const mcpPackage = readJson("mcp/package.json");
 const cargoToml = readFileSync(join(root, "src-tauri/Cargo.toml"), "utf8");
 const cargoLock = readFileSync(join(root, "src-tauri/Cargo.lock"), "utf8");
-const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const identifier = String.raw`(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)`;
+const semver = new RegExp(
+  String.raw`^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-${identifier}(?:\.${identifier})*)?$`,
+);
 
 const cargoVersion = cargoToml.match(/^version = "([^"]+)"$/m)?.[1];
 const lockedVersion = cargoLock.match(/\[\[package\]\]\nname = "soma"\nversion = "([^"]+)"/)?.[1];

@@ -28,6 +28,96 @@
 
 ---
 
+## Install Soma
+
+Download the installer for your operating system from
+[**GitHub Releases**](https://github.com/mdportnov/soma/releases). Installed builds are normal
+desktop applications; using Soma does not require developer tools or a terminal.
+
+| Platform | Release artifact                                             |
+| -------- | ------------------------------------------------------------ |
+| macOS    | One universal `.dmg` for Apple Silicon and Intel             |
+| Windows  | Current-user NSIS `-setup.exe`                               |
+| Linux    | `.AppImage`, `.deb` or `.rpm`, depending on the distribution |
+
+### macOS
+
+Soma has no Apple Developer certificate. The application is ad-hoc signed but not notarized, so
+macOS requires a one-time approval on first launch:
+
+1. Open the universal `.dmg` and drag **Soma** to **Applications**.
+2. Try to open Soma from Applications. macOS will block this first attempt.
+3. Open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway**.
+4. Confirm **Open**.
+
+Later launches work normally from Finder, Spotlight, Launchpad or the Dock. Every release includes
+`SHA256SUMS.txt` for artifact-integrity verification.
+
+### Windows
+
+Run the `-setup.exe` from Explorer. It installs for the current user, adds normal Start Menu
+integration without requiring administrator access, and bootstraps WebView2 if the runtime is
+missing.
+
+The installer is currently unsigned. Defender SmartScreen can show an unknown-publisher warning;
+Windows 11 with Smart App Control in enforcement mode can block unknown unsigned applications
+entirely. An installer script cannot bypass that Windows policy.
+
+### Linux
+
+On Ubuntu/Debian, open the `.deb` with the graphical software installer. On Fedora/RHEL, open the
+`.rpm`. The AppImage is portable; if the browser removed its executable permission, enable
+**Allow executing file as program** in the file manager's Properties dialog before double-clicking
+it.
+
+## Build from source
+
+Clone the repository and run one native build script. Each script provisions the pinned Node,
+pnpm, Rust and Bun versions, installs the locked workspace and writes final packages under
+`artifacts/<platform>/`.
+
+### macOS
+
+Requires macOS 13+ and Xcode Command Line Tools. Homebrew is only needed when `mise` is not already
+installed.
+
+```sh
+git clone https://github.com/mdportnov/soma.git
+cd soma
+./scripts/build-macos.sh
+```
+
+Output: universal `artifacts/macos/Soma.app` and `.dmg`.
+
+### Windows
+
+Requires current x64 Windows 10/11, PowerShell, WinGet and Git. The script installs the Microsoft
+C++ Build Tools workload and `mise`; the one-time Build Tools setup can request administrator
+approval.
+
+```powershell
+git clone https://github.com/mdportnov/soma.git
+cd soma
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1
+```
+
+Output: NSIS installer under `artifacts/windows/`.
+
+### Linux
+
+Supports current Debian/Ubuntu, Fedora and Arch-family distributions. The script uses `sudo` to
+install the required native packages through apt, dnf or pacman.
+
+```sh
+git clone https://github.com/mdportnov/soma.git
+cd soma
+./scripts/build-linux.sh
+```
+
+Output: `.deb`, `.rpm` and `.AppImage` under `artifacts/linux/`. Install or enable a freedesktop
+Secret Service provider such as `gnome-keyring` or KWallet for key storage. Exact support boundaries
+are documented in [platform support](docs/platform-support.md).
+
 ## Why Soma
 
 If you don't have a permanent medical record in one country — you travel, you relocate, you do a
@@ -96,49 +186,33 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 | Auditability       | Every imported value keeps its original `raw_label` from the source document                                                                    |
 | Not medical advice | Every AI output carries a disclaimer                                                                                                            |
 
-## Getting started
-
-### Download
-
-Grab the installer for your OS from [**Releases**](https://github.com/mdportnov/soma/releases) —
-`.dmg` (macOS, Apple Silicon & Intel), `.msi`/`.exe` (Windows), `.deb`/`.rpm`/`.AppImage` (Linux).
-
-### Build from source
-
-Prerequisites: **Node 22+**, **pnpm**, **Rust (stable)**, **[Bun](https://bun.sh)**
-(used to compile the bundled MCP sidecar), and the
-[Tauri system dependencies](https://tauri.app/start/prerequisites/) for your OS.
-On **Linux**, the OS keychain is the freedesktop **Secret Service** — install/enable
-`gnome-keyring` (or KWallet) so API keys and the backup passphrase can be stored.
-
-```bash
-git clone https://github.com/mdportnov/soma.git
-cd soma
-pnpm install                                # also installs the mcp/ sidecar deps (postinstall)
-pnpm tauri icon docs/assets/logo.svg        # regenerate platform icon set from the brand mark
-# macOS .icns uses the padded variant (Apple icon grid), overwrite it after the line above:
-pnpm tauri icon docs/assets/logo-macos.svg -o /tmp/soma-icons && cp /tmp/soma-icons/icon.icns src-tauri/icons/icon.icns
-pnpm tauri dev                             # run the app
-pnpm tauri build                           # production installers
-```
-
 ## Development
 
-| Command                     | What it does                                                         |
-| --------------------------- | -------------------------------------------------------------------- |
-| `pnpm tauri dev`            | Run the desktop app with hot reload                                  |
-| `pnpm dev`                  | Frontend only (Vite dev server; DB requires the Tauri shell)         |
-| `pnpm lint` / `pnpm format` | ESLint / Prettier (write mode; `format:check` in CI)                 |
-| `pnpm typecheck`            | `tsc --noEmit`                                                       |
-| `pnpm build`                | Typecheck + production frontend build                                |
-| `pnpm db:generate`          | Regenerate Drizzle migrations after editing `src/db/schema.ts`       |
-| `pnpm mcp:sidecar`          | Compile the MCP sidecar for the host (auto-run by `tauri dev/build`) |
-| `cargo fmt && cargo clippy` | Rust formatting / lints (run inside `src-tauri/`)                    |
+| Command                                     | What it does                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------- |
+| `pnpm setup:linux`                          | Install Linux system/toolchain dependencies and workspace packages   |
+| `pnpm setup:macos`                          | Install the pinned macOS development toolchain and dependencies      |
+| `pnpm setup:windows`                        | Install Windows build dependencies and workspace packages            |
+| `pnpm build:linux`                          | Build `.deb`, `.rpm` and `.AppImage` into `artifacts/linux/`         |
+| `pnpm build:macos`                          | Build the universal macOS `.app` + `.dmg` into `artifacts/macos/`    |
+| `pnpm build:windows`                        | Build the NSIS installer into `artifacts/windows/`                   |
+| `pnpm tauri dev`                            | Run the desktop app with hot reload                                  |
+| `pnpm dev`                                  | Frontend only (Vite dev server; DB requires the Tauri shell)         |
+| `pnpm lint` / `pnpm format`                 | ESLint / Prettier (write mode; `format:check` in CI)                 |
+| `pnpm typecheck`                            | `tsc --noEmit`                                                       |
+| `pnpm build`                                | Typecheck + production frontend build                                |
+| `pnpm verify`                               | Run all JS/TS formatting, lint, typecheck, test and build gates      |
+| `pnpm version:check`                        | Verify release versions and the current Git tag are consistent       |
+| `pnpm db:generate`                          | Regenerate Drizzle migrations after editing `src/db/schema.ts`       |
+| `pnpm mcp:sidecar`                          | Compile the MCP sidecar for the host (auto-run by `tauri dev/build`) |
+| `cargo fmt` / `cargo clippy` / `cargo test` | Rust gates (run inside `src-tauri/`)                                 |
 
-CI (`.github/workflows/ci.yml`) runs Prettier, ESLint, TypeScript, the frontend build, a
-migrations-up-to-date check, `rustfmt` and `clippy` on every push and PR.
-Releases (`.github/workflows/release.yml`) build installers for **macOS (arm64 + x86_64),
-Windows and Linux** and attach them to a draft GitHub Release on every `v*` tag.
+CI (`.github/workflows/ci.yml`) runs version consistency, Prettier, ESLint, TypeScript, tests, the
+frontend build, a migrations-up-to-date check, sidecar builds on all desktop operating systems,
+`rustfmt`, `clippy` and Rust tests on every push and PR. A weekly packaging smoke build tracks the
+latest GitHub macOS, Ubuntu and Windows images. A `v*` tag runs the release gates, builds one
+universal macOS installer plus Windows and Linux installers, adds SHA-256 checksums, and only then
+publishes the GitHub Release. See [the release runbook](docs/releasing.md).
 
 ## Architecture
 
@@ -192,74 +266,11 @@ flowchart LR
     D -->|user confirms| E[(lab_result<br/>+ raw_label audit trail)]
 ```
 
-## Roadmap
-
-### ✅ v0.1 — MVP core
-
-- [x] Drizzle/SQLite schema + migrations for all entities
-- [x] Biomarker dictionary with reference/optimal ranges, aliases, custom markers
-- [x] Manual lab entry → trend charts with range bands
-- [x] Medications/supplements with intake periods + **overlay on biomarker charts**
-- [x] Visits, diagnoses, prescriptions
-- [x] Unified horizontal timeline
-- [x] AI settings: provider/model registry, keychain, key validation, stubs when disabled
-- [x] AI import: extraction → deterministic mapping → review UI
-- [x] JSON/CSV export, light/dark theme
-
-### ✅ v0.2 — Sections, safety & polish _(shipped)_
-
-- [x] Allergies (severity-aware, anaphylactic delete guard) + drug-allergy interaction warnings
-- [x] Vaccines: dose series & expiry, WHO childhood-immunization calendar, travel guidance
-- [x] Imaging records (X-ray / CT / MRI / ultrasound), manual + AI import
-- [x] Journal: weight, blood pressure & symptoms, with weight-goal projection
-- [x] Emergency Card (blood type, conditions, medications, allergies)
-- [x] AI import for all doc types: lab · vaccine · discharge · imaging · prescription · allergy
-- [x] Dictionary grown to ~180 markers + plain-language explanations (EN/RU)
-- [x] Sex/age-specific reference ranges + clinically-aware critical flags
-- [x] Cross-panel correlation & notable-change detection
-- [x] Encrypted cloud-folder backups (Argon2id + AES-256-GCM) with scheduled runs & restore
-- [x] Full-text search (FTS5) + ⌘K command palette, attachment viewer
-- [x] Local MCP server with one-click setup
-- [x] Navigation: route registry, breadcrumbs, hierarchical back; entity detail pages & links
-- [x] UI localization (EN/RU), searchable unit comboboxes, custom biomarkers with ranges/aliases
-
-### ✅ Quality of life _(shipped)_
-
-- [x] Side-by-side comparison of two lab dates
-- [x] Medication adherence log (mark taken/skipped, trailing % + streak)
-- [x] Per-lab unit memory & an expanded molar-conversion table
-- [x] In-app editor for seeded dictionary entries (ranges & aliases, edit-safe across seed sync)
-
-### ✅ v0.3 — AI analysis & lifestyle context _(shipped)_
-
-- [x] AI chat with full health context (trends, meds, diagnoses)
-- [x] Trend interpretation summaries with the mandatory disclaimer
-- [x] **Lifestyle context cards** (sleep, training, stress) feeding the AI health
-      context — manual entry today, with a documented design for future
-      Apple Health / Google Fit / Health Connect sync
-      ([`docs/health-data-integrations.md`](docs/health-data-integrations.md))
-
-> _Descoped:_ a PDF "research knowledge base" (RAG over your own papers) was
-> intentionally dropped — out of scope for a local-first records tool.
-
-### ✅ v1.0 — Reports, reminders & encryption _(shipped)_
-
-- [x] **PDF report generator for doctors** — configurable range & sections, built
-      on-device
-- [x] **In-app reminders feed** — medication-intake nudges & scheduled
-      re-testing (every N months), surfaced as passive notifications only;
-      nothing leaves the device and no OS notifications are raised
-- [x] **Optional at-rest database encryption** — encrypt-when-closed vault
-      (Argon2id + AES-256-GCM), with keychain auto-unlock or passphrase-on-launch
-
-> _Descoped:_ multi-profile (family) and viewer-role sharing — Soma stays a
-> single-profile, local-first record; the doctor PDF covers sharing outward.
-
 ## Tech stack
 
 | Layer    | Choice                                                                        |
 | -------- | ----------------------------------------------------------------------------- |
-| Shell    | [Tauri 2](https://tauri.app) — Rust core, ~10 MB bundle                       |
+| Shell    | [Tauri 2](https://tauri.app) — native Rust desktop shell                      |
 | Frontend | React 19 + TypeScript + Vite                                                  |
 | Styling  | Tailwind CSS v4, shadcn-style component kit, lucide icons                     |
 | Charts   | Recharts                                                                      |
@@ -280,11 +291,15 @@ flowchart LR
 
 ### Checks
 
-Issues and PRs are welcome. Before pushing, please run:
+Issues and PRs are welcome. After running the platform setup script, use the same quality gates as
+CI before pushing:
 
 ```bash
-pnpm format && pnpm lint && pnpm typecheck && pnpm build
-cd src-tauri && cargo fmt && cargo clippy --all-targets
+pnpm verify
+cd src-tauri
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
 Conventions: schema changes go through `src/db/schema.ts` + `pnpm db:generate` (never edit

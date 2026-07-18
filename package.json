@@ -4,15 +4,24 @@
   "version": "0.1.0",
   "description": "Personal Health Dashboard — privacy-first, local-first health records, labs and medications tracker",
   "type": "module",
+  "engines": {
+    "node": ">=22 <23",
+    "pnpm": "10.33.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:linux": "./scripts/build-linux.sh",
+    "build:macos": "./scripts/build-macos.sh",
+    "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",
+    "setup:linux": "./scripts/setup-linux.sh",
+    "setup:macos": "./scripts/setup-macos.sh",
+    "setup:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-windows.ps1",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "mcp:sidecar": "node scripts/build-sidecar.mjs",
-    "mcp:install": "pnpm -C mcp install",
-    "postinstall": "pnpm -C mcp install",
+    "mcp:typecheck": "pnpm --filter soma-mcp typecheck",
     "db:generate": "drizzle-kit generate",
     "db:reset": "tsx scripts/reset-db.ts",
     "test": "vitest run",
@@ -22,7 +31,10 @@
     "seed:dev": "tsx scripts/seed-fake-data.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm mcp:typecheck && pnpm check:biomarker-info && pnpm coverage && pnpm build",
+    "version:check": "node scripts/version.mjs check",
+    "release:prepare": "node scripts/prepare-release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",

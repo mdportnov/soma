@@ -13,22 +13,23 @@
 //   • otherwise the host triple from `rustc -Vv`.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const mcpDir = join(repoRoot, "mcp");
 const outDir = join(repoRoot, "src-tauri", "binaries");
+const bunCacheDir = join(repoRoot, "src-tauri", "target", "bun-cache");
 
 /** Rust target triple → Bun `--target` (for standalone cross-compilation). */
 const BUN_TARGETS = {
   "aarch64-apple-darwin": "bun-darwin-arm64",
   "x86_64-apple-darwin": "bun-darwin-x64",
-  "x86_64-unknown-linux-gnu": "bun-linux-x64",
+  "x86_64-unknown-linux-gnu": "bun-linux-x64-baseline",
   "aarch64-unknown-linux-gnu": "bun-linux-arm64",
-  "x86_64-pc-windows-msvc": "bun-windows-x64",
-  "aarch64-pc-windows-msvc": "bun-windows-x64",
+  "x86_64-pc-windows-msvc": "bun-windows-x64-baseline",
+  "aarch64-pc-windows-msvc": "bun-windows-arm64",
 };
 
 function hostTriple() {
@@ -39,35 +40,58 @@ function hostTriple() {
 }
 
 const triple = process.env.SOMA_SIDECAR_TARGET?.trim() || hostTriple();
-const bunTarget = BUN_TARGETS[triple];
-const isWindows = triple.includes("windows");
-const outFile = join(outDir, `soma-mcp-${triple}${isWindows ? ".exe" : ""}`);
-
 mkdirSync(outDir, { recursive: true });
 
-const args = ["build", "src/index.ts", "--compile", "--outfile", outFile];
-if (bunTarget) {
-  args.push(`--target=${bunTarget}`);
-} else {
-  console.warn(`[build-sidecar] unknown triple "${triple}"; compiling for host arch`);
-}
-
-console.log(`[build-sidecar] target=${triple} (bun ${bunTarget ?? "host"}) → ${outFile}`);
-
-const bun = process.platform === "win32" ? "bun.exe" : "bun";
-try {
-  execFileSync(bun, args, { cwd: mcpDir, stdio: "inherit" });
-} catch (err) {
-  if (err?.code === "ENOENT") {
-    throw new Error(
-      "`bun` was not found on PATH. Install it from https://bun.sh (the MCP sidecar is compiled with Bun).",
-      { cause: err },
-    );
+function build(target, outFile) {
+  const bunTarget = BUN_TARGETS[target];
+  const args = ["build", "src/index.ts", "--compile", "--outfile", outFile];
+  if (bunTarget) {
+    args.push(`--target=${bunTarget}`);
+  } else {
+    console.warn(`[build-sidecar] unknown triple "${target}"; compiling for host arch`);
   }
-  throw err;
+
+  console.log(`[build-sidecar] target=${target} (bun ${bunTarget ?? "host"}) → ${outFile}`);
+
+  const bun = process.platform === "win32" ? "bun.exe" : "bun";
+  const env = { ...process.env };
+  if (process.platform === "win32") {
+    mkdirSync(bunCacheDir, { recursive: true });
+    env.BUN_INSTALL_CACHE_DIR = bunCacheDir;
+  }
+  try {
+    execFileSync(bun, args, { cwd: mcpDir, env, stdio: "inherit" });
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      throw new Error(
+        "`bun` was not found on PATH. Install it from https://bun.sh (the MCP sidecar is compiled with Bun).",
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+
+  if (!existsSync(outFile)) {
+    throw new Error(`[build-sidecar] expected output not found: ${outFile}`);
+  }
 }
 
-if (!existsSync(outFile)) {
-  throw new Error(`[build-sidecar] expected output not found: ${outFile}`);
+if (triple === "universal-apple-darwin") {
+  if (process.platform !== "darwin") {
+    throw new Error("universal-apple-darwin sidecars can only be built on macOS");
+  }
+
+  const armFile = join(outDir, "soma-mcp-aarch64-apple-darwin");
+  const intelFile = join(outDir, "soma-mcp-x86_64-apple-darwin");
+  const outFile = join(outDir, "soma-mcp-universal-apple-darwin");
+  build("aarch64-apple-darwin", armFile);
+  build("x86_64-apple-darwin", intelFile);
+  execFileSync("lipo", ["-create", armFile, intelFile, "-output", outFile], { stdio: "inherit" });
+  chmodSync(outFile, 0o755);
+  execFileSync("lipo", ["-archs", outFile], { stdio: "inherit" });
+} else {
+  const extension = triple.includes("windows") ? ".exe" : "";
+  build(triple, join(outDir, `soma-mcp-${triple}${extension}`));
 }
+
 console.log(`[build-sidecar] ok`);

@@ -1,25 +1,41 @@
-node_modules
-dist
-dist-ssr
+node_modules/
+dist/
+dist-ssr/
+coverage/
+artifacts/
 *.local
+mise.local.toml
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+
+# Local health data and backups
+*.db
+*.db-*
+*.somabk
 
 # Tauri
-src-tauri/target
-src-tauri/gen
+src-tauri/target/
+src-tauri/gen/
 
-# Editor
+# Editors and local agents
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
+.claude/
 .DS_Store
-
-# Tests
-coverage
+Thumbs.db
+Desktop.ini
 
 # Logs
 *.log
 npm-debug.log*
 pnpm-debug.log*
 
-# MCP sidecar binary (built via `pnpm --filter soma-mcp build:sidecar`)
+# MCP sidecar binary (built via `pnpm mcp:sidecar`)
 src-tauri/binaries/

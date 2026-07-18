@@ -1,4 +1,3 @@
-import { addMonths, differenceInCalendarDays, parseISO } from "date-fns";
 import type { NotificationFeedData } from "@/db/repos";
 
 /**
@@ -51,17 +50,19 @@ const RETEST_DUE_SOON_DAYS = 14;
 const RETEST_ALERT_OVERDUE_DAYS = 60;
 
 function daysBetween(fromISO: string, toISO: string): number {
-  return differenceInCalendarDays(
-    parseISO(`${toISO.slice(0, 10)}`),
-    parseISO(`${fromISO.slice(0, 10)}`),
-  );
+  const to = Date.parse(`${toISO.slice(0, 10)}T00:00:00Z`);
+  const from = Date.parse(`${fromISO.slice(0, 10)}T00:00:00Z`);
+  return Math.round((to - from) / 86_400_000);
 }
 
 /** Next-due date for a re-test = anchor + interval months (calendar-correct). */
 export function retestDueDate(lastTestedDate: string, intervalMonths: number): string {
-  return addMonths(parseISO(lastTestedDate.slice(0, 10)), intervalMonths)
-    .toISOString()
-    .slice(0, 10);
+  const [year, month, day] = lastTestedDate.slice(0, 10).split("-").map(Number);
+  const monthIndex = year * 12 + month - 1 + intervalMonths;
+  const targetYear = Math.floor(monthIndex / 12);
+  const targetMonth = ((monthIndex % 12) + 12) % 12;
+  const targetDay = Math.min(day, new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate());
+  return new Date(Date.UTC(targetYear, targetMonth, targetDay)).toISOString().slice(0, 10);
 }
 
 export function buildNotificationFeed(data: NotificationFeedData): NotificationItem[] {

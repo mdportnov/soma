@@ -32,10 +32,12 @@ read-only schema note (see [Database](#database)).
 ## Build
 
 ```sh
-cd mcp
-pnpm install
-pnpm build        # → dist/index.js
+pnpm install --frozen-lockfile
+pnpm --filter soma-mcp build
 ```
+
+This produces the standalone `mcp/dist/soma-mcp` executable. Desktop packages use
+`pnpm mcp:sidecar` automatically to compile and name the executable for Tauri's target triple.
 
 ## Register
 
@@ -43,7 +45,7 @@ pnpm build        # → dist/index.js
 automatically when working in this project. To register globally:
 
 ```sh
-claude mcp add --scope user soma -- node /path/to/soma/mcp/dist/index.js
+claude mcp add --scope user soma -- /path/to/soma/mcp/dist/soma-mcp
 ```
 
 **Claude Desktop** — add to `claude_desktop_config.json`:
@@ -52,8 +54,7 @@ claude mcp add --scope user soma -- node /path/to/soma/mcp/dist/index.js
 {
   "mcpServers": {
     "soma": {
-      "command": "node",
-      "args": ["/path/to/soma/mcp/dist/index.js"]
+      "command": "/path/to/soma/mcp/dist/soma-mcp"
     }
   }
 }

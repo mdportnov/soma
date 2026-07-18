@@ -77,7 +77,7 @@ jobs:
             sidecarTarget: universal-apple-darwin
           - name: Linux x64
             platform: ubuntu-22.04
-            args: --bundles deb,rpm,appimage
+            args: --verbose --bundles deb,rpm,appimage
             rustTargets: ""
             sidecarTarget: ""
           - name: Windows x64

@@ -521,7 +521,7 @@ server.registerTool(
       labName: z.string().optional(),
       city: z.string().optional(),
       country: z.string().optional(),
-      panelType: z.enum(["blood", "urine", "other"]).default("blood"),
+      panelType: z.enum(["blood", "urine", "stool", "other"]).default("blood"),
       results: z.array(labResultInput).min(1),
       dryRun: z.boolean().default(false),
     },

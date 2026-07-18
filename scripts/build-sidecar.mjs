@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const mcpDir = join(repoRoot, "mcp");
 const outDir = join(repoRoot, "src-tauri", "binaries");
+const bunCacheDir = join(repoRoot, "src-tauri", "target", "bun-cache");
 
 /** Rust target triple → Bun `--target` (for standalone cross-compilation). */
 const BUN_TARGETS = {
@@ -53,8 +54,13 @@ function build(target, outFile) {
   console.log(`[build-sidecar] target=${target} (bun ${bunTarget ?? "host"}) → ${outFile}`);
 
   const bun = process.platform === "win32" ? "bun.exe" : "bun";
+  const env = { ...process.env };
+  if (process.platform === "win32") {
+    mkdirSync(bunCacheDir, { recursive: true });
+    env.BUN_INSTALL_CACHE_DIR = bunCacheDir;
+  }
   try {
-    execFileSync(bun, args, { cwd: mcpDir, stdio: "inherit" });
+    execFileSync(bun, args, { cwd: mcpDir, env, stdio: "inherit" });
   } catch (err) {
     if (err?.code === "ENOENT") {
       throw new Error(

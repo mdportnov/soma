@@ -34,6 +34,9 @@ Download the installer for your operating system from
 [**GitHub Releases**](https://github.com/mdportnov/soma/releases). Installed builds are normal
 desktop applications; using Soma does not require developer tools or a terminal.
 
+**Settings → Updates** shows the installed version, checks the latest published stable GitHub
+Release and opens its download page for manual installation.
+
 | Platform | Release artifact                                             |
 | -------- | ------------------------------------------------------------ |
 | macOS    | One universal `.dmg` for Apple Silicon and Intel             |

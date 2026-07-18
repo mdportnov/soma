@@ -25,6 +25,7 @@ export default defineConfig({
         "src/ai/import/resolve.ts",
         "src/ai/import/validate.ts",
         "src/db/guards.ts",
+        "src/lib/releases.ts",
       ],
       thresholds: {
         statements: 90,

@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Lightbulb,
   Loader2,
+  RefreshCw,
   RotateCcw,
   ShieldCheck,
   SlidersHorizontal,
@@ -45,6 +46,7 @@ import { useKeychainStatus } from "@/hooks/useKeychainStatus";
 import { KeychainNotice } from "@/components/app/KeychainNotice";
 import { useToast } from "@/components/app/Toast";
 import { appLogDir, join } from "@tauri-apps/api/path";
+import { getVersion } from "@tauri-apps/api/app";
 import { applyThemePreference, loadThemePreference, type ThemePreference } from "@/lib/theme";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -73,6 +75,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible } from "@/components/ui/collapsible";
 import { exportAllJson, exportLabsCsv } from "@/lib/export";
+import { GITHUB_RELEASES_URL, checkLatestRelease, type UpdateCheckResult } from "@/lib/releases";
 
 export function Settings() {
   const { t } = useI18n();
@@ -85,6 +88,7 @@ export function Settings() {
       <PageHeader title={t("settings.title")} description={t("settings.description")} />
       <div className="space-y-4">
         <AppearanceCard />
+        <UpdatesCard />
         <SectionsCard />
         <DashboardCard />
         <ResetPersonalizationCard />
@@ -98,6 +102,106 @@ export function Settings() {
         <LogsCard />
       </div>
     </>
+  );
+}
+
+function UpdatesCard() {
+  const { t } = useI18n();
+  const [currentVersion, setCurrentVersion] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<UpdateCheckResult | null>(null);
+  const [checking, setChecking] = React.useState(true);
+  const [error, setError] = React.useState(false);
+
+  const check = React.useCallback(async (version: string) => {
+    setChecking(true);
+    setError(false);
+    setResult(null);
+    try {
+      setResult(await checkLatestRelease(version));
+    } catch {
+      setError(true);
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void getVersion()
+      .then((version) => {
+        setCurrentVersion(version);
+        return check(version);
+      })
+      .catch(() => {
+        setError(true);
+        setChecking(false);
+      });
+  }, [check]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <RefreshCw className="size-4 text-muted-foreground" />
+          <CardTitle>{t("settings.updates.title")}</CardTitle>
+        </div>
+        <CardDescription>
+          {currentVersion
+            ? t("settings.updates.description", { version: currentVersion })
+            : t("settings.updates.loadingVersion")}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+          {checking && (
+            <p className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> {t("settings.updates.checking")}
+            </p>
+          )}
+          {!checking && error && (
+            <p className="flex items-center gap-2 text-destructive">
+              <XCircle className="size-4" /> {t("settings.updates.error")}
+            </p>
+          )}
+          {!checking && result?.status === "no_releases" && (
+            <p className="text-muted-foreground">{t("settings.updates.noReleases")}</p>
+          )}
+          {!checking && result?.status === "current" && (
+            <p className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 text-success" />
+              {t("settings.updates.current", { version: result.latestVersion })}
+            </p>
+          )}
+          {!checking && result?.status === "available" && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">
+                {t("settings.updates.available", { version: result.latestVersion })}
+              </p>
+              <Badge variant="success">{t("settings.updates.newVersion")}</Badge>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            disabled={checking || currentVersion === null}
+            onClick={() => currentVersion && void check(currentVersion)}
+          >
+            {checking ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            {t("settings.updates.check")}
+          </Button>
+          {result?.status === "available" && (
+            <Button onClick={() => void openUrl(result.releaseUrl)}>
+              <Download />
+              {t("settings.updates.openRelease", { version: result.latestVersion })}
+            </Button>
+          )}
+          <Button variant="ghost" onClick={() => void openUrl(GITHUB_RELEASES_URL)}>
+            <SquareArrowOutUpRight /> {t("settings.updates.allReleases")}
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">{t("settings.updates.manual")}</p>
+      </CardContent>
+    </Card>
   );
 }
 

@@ -13,7 +13,7 @@
 //   • otherwise the host triple from `rustc -Vv`.
 
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -89,6 +89,15 @@ if (triple === "universal-apple-darwin") {
   execFileSync("lipo", ["-create", armFile, intelFile, "-output", outFile], { stdio: "inherit" });
   chmodSync(outFile, 0o755);
   execFileSync("lipo", ["-archs", outFile], { stdio: "inherit" });
+} else if (triple.includes("-linux-")) {
+  const runtimeFile = join(outDir, "soma-mcp-runtime");
+  const wrapperFile = join(outDir, `soma-mcp-${triple}`);
+  build(triple, runtimeFile);
+  writeFileSync(
+    wrapperFile,
+    '#!/bin/sh\nself=$(readlink -f "$0")\nroot=${self%/usr/bin/*}\nexec "$root/usr/share/soma/soma-mcp-runtime" "$@"\n',
+  );
+  chmodSync(wrapperFile, 0o755);
 } else {
   const extension = triple.includes("windows") ? ".exe" : "";
   build(triple, join(outDir, `soma-mcp-${triple}${extension}`));

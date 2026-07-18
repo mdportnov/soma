@@ -1,5 +1,23 @@
 {
+  "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "targets": ["deb", "rpm", "appimage"]
+    "targets": ["deb", "rpm", "appimage"],
+    "linux": {
+      "appimage": {
+        "files": {
+          "/usr/share/soma/soma-mcp-runtime": "binaries/soma-mcp-runtime"
+        }
+      },
+      "deb": {
+        "files": {
+          "/usr/share/soma/soma-mcp-runtime": "binaries/soma-mcp-runtime"
+        }
+      },
+      "rpm": {
+        "files": {
+          "/usr/share/soma/soma-mcp-runtime": "binaries/soma-mcp-runtime"
+        }
+      }
+    }
   }
 }

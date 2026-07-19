@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { settingsPath } from "@/lib/settings-navigation";
 
 export function AiAnalysis() {
   const { profileId } = useApp();
@@ -79,7 +80,7 @@ export function AiAnalysis() {
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {t("aiAnalysis.stubDescription")}
             </p>
-            <Link to="/settings" state={{ openAi: true }} className="mt-4">
+            <Link to={settingsPath("ai")} className="mt-4">
               <Button>
                 <SettingsIcon /> {t("aiAnalysis.openSettings")}
               </Button>

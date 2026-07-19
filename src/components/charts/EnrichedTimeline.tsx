@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import type { PanelShift, TimelineEvent } from "@/db/repos";
@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { Tooltip } from "@/components/ui/tooltip";
 import { OVERLAY_COLORS } from "./TrendChart";
 import { cn, formatDate, formatValue, uiLocale } from "@/lib/utils";
+import { allTimeTimelineWidth, timelineTickStep } from "@/lib/timeline-layout";
 
 /** Medications shown before the lane collapses behind a "show more" toggle. */
 const MED_LIMIT = 5;
@@ -116,7 +117,7 @@ export function EnrichedTimeline({
   cursor.setUTCMonth(cursor.getUTCMonth() + 1, 1);
   cursor.setUTCHours(0, 0, 0, 0);
   const monthSpan = span / (30.44 * DAY);
-  const step = monthSpan > 30 ? 6 : monthSpan > 14 ? 3 : 1;
+  const step = timelineTickStep(monthSpan, rangeMonths === null);
   while (cursor.getTime() < end) {
     if (cursor.getUTCMonth() % step === 0) {
       ticks.push({
@@ -181,186 +182,213 @@ export function EnrichedTimeline({
   const bpPts = enabled.has("bp")
     ? [...bp].filter((b) => visible(ts(b.date))).sort((a, b) => a.date.localeCompare(b.date))
     : [];
+  const maxLanePoints = Math.max(
+    0,
+    ...dotLanes.map(({ items }) => items.length),
+    weightPts.length,
+    bpPts.length,
+  );
+  const contentWidth = rangeMonths === null ? allTimeTimelineWidth(monthSpan, maxLanePoints) : null;
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const frame = requestAnimationFrame(() => {
+      scroll.scrollLeft = rangeMonths === null ? scroll.scrollWidth - scroll.clientWidth : 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [contentWidth, rangeMonths]);
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-card">
-      {/* Tick header */}
-      <div className="flex items-end border-b bg-muted/30">
-        <div className="w-16 shrink-0 sm:w-24" />
-        <div className="relative h-6 flex-1">
-          {ticks.map((tick) => (
-            <span
-              key={tick.t}
-              className="absolute bottom-1 -translate-x-1/2 text-[10px] font-medium text-muted-foreground"
-              style={{ left: `${pos(tick.t)}%` }}
-            >
-              {tick.label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Dot lanes (point events) */}
-      {dotLanes.map(
-        ({ kind, items }) =>
-          items.length > 0 && (
-            <LaneRow key={kind} label={labels[kind]} color={LAYER_COLOR[kind]}>
-              <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
-              {items.map((e) => {
-                const x = pos(ts(e.date));
-                const shift = e.kind === "lab_panel" ? shiftByPanel?.get(e.id) : undefined;
-                const halo = shift ? shiftHalo(shift.severity) : null;
-                const isAlert = shift?.severity === "alert";
-                const outOfRange = e.kind === "lab_panel" && e.outOfRangeCount > 0;
-                const dotColor = outOfRange ? "var(--destructive)" : LAYER_COLOR[kind];
-                return (
-                  <Tooltip
-                    key={`${e.kind}-${e.id}`}
-                    content={
-                      <>
-                        <span className="font-medium">{e.title}</span> — {formatDate(e.date)}
-                        {e.subtitle && <div className="text-muted-foreground">{e.subtitle}</div>}
-                        {shift && (
-                          <div className="font-medium text-warning">
-                            {t("timeline.shiftCount", { count: String(shift.count) })}
-                          </div>
-                        )}
-                      </>
-                    }
-                  >
-                    <button
-                      aria-label={`${e.title} — ${formatDate(e.date)}`}
-                      onClick={() => navigate(eventTarget(e))}
-                      className="group absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
-                      style={{ left: `${x}%` }}
-                    >
-                      {halo && (
-                        <span
-                          className={cn(
-                            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
-                            isAlert ? "size-6" : "size-5",
-                            halo.pulse && "motion-safe:animate-ping",
-                          )}
-                          style={{ backgroundColor: halo.color, opacity: 0.3 }}
-                        />
-                      )}
-                      {halo && (
-                        <span
-                          className={cn(
-                            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
-                            isAlert ? "size-5" : "size-4",
-                          )}
-                          style={{ backgroundColor: halo.color, opacity: 0.25 }}
-                        />
-                      )}
-                      <span
-                        className={cn(
-                          "rounded-full ring-2 ring-card transition-transform group-hover:scale-150",
-                          halo ? "size-3.5" : "size-3",
-                        )}
-                        style={{ backgroundColor: dotColor }}
-                      />
-                    </button>
-                  </Tooltip>
-                );
-              })}
-            </LaneRow>
-          ),
-      )}
-
-      {/* Weight sparkline */}
-      {weightPts.length > 0 && (
-        <LaneRow
-          label={labels.weight}
-          color={LAYER_COLOR.weight}
-          height={64}
-          readout={`${formatValue(weightPts[weightPts.length - 1].weightKg, 1)} kg`}
-        >
-          <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
-          <Sparkline
-            points={weightPts.map((w) => ({ t: ts(w.date), v: w.weightKg }))}
-            pos={pos}
-            color={LAYER_COLOR.weight}
-            target={weightTargetKg ?? null}
-            tooltip={(p) => (
-              <>
-                <span className="font-medium">{formatValue(p.v, 1)} kg</span> ·{" "}
-                {formatDate(new Date(p.t).toISOString())}
-              </>
-            )}
-          />
-        </LaneRow>
-      )}
-
-      {/* Blood pressure (systolic→diastolic candlesticks) */}
-      {bpPts.length > 0 && (
-        <LaneRow
-          label={labels.bp}
-          color={LAYER_COLOR.bp}
-          height={64}
-          readout={`${bpPts[bpPts.length - 1].systolic}/${bpPts[bpPts.length - 1].diastolic}`}
-        >
-          <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
-          <BpLane points={bpPts} pos={pos} />
-        </LaneRow>
-      )}
-
-      {/* Medication duration bars (collapsed past MED_LIMIT) */}
-      {shownMeds.map((m, i) => {
-        const mStart = ts(m.date);
-        const mEnd = m.endDate ? ts(m.endDate) : now;
-        const x1 = Math.max(pos(mStart), 0);
-        const x2 = Math.min(pos(mEnd), 100);
-        const color = OVERLAY_COLORS[i % OVERLAY_COLORS.length];
-        const range = `${formatDate(m.date)} → ${m.endDate ? formatDate(m.endDate) : t("timeline.now")}`;
-        return (
-          <LaneRow key={`med-${m.id}`} label={m.title} color={color} compact height={28}>
-            <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
-            <Tooltip
-              content={
-                <>
-                  <span className="font-medium">{m.title}</span>
-                  {m.subtitle ? ` · ${m.subtitle}` : ""}
-                  <div className="text-muted-foreground">{range}</div>
-                </>
-              }
-            >
-              <button
-                aria-label={`${m.title} — ${range}`}
-                onClick={() => navigate("/medications")}
-                className="absolute top-1/2 h-2.5 -translate-y-1/2 cursor-pointer rounded-full ring-1 ring-card transition-opacity hover:opacity-80"
-                style={{
-                  left: `${x1}%`,
-                  width: `${Math.max(x2 - x1, 0.6)}%`,
-                  backgroundColor: color,
-                  opacity: 0.8,
-                }}
-              />
-            </Tooltip>
-            {!m.endDate && (
+    <div
+      ref={scrollRef}
+      aria-label={t("timeline.scrollAreaLabel")}
+      data-timeline-scroll
+      tabIndex={rangeMonths === null ? 0 : undefined}
+      className="w-full max-w-full overscroll-x-contain overflow-x-auto rounded-xl border bg-card"
+    >
+      <div className="w-full" style={contentWidth ? { minWidth: `${contentWidth}px` } : undefined}>
+        {/* Tick header */}
+        <div className="flex items-end border-b bg-muted/30">
+          <div className="sticky left-0 z-20 w-16 shrink-0 self-stretch border-r bg-muted/30 sm:w-24" />
+          <div className="relative h-6 flex-1">
+            {ticks.map((tick) => (
               <span
-                className="pointer-events-none absolute top-1/2 size-2 -translate-y-1/2 translate-x-1 rounded-full"
-                style={{ left: `${x2}%`, backgroundColor: color }}
-              />
-            )}
-          </LaneRow>
-        );
-      })}
-      {medsInRange.length > MED_LIMIT && (
-        <button
-          onClick={() => setMedsExpanded((v) => !v)}
-          className="flex w-full items-center gap-1.5 border-b border-dashed py-1.5 pl-2 text-[11px] font-medium text-muted-foreground last:border-0 hover:bg-muted/20"
-        >
-          <ChevronDown
-            className={cn("size-3.5 transition-transform", medsExpanded && "rotate-180")}
-          />
-          {medsExpanded
-            ? t("timeline.medsLess")
-            : t("timeline.medsMore", { count: String(medsInRange.length - MED_LIMIT) })}
-        </button>
-      )}
+                key={tick.t}
+                className="absolute bottom-1 -translate-x-1/2 text-[10px] font-medium text-muted-foreground"
+                style={{ left: `${pos(tick.t)}%` }}
+              >
+                {tick.label}
+              </span>
+            ))}
+          </div>
+        </div>
 
-      <TimelineLegend t={t} hasShifts={hasShifts} hasBp={bpPts.length > 0} />
+        {/* Dot lanes (point events) */}
+        {dotLanes.map(
+          ({ kind, items }) =>
+            items.length > 0 && (
+              <LaneRow key={kind} label={labels[kind]} color={LAYER_COLOR[kind]}>
+                <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
+                {items.map((e) => {
+                  const x = pos(ts(e.date));
+                  const shift = e.kind === "lab_panel" ? shiftByPanel?.get(e.id) : undefined;
+                  const halo = shift ? shiftHalo(shift.severity) : null;
+                  const isAlert = shift?.severity === "alert";
+                  const outOfRange = e.kind === "lab_panel" && e.outOfRangeCount > 0;
+                  const dotColor = outOfRange ? "var(--destructive)" : LAYER_COLOR[kind];
+                  return (
+                    <Tooltip
+                      key={`${e.kind}-${e.id}`}
+                      content={
+                        <>
+                          <span className="font-medium">{e.title}</span> — {formatDate(e.date)}
+                          {e.subtitle && <div className="text-muted-foreground">{e.subtitle}</div>}
+                          {shift && (
+                            <div className="font-medium text-warning">
+                              {t("timeline.shiftCount", { count: String(shift.count) })}
+                            </div>
+                          )}
+                        </>
+                      }
+                    >
+                      <button
+                        aria-label={`${e.title} — ${formatDate(e.date)}`}
+                        onClick={() => navigate(eventTarget(e))}
+                        className="group absolute top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
+                        style={{ left: `${x}%` }}
+                      >
+                        {halo && (
+                          <span
+                            className={cn(
+                              "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
+                              isAlert ? "size-6" : "size-5",
+                              halo.pulse && "motion-safe:animate-ping",
+                            )}
+                            style={{ backgroundColor: halo.color, opacity: 0.3 }}
+                          />
+                        )}
+                        {halo && (
+                          <span
+                            className={cn(
+                              "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
+                              isAlert ? "size-5" : "size-4",
+                            )}
+                            style={{ backgroundColor: halo.color, opacity: 0.25 }}
+                          />
+                        )}
+                        <span
+                          className={cn(
+                            "rounded-full ring-2 ring-card transition-transform group-hover:scale-150",
+                            halo ? "size-3.5" : "size-3",
+                          )}
+                          style={{ backgroundColor: dotColor }}
+                        />
+                      </button>
+                    </Tooltip>
+                  );
+                })}
+              </LaneRow>
+            ),
+        )}
+
+        {/* Weight sparkline */}
+        {weightPts.length > 0 && (
+          <LaneRow
+            label={labels.weight}
+            color={LAYER_COLOR.weight}
+            height={64}
+            readout={`${formatValue(weightPts[weightPts.length - 1].weightKg, 1)} kg`}
+          >
+            <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
+            <Sparkline
+              points={weightPts.map((w) => ({ t: ts(w.date), v: w.weightKg }))}
+              pos={pos}
+              color={LAYER_COLOR.weight}
+              target={weightTargetKg ?? null}
+              tooltip={(p) => (
+                <>
+                  <span className="font-medium">{formatValue(p.v, 1)} kg</span> ·{" "}
+                  {formatDate(new Date(p.t).toISOString())}
+                </>
+              )}
+            />
+          </LaneRow>
+        )}
+
+        {/* Blood pressure (systolic→diastolic candlesticks) */}
+        {bpPts.length > 0 && (
+          <LaneRow
+            label={labels.bp}
+            color={LAYER_COLOR.bp}
+            height={64}
+            readout={`${bpPts[bpPts.length - 1].systolic}/${bpPts[bpPts.length - 1].diastolic}`}
+          >
+            <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
+            <BpLane points={bpPts} pos={pos} />
+          </LaneRow>
+        )}
+
+        {/* Medication duration bars (collapsed past MED_LIMIT) */}
+        {shownMeds.map((m, i) => {
+          const mStart = ts(m.date);
+          const mEnd = m.endDate ? ts(m.endDate) : now;
+          const x1 = Math.max(pos(mStart), 0);
+          const x2 = Math.min(pos(mEnd), 100);
+          const color = OVERLAY_COLORS[i % OVERLAY_COLORS.length];
+          const range = `${formatDate(m.date)} → ${m.endDate ? formatDate(m.endDate) : t("timeline.now")}`;
+          return (
+            <LaneRow key={`med-${m.id}`} label={m.title} color={color} compact height={28}>
+              <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
+              <Tooltip
+                content={
+                  <>
+                    <span className="font-medium">{m.title}</span>
+                    {m.subtitle ? ` · ${m.subtitle}` : ""}
+                    <div className="text-muted-foreground">{range}</div>
+                  </>
+                }
+              >
+                <button
+                  aria-label={`${m.title} — ${range}`}
+                  onClick={() => navigate("/medications")}
+                  className="absolute top-1/2 h-2.5 -translate-y-1/2 cursor-pointer rounded-full ring-1 ring-card transition-opacity hover:opacity-80"
+                  style={{
+                    left: `${x1}%`,
+                    width: `${Math.max(x2 - x1, 0.6)}%`,
+                    backgroundColor: color,
+                    opacity: 0.8,
+                  }}
+                />
+              </Tooltip>
+              {!m.endDate && (
+                <span
+                  className="pointer-events-none absolute top-1/2 size-2 -translate-y-1/2 translate-x-1 rounded-full"
+                  style={{ left: `${x2}%`, backgroundColor: color }}
+                />
+              )}
+            </LaneRow>
+          );
+        })}
+        {medsInRange.length > MED_LIMIT && (
+          <button
+            onClick={() => setMedsExpanded((v) => !v)}
+            className="flex w-full items-center border-b border-dashed py-1.5 text-[11px] font-medium text-muted-foreground last:border-0 hover:bg-muted/20"
+          >
+            <span className="sticky left-2 inline-flex items-center gap-1.5">
+              <ChevronDown
+                className={cn("size-3.5 transition-transform", medsExpanded && "rotate-180")}
+              />
+              {medsExpanded
+                ? t("timeline.medsLess")
+                : t("timeline.medsMore", { count: String(medsInRange.length - MED_LIMIT) })}
+            </span>
+          </button>
+        )}
+
+        <TimelineLegend t={t} hasShifts={hasShifts} hasBp={bpPts.length > 0} />
+      </div>
     </div>
   );
 }
@@ -407,8 +435,8 @@ function LaneRow({
   readout?: string;
 }) {
   return (
-    <div className="flex items-center border-b border-dashed last:border-0 hover:bg-muted/20">
-      <div className="flex w-16 shrink-0 items-center gap-1.5 pl-2 pr-2 sm:w-24">
+    <div className="group flex items-center border-b border-dashed last:border-0 hover:bg-muted/20">
+      <div className="sticky left-0 z-10 flex w-16 shrink-0 items-center gap-1.5 bg-card pl-2 pr-2 group-hover:bg-muted sm:w-24">
         <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <span
           className={cn(
@@ -519,11 +547,11 @@ function TimelineLegend({
   );
   return (
     <details className="group border-t bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium">
+      <summary className="sticky left-3 flex w-fit cursor-pointer list-none items-center gap-1.5 font-medium">
         <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
         {t("timeline.legend.title")}
       </summary>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+      <div className="sticky left-3 mt-2 flex w-fit flex-wrap gap-x-4 gap-y-1.5">
         <span className="inline-flex items-center gap-1.5">
           {dot("var(--destructive)")} {t("timeline.legend.outOfRange")}
         </span>

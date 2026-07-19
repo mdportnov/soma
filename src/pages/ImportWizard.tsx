@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { settingsPath } from "@/lib/settings-navigation";
 
 /**
  * UI-facing import failure. `affordance` drives which action button (if any) the
@@ -127,7 +128,7 @@ export function ImportWizard() {
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {t("importWizard.aiDisabledDescription")}
             </p>
-            <Link to="/settings" state={{ openAi: true }} className="mt-4">
+            <Link to={settingsPath("ai")} className="mt-4">
               <Button>
                 <SettingsIcon /> {t("importWizard.openSettings")}
               </Button>
@@ -289,7 +290,7 @@ export function ImportWizard() {
             </p>
             <p className="mt-0.5 text-xs opacity-90">{error.message}</p>
             {error.affordance === "settings" && (
-              <Link to="/settings" state={{ openAi: true }} className="mt-2 inline-block">
+              <Link to={settingsPath("ai")} className="mt-2 inline-block">
                 <Button size="sm" variant="outline">
                   <SettingsIcon /> {t("importErrors.authAction")}
                 </Button>

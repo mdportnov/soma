@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/app/CommandPalette";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import logo from "@/assets/logo.svg";
+import { settingsPath } from "@/lib/settings-navigation";
 
 type NavItem =
   | { kind: "link"; to: string; labelKey: string; icon: React.ElementType; end?: boolean }
@@ -322,8 +323,7 @@ export function Shell() {
               {/* When peeking at hidden sections, point to where the choice sticks. */}
               {showAll && (
                 <Link
-                  to="/settings"
-                  state={{ openSections: true }}
+                  to={settingsPath("sections")}
                   title={t("nav.manageSections")}
                   className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
                 >
@@ -352,12 +352,12 @@ export function Shell() {
           </NavLink>
         </div>
       </aside>
-      <main ref={mainRef} className="flex-1 overflow-y-auto">
+      <main ref={mainRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {/* key on location.key re-mounts the page so navigation fades in;
             scroll restoration is handled imperatively on <main> above. */}
         <div
           key={`${location.key}:${retryNonce}`}
-          className="animate-step-in mx-auto max-w-6xl p-6 md:p-8"
+          className="animate-step-in mx-auto w-full min-w-0 max-w-6xl p-6 md:p-8"
         >
           <RouteErrorBoundary
             resetKey={`${location.key}:${retryNonce}`}

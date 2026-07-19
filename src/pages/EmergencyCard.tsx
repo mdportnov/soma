@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, todayISO } from "@/lib/utils";
+import { settingsPath } from "@/lib/settings-navigation";
 
 function ageFromBirthDate(iso: string | null | undefined): number | null {
   if (!iso) return null;
@@ -158,7 +159,10 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <p>
             {t("emergency.incompleteBanner")}{" "}
-            <Link to="/settings" className="font-medium underline">
+            <Link
+              to={settingsPath(!p.bloodType ? "profile" : "emergency")}
+              className="font-medium underline"
+            >
               {t("emergency.updateProfile")}
             </Link>
           </p>

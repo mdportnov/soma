@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Actionable Settings links** now open, scroll to and highlight the exact requested section;
+  AI setup links land directly on the expanded provider and API-key controls.
+- **All-time Timeline navigation** now uses a horizontally scrollable, density-aware canvas with
+  sticky lane labels instead of compressing decades of events into the viewport.
+
 ## [0.2.0] — 2026-07-18
 
 ### Fixed

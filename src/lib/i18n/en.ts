@@ -626,6 +626,9 @@ export const en = {
     emptyTitle: "No lab panels yet",
     emptyDescription: "Enter results manually or import a PDF/photo of a lab report with AI.",
     addFirstPanel: "Add first panel",
+    findingsTitle: "Additional findings",
+    findingsDescription:
+      "Results saved without a biomarker (unmapped or qualitative), grouped across all panels. Click a row to open the panel.",
     tableColumns: {
       date: "Date",
       lab: "Lab",
@@ -634,6 +637,7 @@ export const en = {
       results: "Results",
       outOfRange: "Out of range",
       source: "Source",
+      finding: "Finding / source label",
     },
     importSource: {
       ai: "AI",
@@ -714,6 +718,10 @@ export const en = {
     deletePanelDescription:
       "The panel and all its results will be removed. You can undo right after.",
     deletedToast: "Panel deleted.",
+    findingsTitle: "Additional findings",
+    findingsDescription:
+      "Results saved without a biomarker (unmapped or qualitative). Editable, not trended.",
+    editFindingTitle: "Edit finding",
     panelNotFound: "Panel not found",
     tableColumns: {
       biomarker: "Biomarker",
@@ -1191,6 +1199,14 @@ export const en = {
     description:
       "PDF or photo → extracted values → you confirm the mapping → saved. Nothing is written without your review.",
     notMapped: "— not mapped —",
+    aiSuggestionBadge: "AI draft",
+    saveToFindings: "Save to findings",
+    findingsTitle: "Additional findings",
+    findingsDescription:
+      "Non-numeric results from the report (e.g. “negative”, titres). Saved with the panel as-is — not tracked as biomarkers. Edit or drop rows before saving.",
+    swapDuplicateHint: "Use this result instead of the currently kept one",
+    aiSuggestionHint:
+      "The dialog is pre-filled with an AI-drafted biomarker definition based on the printed label, unit and reference range — verify every field before creating.",
     translatedHint:
       "Matched via the AI's English translation, not the printed label — double-check it's the right biomarker (e.g. LDL vs total cholesterol).",
     savingPanel: "Saving panel…",

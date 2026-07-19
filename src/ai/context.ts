@@ -13,6 +13,7 @@ import { ageYearsFrom } from "@/lib/units";
 import {
   getLatestResults,
   getProfile,
+  getRecentFindings,
   getRecentLifestyle,
   listAllergies,
   listBiomarkers,
@@ -81,7 +82,7 @@ function bloodTypeLabel(
  * handed an empty context that invites speculation.
  */
 export async function buildHealthContext(profileId: number): Promise<string> {
-  const [profile, allergies, diagnoses, medications, latest, biomarkers, lifestyle] =
+  const [profile, allergies, diagnoses, medications, latest, biomarkers, lifestyle, findings] =
     await Promise.all([
       getProfile(profileId),
       listAllergies(profileId),
@@ -90,6 +91,7 @@ export async function buildHealthContext(profileId: number): Promise<string> {
       getLatestResults(profileId),
       listBiomarkers(),
       getRecentLifestyle(profileId, LIFESTYLE_WINDOW_DAYS),
+      getRecentFindings(profileId),
     ]);
   if (!profile) return "No profile data is available yet.";
 
@@ -150,6 +152,14 @@ export async function buildHealthContext(profileId: number): Promise<string> {
         ? `Latest out-of-range markers: ${abnormal.join("; ")}`
         : "Latest labs: all recorded markers are within range in their most recent values.",
   );
+
+  if (findings.length) {
+    lines.push(
+      `Other findings (non-dictionary / qualitative results, not tracked as biomarkers): ${findings
+        .map((f) => `${f.nameEn ?? f.rawLabel} ${f.valueText}${f.unit ? ` ${f.unit}` : ""} (${f.date})`)
+        .join("; ")}`,
+    );
+  }
 
   const lifestyleLine = lifestyleSummaryLine(lifestyle);
   if (lifestyleLine) lines.push(lifestyleLine);

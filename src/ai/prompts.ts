@@ -9,19 +9,21 @@ export const EXTRACTION_PROMPT = `You are a data-extraction engine for laborator
 
 Extract the panel metadata and EVERY quantitative analyte row, and return ONLY a single JSON object:
 
-{"collection_date": string | null, "lab_name": string | null, "fasting": boolean | null, "results": [{"raw_label": string, "analyte_en": string | null, "value": number, "unit": string, "ref_range_text": string | null, "page": number | null}]}
+{"collection_date": string | null, "lab_name": string | null, "city": string | null, "country": string | null, "fasting": boolean | null, "results": [{"raw_label": string, "analyte_en": string | null, "value": number, "unit": string, "ref_range_text": string | null, "page": number | null}], "qualitative": [{"raw_label": string, "analyte_en": string | null, "result_text": string, "ref_range_text": string | null, "page": number | null}]}
 
 Strict rules:
 - "collection_date" is the date the sample was COLLECTED/DRAWN as ISO "YYYY-MM-DD" (prefer the collection/sampling date over the print/report date if both are shown). If the day/month/year is not fully legible, use null. Never guess.
 - "lab_name" is the laboratory or clinic name as printed, or null.
+- "city" and "country" are the location of the laboratory/clinic (from its printed address or letterhead), translated to English (e.g. "Bakı, Azərbaycan" → city "Baku", country "Azerbaijan"; "Москва" → "Moscow"). Use null when no location is stated — never guess.
 - "fasting" is true if the report states the sample was taken fasting, false if it states non-fasting, otherwise null. Never guess.
 - "results" contains one object per analyte row.
 - "raw_label" must be the analyte name EXACTLY as printed (original language, original wording). Do NOT translate, rename, normalize, or map it to any standard nomenclature.
 - "analyte_en" is the SAME analyte's standard English name, translated from "raw_label" so it can be matched against an English dictionary — e.g. "Colesterol total" → "Total cholesterol", "Глюкоза" → "Glucose", "Erythrozyten" → "Red blood cells", "Hierro" → "Iron", "Hémoglobine" → "Hemoglobin". If the label is already English, repeat it verbatim. Use the common clinical English term; never invent an analyte that is not in the document; use null only if you genuinely cannot tell what it is.
-- "value" must be the numeric result. Use "." as decimal separator. For values printed like "<0.5" use the number (0.5). Skip rows whose result is purely qualitative (e.g. "negative") — do not invent numbers.
+- "value" must be the numeric result. Use "." as decimal separator. For values printed like "<0.5" use the number (0.5).
 - "unit" is the unit string exactly as printed, or "" if no unit is printed.
 - "ref_range_text" is the reference range exactly as printed, or null.
 - "page" is the 1-based page number the row appears on, or null for images.
+- "qualitative" collects every row whose result is NOT numeric: qualitative readings ("negative", "positive", "not detected", "обнаружено"), antibody titres ("1:160"), trace/+/++ grades, and similar. "result_text" is the result exactly as printed (original language). Same rules for "raw_label", "analyte_en", "ref_range_text" and "page" as above. Use [] when there are none. Never invent a result.
 - Do not add analytes that are not in the document. Do not deduplicate rows.
 - Output ONLY the JSON object. No preamble, no Markdown fences, no commentary.`;
 
@@ -144,6 +146,34 @@ Return ONLY this JSON object, nothing else:
 }
 
 export const TEST_PROMPT = `Reply with exactly the word "ok".`;
+
+/**
+ * Phase-3 helper: for analytes the dictionary couldn't map, ask the model to
+ * draft a NEW biomarker definition per analyte (name/category/unit/direction),
+ * grounded in the printed label, unit, and reference range. Batched into one
+ * call; the review dialog prefills from it and the user confirms.
+ */
+export function buildCustomBiomarkerPrompt(
+  rows: { raw_label: string; analyte_en: string | null; unit: string; ref_range_text: string | null }[],
+  existingCategories: string[],
+): string {
+  return `A lab report import found analytes that do not exist in the user's biomarker dictionary. For EACH analyte below, draft how it should be defined as a NEW biomarker entry, using clinical knowledge plus the printed unit and reference range.
+
+Existing category names (prefer one of these; propose a short new one only when none fit):
+${JSON.stringify(existingCategories)}
+
+Analytes (JSON, keep this order):
+${JSON.stringify(rows)}
+
+Return ONLY a JSON array with one object per analyte, in the SAME ORDER:
+[{"name": string, "category": string, "unit": string, "direction": "range" | "higher_better" | "lower_better"}]
+
+Rules:
+- "name" is the standard English clinical name (e.g. "TSH", "Vitamin D (25-OH)"). Base it strictly on the given label — never substitute a different analyte.
+- "unit" is the canonical unit for this biomarker; keep the printed unit when it is a standard way to report this analyte.
+- "direction": "higher_better" when higher values are generally favorable (e.g. HDL cholesterol), "lower_better" when lower is favorable (e.g. LDL cholesterol, CRP), otherwise "range".
+- Output ONLY the JSON array. No preamble, no Markdown fences, no commentary.`;
+}
 
 // ── v0.3 AI analysis (§8) ────────────────────────────────────────────────────
 // All AI-analysis behavior lives here so the pipeline stays vendor-agnostic: the

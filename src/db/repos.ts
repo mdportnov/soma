@@ -12,6 +12,7 @@ import {
   healthNote,
   imagingRecord,
   labPanel,
+  labFinding,
   labResult,
   lifestyleLog,
   medication,
@@ -31,6 +32,7 @@ import {
   type ImagingRecord,
   type HealthNote,
   type LabPanel,
+  type LabFinding,
   type LabResult,
   type LifestyleLog,
   type Medication,
@@ -43,6 +45,7 @@ import {
   type NewImagingRecord,
   type NewHealthNote,
   type NewLabPanel,
+  type NewLabFinding,
   type NewLabResult,
   type NewLifestyleLog,
   type NewMedication,
@@ -409,6 +412,76 @@ export async function createPanelWithResults(
   return panelRow.id;
 }
 
+// ── lab_finding ──────────────────────────────────────────────────────────────
+
+/**
+ * Insert a panel's additional findings. Same compensate-on-failure pattern as
+ * createPanelWithResults: a failed findings insert must not leave a panel that
+ * looks like a clean import.
+ */
+export async function createPanelFindings(
+  panelId: number,
+  findings: Omit<NewLabFinding, "panelId" | "createdAt">[],
+): Promise<void> {
+  if (!findings.length) return;
+  try {
+    await db.insert(labFinding).values(findings.map((f) => ({ ...f, panelId })));
+  } catch (e) {
+    await db.delete(labPanel).where(eq(labPanel.id, panelId));
+    throw e;
+  }
+}
+
+export async function getFindingsByPanel(panelId: number): Promise<LabFinding[]> {
+  return db.select().from(labFinding).where(eq(labFinding.panelId, panelId));
+}
+
+/** Latest findings across a profile's panels (most recent panels first) — feeds
+ *  the AI health context so the assistant sees non-dictionary results too. */
+export async function getRecentFindings(
+  profileId: number,
+  limit = 15,
+): Promise<{ rawLabel: string; nameEn: string | null; valueText: string; unit: string | null; date: string }[]> {
+  return db
+    .select({
+      rawLabel: labFinding.rawLabel,
+      nameEn: labFinding.nameEn,
+      valueText: labFinding.valueText,
+      unit: labFinding.unit,
+      date: labPanel.date,
+    })
+    .from(labFinding)
+    .innerJoin(labPanel, eq(labFinding.panelId, labPanel.id))
+    .where(eq(labPanel.profileId, profileId))
+    .orderBy(desc(labPanel.date), desc(labFinding.id))
+    .limit(limit);
+}
+
+export type FindingWithPanel = LabFinding & { date: string; labName: string | null };
+
+/** Every finding of a profile with its panel date/lab — the aggregated
+ *  cross-panel findings view on the labs page. */
+export async function getAllFindings(profileId: number): Promise<FindingWithPanel[]> {
+  const rows = await db
+    .select({ finding: labFinding, date: labPanel.date, labName: labPanel.labName })
+    .from(labFinding)
+    .innerJoin(labPanel, eq(labFinding.panelId, labPanel.id))
+    .where(eq(labPanel.profileId, profileId))
+    .orderBy(desc(labPanel.date), desc(labFinding.id));
+  return rows.map((r) => ({ ...r.finding, date: r.date, labName: r.labName }));
+}
+
+export async function updateFinding(
+  id: number,
+  patch: Partial<Pick<LabFinding, "rawLabel" | "nameEn" | "valueText" | "unit" | "refRangeText">>,
+): Promise<void> {
+  await db.update(labFinding).set(patch).where(eq(labFinding.id, id));
+}
+
+export async function deleteFinding(id: number): Promise<void> {
+  await db.delete(labFinding).where(eq(labFinding.id, id));
+}
+
 /**
  * Removes attachment rows polymorphically linked to a now-deleted entity, and
  * deletes their backing files from disk. The file paths are read before the
@@ -434,6 +507,7 @@ async function deleteLinkedAttachments(entityType: string, entityId: number) {
 
 export async function deletePanel(panelId: number) {
   await db.delete(labResult).where(eq(labResult.panelId, panelId));
+  await db.delete(labFinding).where(eq(labFinding.panelId, panelId));
   await db.delete(labPanel).where(eq(labPanel.id, panelId));
   // Panel (and its FK to source_file_id) is gone — clear the orphaned attachment.
   await deleteLinkedAttachments("lab_panel", panelId);

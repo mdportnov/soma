@@ -11,11 +11,16 @@
  */
 
 import * as React from "react";
-import { AlertTriangle, Plus, TestTubes } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CornerDownRight, Plus, TestTubes, X } from "lucide-react";
 import type { Biomarker, SampleType } from "@/db/schema";
 import { SAMPLE_TYPES } from "@/db/schema";
-import { EXTRACTION_PROMPT } from "../../prompts";
-import type { LabExtraction, RawExtraction } from "../../types";
+import { EXTRACTION_PROMPT, buildCustomBiomarkerPrompt, extractJson } from "../../prompts";
+import type {
+  LabExtraction,
+  RawExtraction,
+  RawQualitativeExtraction,
+  SuggestedBiomarker,
+} from "../../types";
 import {
   buildBiomarkerIndex,
   mapExtractions,
@@ -33,7 +38,7 @@ import {
   nullableStr,
   numberOrNull,
 } from "../validate";
-import { createAttachment, createPanelWithResults, updateAttachment } from "@/db/repos";
+import { createAttachment, createPanelFindings, createPanelWithResults, updateAttachment } from "@/db/repos";
 import { storeAttachmentFile, mimeFromPath } from "@/lib/attachments";
 import { Field } from "@/components/app/Field";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
@@ -58,10 +63,32 @@ import { allKnownUnits } from "@/lib/units";
 import { rememberUnit, recallUnit } from "@/lib/unit-memory";
 import { useI18n } from "@/lib/i18n";
 
-type ReviewRow = MappedRow & { include: boolean; key: number };
+type ReviewRow = MappedRow & {
+  include: boolean;
+  key: number;
+  /** Unmapped rows default to being kept as panel findings; mapping the row or
+   *  creating a custom biomarker takes it out of the findings set. */
+  saveAsFinding: boolean;
+};
+
+/** A qualitative / non-dictionary finding staged for save with the panel. */
+export type FindingDraft = {
+  key: number;
+  rawLabel: string;
+  nameEn: string | null;
+  valueText: string;
+  valueNumeric: number | null;
+  unit: string | null;
+  refRangeText: string | null;
+  sourcePage: number | null;
+  include: boolean;
+};
 
 export type LabDraft = {
   rows: ReviewRow[];
+  /** Qualitative results from the report (editable on review). Unmapped numeric
+   *  rows join at save time via their `saveAsFinding` flag instead. */
+  findings: FindingDraft[];
   meta: {
     date: string;
     labName: string;
@@ -123,21 +150,74 @@ function autoResolveDuplicates(rows: ReviewRow[]): void {
   }
 }
 
-/** Render order that clusters colliding rows adjacently at the group's first
- *  appearance, leaving everything else in document order. */
+/** Review-need order for the table: unmatched first, then rows whose unit
+ *  won't convert, then declining mapping trust; exact matches sink to the
+ *  bottom so everything needing eyes sits at the top. */
+const REVIEW_PRIORITY: Record<MappedRow["confidence"], number> = {
+  none: 0,
+  fuzzy: 2,
+  ai: 3,
+  translated: 4,
+  exact: 5,
+};
+
+function reviewPriority(r: Pick<ReviewRow, "confidence" | "biomarkerId" | "conversion">): number {
+  const p = REVIEW_PRIORITY[r.confidence];
+  // A matched row with a broken unit conversion needs attention almost as
+  // much as an unmatched one.
+  return r.biomarkerId != null && r.conversion != null && !r.conversion.ok
+    ? Math.min(p, 1)
+    : p;
+}
+
+/** Render order: by review priority (neediest first), with duplicate clusters
+ *  kept adjacent — a cluster floats to the position of its neediest member and
+ *  clusters within one priority band keep document order. */
 function clusterForDisplay(rows: ReviewRow[]): ReviewRow[] {
   const firstIdx = new Map<number, number>();
   rows.forEach((r, i) => {
     if (r.biomarkerId != null && !firstIdx.has(r.biomarkerId)) firstIdx.set(r.biomarkerId, i);
   });
+  const prio = rows.map(reviewPriority);
+  const clusterPrio = rows.map((r, i) =>
+    r.biomarkerId != null
+      ? Math.min(...rows.flatMap((x, j) => (x.biomarkerId === r.biomarkerId ? [prio[j]] : [])))
+      : prio[i],
+  );
   return rows
     .map((r, i) => ({ r, i }))
     .sort((a, b) => {
+      const dp = clusterPrio[a.i] - clusterPrio[b.i];
+      if (dp !== 0) return dp;
       const ka = a.r.biomarkerId != null ? firstIdx.get(a.r.biomarkerId)! : a.i;
       const kb = b.r.biomarkerId != null ? firstIdx.get(b.r.biomarkerId)! : b.i;
-      return ka - kb || a.i - b.i;
+      // Within a duplicate cluster the currently-kept row leads, so the
+      // alternates nest directly beneath their primary.
+      return ka - kb || Number(b.r.include) - Number(a.r.include) || a.i - b.i;
     })
     .map((x) => x.r);
+}
+
+const DIRECTIONS = ["range", "higher_better", "lower_better"] as const;
+
+/** Per-row validation of the model's custom-biomarker drafts — anything
+ *  malformed becomes null so a bad apple never breaks the whole batch. */
+function validateSuggestions(parsed: unknown): (SuggestedBiomarker | null)[] {
+  return asArray(parsed).map((item) => {
+    const o = asObject(item);
+    if (!o || typeof o.name !== "string" || !o.name.trim()) return null;
+    return {
+      name: o.name.trim().slice(0, 120),
+      category:
+        typeof o.category === "string" && o.category.trim()
+          ? o.category.trim().slice(0, 60)
+          : "Custom",
+      unit: typeof o.unit === "string" ? o.unit.trim().slice(0, 40) : "",
+      direction: DIRECTIONS.includes(o.direction as (typeof DIRECTIONS)[number])
+        ? (o.direction as SuggestedBiomarker["direction"])
+        : "range",
+    };
+  });
 }
 
 /** Hard cap on surfaced skipped rows — a runaway report shouldn't bloat state. */
@@ -153,6 +233,8 @@ function validateLabExtraction(parsed: unknown): LabExtraction {
     return {
       collectionDate: null,
       labName: null,
+      city: null,
+      country: null,
       fasting: null,
       results: validateExtractions(parsed, skipped),
       skipped: skipped.length ? skipped : undefined,
@@ -162,10 +244,38 @@ function validateLabExtraction(parsed: unknown): LabExtraction {
   return {
     collectionDate: isoDateOrNull(o.collection_date),
     labName: nullableStr(o.lab_name),
+    city: nullableStr(o.city),
+    country: nullableStr(o.country),
     fasting: boolOrNull(o.fasting),
     results: validateExtractions(o.results, skipped),
+    qualitative: validateQualitative(o.qualitative),
     skipped: skipped.length ? skipped : undefined,
   };
+}
+
+/** Validate qualitative rows (non-numeric results → panel findings). */
+function validateQualitative(parsed: unknown): RawQualitativeExtraction[] {
+  const rows: RawQualitativeExtraction[] = [];
+  for (const item of asArray(parsed)) {
+    const o = asObject(item);
+    if (!o) continue;
+    const rawLabel = typeof o.raw_label === "string" ? o.raw_label.trim().slice(0, 300) : "";
+    const resultText =
+      typeof o.result_text === "string" || typeof o.result_text === "number"
+        ? String(o.result_text).trim().slice(0, 200)
+        : "";
+    if (!rawLabel || !resultText) continue;
+    rows.push({
+      raw_label: rawLabel,
+      analyte_en:
+        typeof o.analyte_en === "string" ? o.analyte_en.trim().slice(0, 120) || null : null,
+      result_text: resultText,
+      ref_range_text:
+        typeof o.ref_range_text === "string" ? o.ref_range_text.trim().slice(0, 120) : null,
+      page: Number.isInteger(o.page) && (o.page as number) >= 1 ? (o.page as number) : null,
+    });
+  }
+  return rows;
 }
 
 /**
@@ -230,23 +340,58 @@ export const labModule: DocTypeModule<LabDraft> = {
         }
       }
     }
+    // Unmatched rows: one batched AI call drafts a custom-biomarker definition
+    // per analyte (name/category/unit/direction), so the review dialog opens
+    // pre-filled instead of blank. Best-effort — a failure leaves rows as-is.
+    const unmatched = mapped.filter((m) => m.biomarkerId == null);
+    if (unmatched.length > 0) {
+      try {
+        const text = await ctx.provider.chat([
+          {
+            role: "user",
+            content: buildCustomBiomarkerPrompt(
+              unmatched.map((u) => u.raw),
+              [...new Set(ctx.biomarkers.map((b) => b.category))],
+            ),
+          },
+        ]);
+        const specs = validateSuggestions(extractJson(text));
+        unmatched.forEach((m, i) => {
+          m.suggestion = specs[i] ?? null;
+        });
+      } catch (e) {
+        console.error("custom-biomarker suggestions failed", e);
+      }
+    }
     const rows: ReviewRow[] = mapped.map((m, i) => ({
       ...m,
       include: m.biomarkerId != null,
       key: i,
+      saveAsFinding: m.biomarkerId == null,
     }));
     // Start the user from a save-ready state: when several rows hit one biomarker,
     // keep only the strongest selected instead of flagging an error to untangle.
     autoResolveDuplicates(rows);
     return {
       rows,
+      findings: (extraction.qualitative ?? []).map((q, i) => ({
+        key: i,
+        rawLabel: q.raw_label,
+        nameEn: q.analyte_en,
+        valueText: q.result_text,
+        valueNumeric: null,
+        unit: null,
+        refRangeText: q.ref_range_text,
+        sourcePage: q.page,
+        include: true,
+      })),
       meta: {
         // An old report imported today keeps its real collection date — essential
         // for the trend; fall back to today and flag it when illegible.
         date: extraction.collectionDate ?? todayISO(),
         labName: extraction.labName ?? "",
-        city: "",
-        country: "",
+        city: extraction.city ?? "",
+        country: extraction.country ?? "",
         sampleTypes: ["blood"],
         cost: "",
       },
@@ -255,7 +400,7 @@ export const labModule: DocTypeModule<LabDraft> = {
     };
   },
 
-  isEmpty: (draft) => draft.rows.length === 0,
+  isEmpty: (draft) => draft.rows.length === 0 && draft.findings.length === 0,
 
   Review: LabReview,
 
@@ -303,6 +448,34 @@ export const labModule: DocTypeModule<LabDraft> = {
     // Remember each (lab, biomarker) → unit so the next import from this lab
     // defaults to the same unit — most useful when the document omits it.
     for (const res of results) rememberUnit(draft.meta.labName, res.biomarkerId, res.unit);
+    // Everything the dictionary couldn't absorb is kept as structured findings:
+    // qualitative rows staged on the review screen + unmapped numeric rows the
+    // user left flagged "save as finding".
+    const findingsToSave = [
+      ...draft.findings
+        .filter((f) => f.include)
+        .map((f) => ({
+          rawLabel: f.rawLabel,
+          nameEn: f.nameEn,
+          valueText: f.valueText,
+          valueNumeric: f.valueNumeric,
+          unit: f.unit,
+          refRangeText: f.refRangeText,
+          sourcePage: f.sourcePage,
+        })),
+      ...draft.rows
+        .filter((r) => r.biomarkerId == null && r.saveAsFinding)
+        .map((r) => ({
+          rawLabel: r.raw.raw_label,
+          nameEn: r.raw.analyte_en,
+          valueText: String(r.raw.value),
+          valueNumeric: r.raw.value,
+          unit: r.raw.unit || null,
+          refRangeText: r.raw.ref_range_text,
+          sourcePage: r.raw.page,
+        })),
+    ];
+    await createPanelFindings(panelId, findingsToSave);
     if (sourceFileId != null) {
       await updateAttachment(sourceFileId, { linkedEntityId: panelId });
     }
@@ -337,9 +510,13 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
   const [showSkipped, setShowSkipped] = React.useState(false);
 
   const index = React.useMemo(() => buildBiomarkerIndex(ctx.biomarkers), [ctx.biomarkers]);
-  const { rows, meta, skipped, dateGuessed } = draft;
+  const { rows, findings, meta, skipped, dateGuessed } = draft;
 
   const includedCount = rows.filter((r) => r.include && r.biomarkerId != null).length;
+  // Findings = staged qualitative rows + unmapped numeric rows left flagged.
+  const findingsCount =
+    findings.filter((f) => f.include).length +
+    rows.filter((r) => r.biomarkerId == null && r.saveAsFinding).length;
   // Clusters colliding rows together; flagged rows are styled as a group.
   const orderedRows = React.useMemo(() => clusterForDisplay(rows), [rows]);
   // Only groups where the user still has MORE THAN ONE row selected are a real
@@ -376,8 +553,42 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
     setDraft({ ...draft, rows: next });
   };
 
+  // Non-primary members of a duplicate group — rendered nested under the kept
+  // row with a one-click swap instead of a plain checkbox.
+  const secondaryDupKeys = React.useMemo(() => {
+    const keys = new Set<number>();
+    for (const [, group] of duplicateGroups(rows)) {
+      for (const r of group) if (!r.include) keys.add(r.key);
+    }
+    return keys;
+  }, [rows]);
+
+  /** Swap the kept row of a duplicate group: the clicked alternate becomes the
+   *  single included member. */
+  const promoteDuplicate = (key: number) =>
+    updateRows((rs) => {
+      const r = rs.find((x) => x.key === key);
+      if (!r || r.biomarkerId == null) return;
+      for (const x of rs) if (x.biomarkerId === r.biomarkerId) x.include = x.key === key;
+    });
+
   const customRow = customForKey != null ? rows.find((r) => r.key === customForKey) : undefined;
   const customRange = parseRefRange(customRow?.raw.ref_range_text ?? null);
+  const customSuggestion = customRow?.suggestion ?? null;
+  const customName =
+    customSuggestion?.name ?? customRow?.raw.analyte_en ?? customRow?.raw.raw_label ?? "";
+  // Seed aliases from the original labels so the next import of the same lab
+  // exact-matches instead of landing here again.
+  const customAliases = customRow
+    ? [
+        ...new Set(
+          [customRow.raw.raw_label, customRow.raw.analyte_en].filter(
+            (a): a is string =>
+              !!a && a.trim().toLowerCase() !== customName.trim().toLowerCase(),
+          ),
+        ),
+      ].join(", ")
+    : "";
 
   return (
     <>
@@ -438,24 +649,49 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
             <TableBody>
               {orderedRows.map((row) => {
                 const bio = row.biomarkerId != null ? index.byId.get(row.biomarkerId) : undefined;
+                const secondary = secondaryDupKeys.has(row.key);
                 return (
-                  <TableRow key={row.key} className={row.duplicate ? "bg-warning/5" : undefined}>
+                  <TableRow
+                    key={row.key}
+                    className={
+                      row.duplicate
+                        ? secondary
+                          ? "bg-warning/5 text-muted-foreground"
+                          : "bg-warning/5"
+                        : undefined
+                    }
+                  >
                     <TableCell>
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-[var(--primary)]"
-                        checked={row.include}
-                        disabled={row.biomarkerId == null}
-                        onChange={() =>
-                          updateRows((rs) => {
-                            const r = rs.find((x) => x.key === row.key)!;
-                            r.include = !r.include && r.biomarkerId != null;
-                          })
-                        }
-                      />
+                      {secondary ? (
+                        <button
+                          type="button"
+                          title={t("importWizard.swapDuplicateHint")}
+                          aria-label={t("importWizard.swapDuplicateHint")}
+                          className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-warning/20 hover:text-foreground"
+                          onClick={() => promoteDuplicate(row.key)}
+                        >
+                          <ArrowLeftRight className="size-3.5" />
+                        </button>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-[var(--primary)]"
+                          checked={row.include}
+                          disabled={row.biomarkerId == null}
+                          onChange={() =>
+                            updateRows((rs) => {
+                              const r = rs.find((x) => x.key === row.key)!;
+                              r.include = !r.include && r.biomarkerId != null;
+                            })
+                          }
+                        />
+                      )}
                     </TableCell>
                     <TableCell className="max-w-44">
                       <p className="truncate text-sm" title={row.raw.raw_label}>
+                        {secondary && (
+                          <CornerDownRight className="mr-1 inline size-3 text-muted-foreground" />
+                        )}
                         {row.raw.raw_label}
                       </p>
                       {row.raw.analyte_en &&
@@ -492,12 +728,33 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
                         placeholder={t("importWizard.notMapped")}
                       />
                       {row.biomarkerId == null && (
-                        <button
-                          className="mt-1 inline-flex cursor-pointer items-center gap-1 text-[11px] text-primary hover:underline"
-                          onClick={() => setCustomForKey(row.key)}
-                        >
-                          <Plus className="size-3" /> Create custom biomarker
-                        </button>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <button
+                            className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-primary hover:underline"
+                            onClick={() => setCustomForKey(row.key)}
+                          >
+                            <Plus className="size-3" /> Create custom biomarker
+                            {row.suggestion && (
+                              <Badge variant="secondary" title={t("importWizard.aiSuggestionHint")}>
+                                {t("importWizard.aiSuggestionBadge")}
+                              </Badge>
+                            )}
+                          </button>
+                          <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              className="size-3 accent-[var(--primary)]"
+                              checked={row.saveAsFinding}
+                              onChange={() =>
+                                updateRows((rs) => {
+                                  const r = rs.find((x) => x.key === row.key)!;
+                                  r.saveAsFinding = !r.saveAsFinding;
+                                })
+                              }
+                            />
+                            {t("importWizard.saveToFindings")}
+                          </label>
+                        </div>
                       )}
                     </TableCell>
                     <TableCell>
@@ -539,6 +796,67 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
           </div>
         </CardContent>
       </Card>
+
+      {findings.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>{t("importWizard.findingsTitle")}</CardTitle>
+            <CardDescription>{t("importWizard.findingsDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {findings.map((f) => (
+              <div key={f.key} className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  className="size-4 shrink-0 accent-[var(--primary)]"
+                  checked={f.include}
+                  onChange={() =>
+                    setDraft({
+                      ...draft,
+                      findings: findings.map((x) =>
+                        x.key === f.key ? { ...x, include: !x.include } : x,
+                      ),
+                    })
+                  }
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm" title={f.rawLabel}>
+                    {f.rawLabel}
+                    {f.nameEn && f.nameEn.toLowerCase() !== f.rawLabel.toLowerCase() && (
+                      <span className="italic text-muted-foreground"> ≈ {f.nameEn}</span>
+                    )}
+                  </p>
+                  {f.refRangeText && (
+                    <p className="text-[10px] text-muted-foreground">ref: {f.refRangeText}</p>
+                  )}
+                </div>
+                <Input
+                  className="w-44"
+                  value={f.valueText}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      findings: findings.map((x) =>
+                        x.key === f.key ? { ...x, valueText: e.target.value } : x,
+                      ),
+                    })
+                  }
+                />
+                <Button
+                  variant="ghost"
+                  size="iconSm"
+                  aria-label={t("common.delete")}
+                  onClick={() =>
+                    setDraft({ ...draft, findings: findings.filter((x) => x.key !== f.key) })
+                  }
+                >
+                  <X />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mt-4">
         <CardHeader>
@@ -610,14 +928,18 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
         )}
         <Button onClick={onSave} disabled={includedCount === 0 || !meta.date || unresolvedDups > 0}>
           Confirm & save {includedCount} result{includedCount === 1 ? "" : "s"}
+          {findingsCount > 0 && ` + ${findingsCount} finding${findingsCount === 1 ? "" : "s"}`}
         </Button>
       </div>
 
       <CreateBiomarkerDialog
         open={customForKey != null}
         onClose={() => setCustomForKey(null)}
-        initialName={customRow?.raw.analyte_en ?? customRow?.raw.raw_label ?? ""}
-        initialUnit={customRow?.raw.unit ?? ""}
+        initialName={customName}
+        initialUnit={customSuggestion?.unit || customRow?.raw.unit || ""}
+        initialCategory={customSuggestion?.category}
+        initialDirection={customSuggestion?.direction}
+        initialAliases={customAliases}
         initialRefLow={customRange.low}
         initialRefHigh={customRange.high}
         existingCategories={[...new Set(ctx.biomarkers.map((b) => b.category))]}

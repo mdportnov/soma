@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Additional findings**: analytes the biomarker dictionary doesn't know and
+  qualitative results ("negative", titres) are no longer dropped at import —
+  they are saved as structured, editable findings attached to the panel
+  (new `lab_finding` table), shown on the panel page, aggregated across all
+  panels on the labs page, and included in the AI assistant's health context.
+  Unmapped rows are saved as findings by default (per-row opt-out on the review
+  screen); the custom-biomarker dialog is now pre-filled by an AI-drafted
+  definition (name/category/unit/direction + aliases).
+- **Import review ordering**: rows sort by review need (unmatched → broken unit
+  conversion → fuzzy → AI → translated → exact); duplicate groups nest their
+  alternates under the kept row with a one-click swap.
+- **Lab location extraction**: city/country are read from the report letterhead
+  and prefill the panel metadata.
+
+### Fixed
+
+- **Source document preview** falsely reported "file could not be found": the
+  availability check used the fs `exists` command without granting
+  `fs:allow-exists`, so it always failed for stored attachments.
+
 ## [0.3.0] — 2026-07-19
 
 ## [0.2.1] — 2026-07-19

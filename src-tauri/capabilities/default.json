@@ -34,6 +34,15 @@
       ]
     },
     {
+      "identifier": "fs:allow-exists",
+      "comment": "SourceFile preview checks attachment availability before rendering; without this the check throws and the UI falsely reports the file as missing.",
+      "allow": [
+        {
+          "path": "$APPDATA/attachments/**"
+        }
+      ]
+    },
+    {
       "identifier": "fs:allow-write-file",
       "allow": [
         {

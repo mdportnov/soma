@@ -260,6 +260,9 @@ export function CreateBiomarkerDialog({
   initialUnit = "",
   initialRefLow = "",
   initialRefHigh = "",
+  initialCategory,
+  initialDirection,
+  initialAliases = "",
 }: {
   open: boolean;
   onClose: () => void;
@@ -271,17 +274,21 @@ export function CreateBiomarkerDialog({
   initialUnit?: string;
   initialRefLow?: string;
   initialRefHigh?: string;
+  /** AI-drafted definition for an unmatched import row (optional, best-effort). */
+  initialCategory?: string;
+  initialDirection?: "range" | "higher_better" | "lower_better";
+  initialAliases?: string;
 }) {
   const { t } = useI18n();
   const toast = useToast();
   const [name, setName] = React.useState(initialName);
-  const [category, setCategory] = React.useState("Custom");
+  const [category, setCategory] = React.useState(initialCategory ?? "Custom");
   const [unit, setUnit] = React.useState(initialUnit);
   const [refLow, setRefLow] = React.useState(initialRefLow);
   const [refHigh, setRefHigh] = React.useState(initialRefHigh);
-  const [aliases, setAliases] = React.useState("");
+  const [aliases, setAliases] = React.useState(initialAliases);
   const [direction, setDirection] = React.useState<"range" | "higher_better" | "lower_better">(
-    "range",
+    initialDirection ?? "range",
   );
   const [saving, setSaving] = React.useState(false);
 
@@ -289,11 +296,23 @@ export function CreateBiomarkerDialog({
   React.useEffect(() => {
     if (open) {
       setName(initialName);
+      setCategory(initialCategory ?? "Custom");
       setUnit(initialUnit);
       setRefLow(initialRefLow);
       setRefHigh(initialRefHigh);
+      setDirection(initialDirection ?? "range");
+      setAliases(initialAliases);
     }
-  }, [open, initialName, initialUnit, initialRefLow, initialRefHigh]);
+  }, [
+    open,
+    initialName,
+    initialUnit,
+    initialRefLow,
+    initialRefHigh,
+    initialCategory,
+    initialDirection,
+    initialAliases,
+  ]);
 
   const submit = async () => {
     if (!name.trim() || !unit.trim()) return;

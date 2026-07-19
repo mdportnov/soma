@@ -500,6 +500,38 @@ export const labResult = sqliteTable(
   ],
 );
 
+// ── lab_finding ──────────────────────────────────────────────────────────────
+// Structured "additional findings" of a panel: analytes the dictionary doesn't
+// know (infections, tumor markers the user chose not to promote to a custom
+// biomarker) and qualitative results ("negative", titres). Not a lab_result —
+// no biomarker, no normalization/flags/trends — but kept as first-class,
+// editable rows so nothing from the source report is lost.
+export const labFinding = sqliteTable(
+  "lab_finding",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    panelId: integer("panel_id")
+      .notNull()
+      .references(() => labPanel.id, { onDelete: "cascade" }),
+    /** Original label string from the source document — audit trail. */
+    rawLabel: text("raw_label").notNull(),
+    /** AI-translated English name, when known. */
+    nameEn: text("name_en"),
+    /** Result as printed — supports "negative", titres ("1:160"), numbers. */
+    valueText: text("value_text").notNull(),
+    /** Numeric part when the result was numeric (unmapped analytes). */
+    valueNumeric: real("value_numeric"),
+    unit: text("unit"),
+    refRangeText: text("ref_range_text"),
+    /** 1-based page of the source document; null = unknown. */
+    sourcePage: integer("source_page"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("lab_finding_panel_idx").on(t.panelId)],
+);
+
 // ── visit ──────────────────────────────────────────────────────────────────
 export const visit = sqliteTable(
   "visit",
@@ -878,6 +910,8 @@ export type ChatChangeItem = typeof chatChangeItem.$inferSelect;
 export type NewChatChangeItem = typeof chatChangeItem.$inferInsert;
 export type HealthNote = typeof healthNote.$inferSelect;
 export type NewHealthNote = typeof healthNote.$inferInsert;
+export type LabFinding = typeof labFinding.$inferSelect;
+export type NewLabFinding = typeof labFinding.$inferInsert;
 export type RecordProvenance = typeof recordProvenance.$inferSelect;
 export type NewRecordProvenance = typeof recordProvenance.$inferInsert;
 export type RecordAuditEvent = typeof recordAuditEvent.$inferSelect;

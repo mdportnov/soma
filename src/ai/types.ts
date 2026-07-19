@@ -24,6 +24,19 @@ export type RawExtraction = {
 };
 
 /**
+ * Qualitative lab row (non-numeric): "negative", "positive", titres, +/++
+ * grades. Saved as a panel finding, not a lab_result.
+ */
+export type RawQualitativeExtraction = {
+  raw_label: string;
+  analyte_en: string | null;
+  /** Result exactly as printed (original language). */
+  result_text: string;
+  ref_range_text: string | null;
+  page: number | null;
+};
+
+/**
  * Phase-1 lab-report output: the analyte rows plus panel-level metadata read
  * from the same document. The collection date matters for correlation — without
  * it an old report imported today would be mis-dated and break the trend.
@@ -33,9 +46,14 @@ export type LabExtraction = {
   collectionDate: string | null;
   /** Laboratory / clinic name as printed, or null. */
   labName: string | null;
+  /** Lab location from the printed address/letterhead, in English; null when absent. */
+  city: string | null;
+  country: string | null;
   /** Fasting state at draw if stated; null when unknown. */
   fasting: boolean | null;
   results: RawExtraction[];
+  /** Non-numeric rows (qualitative readings, titres) — become panel findings. */
+  qualitative?: RawQualitativeExtraction[];
   /**
    * Rows that had a real label but a non-numeric result (qualitative readings
    * like "positive"/"negative", titres) — silently unsupported by the numeric
@@ -83,6 +101,21 @@ export type RawDischargeExtraction = {
     category: string | null;
   }[];
   notes: string;
+};
+
+/**
+ * AI-proposed definition for an analyte the dictionary doesn't know — used to
+ * prefill the custom-biomarker dialog from the review screen. Grounded in the
+ * printed label/unit/ref-range plus the model's clinical knowledge; the user
+ * still confirms every field before anything is created.
+ */
+export type SuggestedBiomarker = {
+  /** Standard English clinical name for the new entry. */
+  name: string;
+  category: string;
+  /** Canonical unit — the printed one when it is standard. */
+  unit: string;
+  direction: "range" | "higher_better" | "lower_better";
 };
 
 export type MappingCandidatePayload = {

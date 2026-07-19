@@ -1,8 +1,9 @@
+import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeftRight, Paperclip, Plus, Sparkles, TestTubes } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { listPanels } from "@/db/repos";
+import { getAllFindings, listPanels } from "@/db/repos";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -23,9 +24,34 @@ export function Labs() {
   const { profileId } = useApp();
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { data: panels, loading } = useQuery(() => listPanels(profileId), [profileId]);
+  const { data, loading } = useQuery(
+    async () => {
+      const [panels, findings] = await Promise.all([
+        listPanels(profileId),
+        getAllFindings(profileId),
+      ]);
+      return { panels, findings };
+    },
+    [profileId],
+  );
 
-  if (loading || !panels) return <Loading />;
+  // Aggregated cross-panel view: group findings by their (English) name so
+  // e.g. every "Anti-HCV" reading lines up together, newest first within a
+  // group (the query already returns rows date-desc).
+  const findingGroups = React.useMemo(() => {
+    if (!data) return [];
+    const byName = new Map<string, typeof data.findings>();
+    for (const f of data.findings) {
+      const key = (f.nameEn ?? f.rawLabel).toLowerCase();
+      (byName.get(key) ?? byName.set(key, []).get(key)!).push(f);
+    }
+    return [...byName.values()]
+      .map((items) => ({ name: items[0].nameEn ?? items[0].rawLabel, items }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [data]);
+
+  if (loading || !data) return <Loading />;
+  const { panels, findings } = data;
 
   return (
     <>
@@ -135,6 +161,62 @@ export function Labs() {
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {findings.length > 0 && (
+        <>
+          <h2 className="mb-1 mt-8 text-lg font-semibold">{t("labs.findingsTitle")}</h2>
+          <p className="mb-3 text-sm text-muted-foreground">{t("labs.findingsDescription")}</p>
+          <div className="rounded-xl border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("labs.tableColumns.finding")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.value")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.reference")}</TableHead>
+                  <TableHead>{t("labs.tableColumns.date")}</TableHead>
+                  <TableHead>{t("labs.tableColumns.lab")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {findingGroups.map((g) => (
+                  <React.Fragment key={g.name}>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableCell colSpan={5} className="py-1.5 font-medium">
+                        {g.name}
+                        <Badge variant="secondary" className="ml-2">
+                          {g.items.length}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                    {g.items.map((f) => (
+                      <TableRow
+                        key={f.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/labs/${f.panelId}`)}
+                      >
+                        <TableCell className="max-w-56 text-xs text-muted-foreground">
+                          <span className="truncate" title={f.rawLabel}>
+                            {f.rawLabel.toLowerCase() !== g.name.toLowerCase() ? f.rawLabel : "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {f.valueText}
+                          {f.unit ? ` ${f.unit}` : ""}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {f.refRangeText ?? "—"}
+                        </TableCell>
+                        <TableCell className="font-medium">{formatDate(f.date)}</TableCell>
+                        <TableCell>{f.labName ?? "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
     </>
   );

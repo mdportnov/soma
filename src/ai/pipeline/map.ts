@@ -1,5 +1,5 @@
 import type { Biomarker } from "@/db/schema";
-import { AIProviderError, type AIProvider, type RawExtraction } from "../types";
+import { AIProviderError, type AIProvider, type RawExtraction, type SuggestedBiomarker } from "../types";
 import { normalizeLabel, similarity } from "@/lib/fuzzy";
 import { convertToDefaultUnit, type ConversionResult } from "@/lib/units";
 
@@ -27,6 +27,12 @@ export type MappedRow = {
   conversion: ConversionResult | null;
   /** True when another row in the same batch maps to the same biomarker. */
   duplicate: boolean;
+  /**
+   * AI-drafted definition for a custom biomarker, filled post-mapping for
+   * unmatched rows (see lab.tsx prepare). Null/undefined when matched or when
+   * the suggestion call failed — it is strictly best-effort.
+   */
+  suggestion?: SuggestedBiomarker | null;
 };
 
 const FUZZY_ACCEPT = 0.86; // auto-accept threshold for fuzzy matches

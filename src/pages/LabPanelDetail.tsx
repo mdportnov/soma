@@ -1,16 +1,20 @@
 import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Sparkles, TestTubes, Trash2 } from "lucide-react";
+import { Sparkles, TestTubes, Trash2, Pencil } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
 import {
+  createPanelFindings,
   createPanelWithResults,
+  deleteFinding,
   deletePanel,
+  getFindingsByPanel,
   getPanel,
   getPanelChanges,
   getPanelResults,
   getPanelSource,
   markPanelReviewed,
   markResultReviewed,
+  updateFinding,
 } from "@/db/repos";
 import { SourceFileButton, SourcePageLink } from "@/components/app/SourceFile";
 import { useToast } from "@/components/app/Toast";
@@ -24,7 +28,10 @@ import { NotableChanges } from "@/components/app/NotableChanges";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/app/Field";
+import { Input } from "@/components/ui/input";
+import type { LabFinding } from "@/db/schema";
 import {
   Table,
   TableBody,
@@ -43,21 +50,24 @@ export function LabPanelDetail() {
   const { t } = useI18n();
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [editFinding, setEditFinding] = React.useState<LabFinding | null>(null);
+  const [editDraft, setEditDraft] = React.useState({ valueText: "", unit: "", refRangeText: "" });
 
   const { data, loading, reload } = useQuery(async () => {
-    const [panel, results, changes, source] = await Promise.all([
+    const [panel, results, changes, source, findings] = await Promise.all([
       getPanel(panelId),
       getPanelResults(panelId),
       getPanelChanges(panelId),
       getPanelSource(panelId),
+      getFindingsByPanel(panelId),
     ]);
-    return { panel, results, changes, source };
+    return { panel, results, changes, source, findings };
   }, [panelId]);
 
   if (loading || !data) return <Loading />;
   if (!data.panel) return <EmptyState icon={TestTubes} title={t("labPanelDetail.panelNotFound")} />;
 
-  const { panel, results, changes, source } = data;
+  const { panel, results, changes, source, findings } = data;
   const outOfRange = results.filter((r) => r.outOfRange).length;
   const changeByResult = new Map(changes.map((c) => [c.result.id, c]));
   const needsReview = results.filter((r) => r.reviewedAt == null);
@@ -267,6 +277,124 @@ export function LabPanelDetail() {
         </CardContent>
       </Card>
 
+      {findings.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>{t("labPanelDetail.findingsTitle")}</CardTitle>
+            <CardDescription>{t("labPanelDetail.findingsDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableBody>
+                {findings.map((f) => (
+                  <TableRow key={f.id}>
+                    <TableCell className="max-w-64">
+                      <p className="truncate text-sm" title={f.rawLabel}>
+                        {f.rawLabel}
+                      </p>
+                      {f.nameEn && f.nameEn.toLowerCase() !== f.rawLabel.toLowerCase() && (
+                        <p
+                          className="truncate text-[10px] italic text-muted-foreground"
+                          title={f.nameEn}
+                        >
+                          ≈ {f.nameEn}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums">
+                      {f.valueText}
+                      {f.unit ? ` ${f.unit}` : ""}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {f.refRangeText ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1">
+                        <SourcePageLink attachment={source} page={f.sourcePage} />
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          aria-label={t("common.edit")}
+                          onClick={() => {
+                            setEditFinding(f);
+                            setEditDraft({
+                              valueText: f.valueText,
+                              unit: f.unit ?? "",
+                              refRangeText: f.refRangeText ?? "",
+                            });
+                          }}
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          aria-label={t("common.delete")}
+                          onClick={async () => {
+                            await deleteFinding(f.id);
+                            await reload();
+                          }}
+                        >
+                          <Trash2 className="text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog
+        open={editFinding != null}
+        onClose={() => setEditFinding(null)}
+        title={t("labPanelDetail.editFindingTitle")}
+        description={editFinding?.rawLabel}
+      >
+        <div className="grid gap-3">
+          <Field label={t("labPanelDetail.tableColumns.value")}>
+            <Input
+              value={editDraft.valueText}
+              onChange={(e) => setEditDraft({ ...editDraft, valueText: e.target.value })}
+            />
+          </Field>
+          <Field label={t("biomarkers.createDialog.unitLabel")}>
+            <Input
+              value={editDraft.unit}
+              onChange={(e) => setEditDraft({ ...editDraft, unit: e.target.value })}
+            />
+          </Field>
+          <Field label={t("labPanelDetail.tableColumns.reference")}>
+            <Input
+              value={editDraft.refRangeText}
+              onChange={(e) => setEditDraft({ ...editDraft, refRangeText: e.target.value })}
+            />
+          </Field>
+          <div className="mt-1 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditFinding(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              disabled={!editDraft.valueText.trim()}
+              onClick={async () => {
+                if (!editFinding) return;
+                await updateFinding(editFinding.id, {
+                  valueText: editDraft.valueText.trim(),
+                  unit: editDraft.unit.trim() || null,
+                  refRangeText: editDraft.refRangeText.trim() || null,
+                });
+                setEditFinding(null);
+                await reload();
+              }}
+            >
+              {t("common.save")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
@@ -292,11 +420,16 @@ export function LabPanelDetail() {
                 reviewedAt: r.reviewedAt,
               }));
               const biosById = new Map(results.map((r) => [r.biomarkerId, r.biomarker]));
+              const findingInputs = findings.map(
+                ({ id: _i, panelId: _p, createdAt: _c, ...f }) => f,
+              );
               await deletePanel(panelId);
               setConfirmDelete(false);
               navigate("/labs");
               toast.showAction(t("labPanelDetail.deletedToast"), t("common.undo"), () => {
-                void createPanelWithResults(panelData, resultInputs, biosById);
+                void createPanelWithResults(panelData, resultInputs, biosById).then((newId) =>
+                  createPanelFindings(newId, findingInputs),
+                );
               });
             }}
           >

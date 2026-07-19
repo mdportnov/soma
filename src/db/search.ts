@@ -10,6 +10,7 @@ import {
   vaccine,
   symptomLog,
   imagingRecord,
+  healthNote,
 } from "./schema";
 
 /**
@@ -31,7 +32,8 @@ export type EntityType =
   | "allergy"
   | "vaccine"
   | "symptom"
-  | "imaging";
+  | "imaging"
+  | "health_note";
 
 export type SearchResult = {
   entityType: EntityType;
@@ -249,6 +251,35 @@ async function collectRows(profileId: number): Promise<IndexRow[]> {
       subtitle: im.findings ?? "",
       date: im.date,
       content: blob(im.modalityType, im.bodyArea, im.findings),
+    });
+  }
+
+  const notes = await db
+    .select({
+      id: healthNote.id,
+      title: healthNote.title,
+      summary: healthNote.summary,
+      originalText: healthNote.originalText,
+      category: healthNote.category,
+      date: healthNote.date,
+      tags: healthNote.tags,
+    })
+    .from(healthNote)
+    .where(sql`${healthNote.profileId} = ${profileId}`);
+  for (const note of notes) {
+    rows.push({
+      entityType: "health_note",
+      entityId: note.id,
+      title: note.title ?? note.summary ?? "Health note",
+      subtitle: note.category,
+      date: note.date,
+      content: blob(
+        note.title,
+        note.summary,
+        note.originalText,
+        note.category,
+        ...(Array.isArray(note.tags) ? note.tags : []),
+      ),
     });
   }
 

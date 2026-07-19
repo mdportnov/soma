@@ -2,6 +2,8 @@ import { fetch } from "@tauri-apps/plugin-http";
 import {
   AIProviderError,
   isRetryableError,
+  type AgentTurnRequest,
+  type AgentTurnResult,
   type AIErrorKind,
   type AIProvider,
   type ChatMessage,
@@ -101,6 +103,17 @@ export abstract class BaseProvider implements AIProvider {
       maxTokens: 4096,
       signal,
     });
+  }
+
+  async runAgentTurn(request: AgentTurnRequest): Promise<AgentTurnResult> {
+    if (request.tools.length) {
+      throw new AIProviderError(`${this.id} tool calling is unavailable`, undefined, "bad_request");
+    }
+    const messages = request.messages.flatMap<ChatMessage>((message) =>
+      message.role === "tool" ? [] : [{ role: message.role, content: message.content }],
+    );
+    const content = await this.chat(messages, request.systemPrompt, request.signal);
+    return { kind: "message", content };
   }
 
   async testKey(): Promise<void> {

@@ -94,6 +94,34 @@ export type MappingCandidatePayload = {
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+export type AIToolDefinition = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
+export type AIToolCall = {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+};
+
+export type AgentMessage =
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string; toolCalls?: AIToolCall[] }
+  | { role: "tool"; content: string; toolCallId: string; name: string };
+
+export type AgentTurnResult =
+  | { kind: "message"; content: string }
+  | { kind: "tool_calls"; content: string; calls: AIToolCall[] };
+
+export type AgentTurnRequest = {
+  messages: AgentMessage[];
+  systemPrompt: string;
+  tools: AIToolDefinition[];
+  signal?: AbortSignal;
+};
+
 /**
  * Single internal interface per §5 — adding a provider means writing one
  * adapter; the pipeline never talks to vendor SDKs directly.
@@ -119,6 +147,7 @@ export interface AIProvider {
   /** Free-form chat with health context (v1.x features). `signal` lets the UI
    *  cancel an in-flight turn (a "Stop" button). */
   chat(messages: ChatMessage[], systemPrompt?: string, signal?: AbortSignal): Promise<string>;
+  runAgentTurn?(request: AgentTurnRequest): Promise<AgentTurnResult>;
   /** Cheap round-trip to validate the API key. */
   testKey(): Promise<void>;
 }

@@ -15,6 +15,13 @@
       "when": 1782102862683,
       "tag": "0001_fts_records",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784463224244,
+      "tag": "0002_perpetual_quentin_quire",
+      "breakpoints": true
     }
   ]
 }

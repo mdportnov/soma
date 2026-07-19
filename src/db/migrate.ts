@@ -34,7 +34,7 @@ const BREAKPOINT = "--> statement-breakpoint";
  * to 1 — wrongly rejecting every older backup as "newer than the app". Bump it
  * by hand whenever a new migration is added (0001_fts_records → 7).
  */
-export const schemaVersion = 7;
+export const schemaVersion = 8;
 
 /** Minimal connection surface the migrator needs — lets it be unit-tested with
  *  a stub instead of a real SQLite handle. */

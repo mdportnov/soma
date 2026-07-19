@@ -94,6 +94,241 @@ export const profile = sqliteTable("profile", {
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
 });
 
+export const chatThread = sqliteTable(
+  "chat_thread",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    title: text("title"),
+    status: text("status", { enum: ["active", "archived"] })
+      .notNull()
+      .default("active"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("chat_thread_profile_updated_idx").on(t.profileId, t.updatedAt)],
+);
+
+export const chatMessage = sqliteTable(
+  "chat_message",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    threadId: integer("thread_id")
+      .notNull()
+      .references(() => chatThread.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    turnStatus: text("turn_status", {
+      enum: ["completed", "running", "failed", "cancelled"],
+    })
+      .notNull()
+      .default("completed"),
+    providerId: text("provider_id"),
+    modelId: text("model_id"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("chat_message_thread_created_idx").on(t.threadId, t.createdAt)],
+);
+
+export const chatToolEvent = sqliteTable(
+  "chat_tool_event",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    messageId: integer("message_id")
+      .notNull()
+      .references(() => chatMessage.id, { onDelete: "cascade" }),
+    toolName: text("tool_name").notNull(),
+    argumentsJson: text("arguments_json", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    resultSummaryJson: text("result_summary_json", { mode: "json" }).$type<unknown>(),
+    status: text("status", { enum: ["completed", "failed"] }).notNull(),
+    durationMs: integer("duration_ms"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("chat_tool_event_message_idx").on(t.messageId)],
+);
+
+export const chatChangeSet = sqliteTable(
+  "chat_change_set",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    threadId: integer("thread_id")
+      .notNull()
+      .references(() => chatThread.id, { onDelete: "cascade" }),
+    sourceMessageId: integer("source_message_id")
+      .notNull()
+      .references(() => chatMessage.id),
+    summary: text("summary").notNull(),
+    revision: integer("revision").notNull().default(1),
+    status: text("status", {
+      enum: ["draft", "ready", "committed", "failed", "discarded", "superseded"],
+    })
+      .notNull()
+      .default("draft"),
+    riskLevel: text("risk_level", { enum: ["standard", "elevated", "destructive"] })
+      .notNull()
+      .default("standard"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+    committedAt: text("committed_at"),
+  },
+  (t) => [
+    index("chat_change_set_thread_idx").on(t.threadId),
+    index("chat_change_set_source_idx").on(t.sourceMessageId),
+  ],
+);
+
+export const chatChangeItem = sqliteTable(
+  "chat_change_item",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    changeSetId: integer("change_set_id")
+      .notNull()
+      .references(() => chatChangeSet.id, { onDelete: "cascade" }),
+    operation: text("operation", {
+      enum: ["create", "update", "end", "merge", "delete"],
+    }).notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id"),
+    payloadJson: text("payload_json", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    beforeJson: text("before_json", { mode: "json" }).$type<Record<string, unknown>>(),
+    status: text("status", { enum: ["ready", "blocked", "committed", "excluded", "failed"] })
+      .notNull()
+      .default("ready"),
+    warningsJson: text("warnings_json", { mode: "json" }).$type<string[]>().notNull().default([]),
+    errorsJson: text("errors_json", { mode: "json" }).$type<string[]>().notNull().default([]),
+    candidateMatchesJson: text("candidate_matches_json", { mode: "json" })
+      .$type<{ entityType: string; entityId: number; label: string }[]>()
+      .notNull()
+      .default([]),
+    confidence: real("confidence"),
+    selected: integer("selected", { mode: "boolean" }).notNull().default(true),
+  },
+  (t) => [index("chat_change_item_set_idx").on(t.changeSetId)],
+);
+
+export const healthNote = sqliteTable(
+  "health_note",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    category: text("category", {
+      enum: ["general", "concern", "symptom_pattern", "treatment", "history", "other"],
+    })
+      .notNull()
+      .default("general"),
+    title: text("title"),
+    summary: text("summary"),
+    originalText: text("original_text").notNull(),
+    date: text("date"),
+    datePrecision: text("date_precision", {
+      enum: ["day", "month", "year", "approximate", "range", "unknown"],
+    })
+      .notNull()
+      .default("unknown"),
+    dateRaw: text("date_raw"),
+    tags: text("tags", { mode: "json" }).$type<string[]>().notNull().default([]),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("health_note_profile_date_idx").on(t.profileId, t.date)],
+);
+
+export const recordProvenance = sqliteTable(
+  "record_provenance",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    sourceType: text("source_type", {
+      enum: ["chat", "manual", "document", "mcp", "integration"],
+    }).notNull(),
+    sourceId: text("source_id"),
+    assertionType: text("assertion_type", {
+      enum: ["user_reported", "clinician_diagnosed", "documented", "measured", "device_recorded"],
+    }).notNull(),
+    verificationStatus: text("verification_status", {
+      enum: ["user_confirmed", "manually_reviewed", "unverified"],
+    }).notNull(),
+    rawText: text("raw_text"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("record_provenance_entity_idx").on(t.entityType, t.entityId)],
+);
+
+export const recordAuditEvent = sqliteTable(
+  "record_audit_event",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    operation: text("operation").notNull(),
+    beforeJson: text("before_json", { mode: "json" }).$type<Record<string, unknown>>(),
+    afterJson: text("after_json", { mode: "json" }).$type<Record<string, unknown>>(),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [index("record_audit_entity_idx").on(t.entityType, t.entityId)],
+);
+
+export const recordRelation = sqliteTable(
+  "record_relation",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profile.id),
+    sourceEntityType: text("source_entity_type").notNull(),
+    sourceEntityId: integer("source_entity_id").notNull(),
+    targetEntityType: text("target_entity_type").notNull(),
+    targetEntityId: integer("target_entity_id").notNull(),
+    relationType: text("relation_type", {
+      enum: [
+        "prescribed_at",
+        "diagnosed_at",
+        "treats",
+        "successor_of",
+        "reaction_to",
+        "associated_with",
+      ],
+    }).notNull(),
+    assertionType: text("assertion_type", { enum: ["explicit", "user_confirmed"] }).notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [
+    index("record_relation_source_idx").on(t.sourceEntityType, t.sourceEntityId),
+    index("record_relation_target_idx").on(t.targetEntityType, t.targetEntityId),
+  ],
+);
+
 // ── biomarker (reference dictionary) ───────────────────────────────────────
 export const biomarker = sqliteTable(
   "biomarker",
@@ -631,3 +866,21 @@ export type LifestyleLog = typeof lifestyleLog.$inferSelect;
 export type NewLifestyleLog = typeof lifestyleLog.$inferInsert;
 export type RetestSchedule = typeof retestSchedule.$inferSelect;
 export type NewRetestSchedule = typeof retestSchedule.$inferInsert;
+export type ChatThread = typeof chatThread.$inferSelect;
+export type NewChatThread = typeof chatThread.$inferInsert;
+export type ChatMessageRecord = typeof chatMessage.$inferSelect;
+export type NewChatMessageRecord = typeof chatMessage.$inferInsert;
+export type ChatToolEvent = typeof chatToolEvent.$inferSelect;
+export type NewChatToolEvent = typeof chatToolEvent.$inferInsert;
+export type ChatChangeSet = typeof chatChangeSet.$inferSelect;
+export type NewChatChangeSet = typeof chatChangeSet.$inferInsert;
+export type ChatChangeItem = typeof chatChangeItem.$inferSelect;
+export type NewChatChangeItem = typeof chatChangeItem.$inferInsert;
+export type HealthNote = typeof healthNote.$inferSelect;
+export type NewHealthNote = typeof healthNote.$inferInsert;
+export type RecordProvenance = typeof recordProvenance.$inferSelect;
+export type NewRecordProvenance = typeof recordProvenance.$inferInsert;
+export type RecordAuditEvent = typeof recordAuditEvent.$inferSelect;
+export type NewRecordAuditEvent = typeof recordAuditEvent.$inferInsert;
+export type RecordRelation = typeof recordRelation.$inferSelect;
+export type NewRecordRelation = typeof recordRelation.$inferInsert;

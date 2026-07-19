@@ -3,6 +3,7 @@ mod backup;
 mod fsutil;
 mod kdf;
 mod mcp;
+mod transaction;
 mod vault;
 
 use keyring::Entry;
@@ -144,6 +145,7 @@ pub fn run() {
             mcp_server_path,
             mcp::mcp_clients_status,
             mcp::mcp_install,
+            transaction::execute_transaction,
             backup::detect_backup_providers,
             backup::verify_backup_dir,
             backup::backup_passphrase_set,

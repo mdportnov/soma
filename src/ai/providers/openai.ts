@@ -1,9 +1,86 @@
 import { BaseProvider, type CompletionRequest } from "./base";
-import { AIProviderError } from "../types";
+import {
+  AIProviderError,
+  type AgentMessage,
+  type AgentTurnRequest,
+  type AgentTurnResult,
+} from "../types";
 
 /** Uses the OpenAI Responses API (supports inline images and PDF files). */
 export class OpenAIProvider extends BaseProvider {
   readonly id = "openai";
+
+  async runAgentTurn(request: AgentTurnRequest): Promise<AgentTurnResult> {
+    const input = request.messages.flatMap((message: AgentMessage): any[] => {
+      if (message.role === "tool") {
+        return [
+          {
+            type: "function_call_output",
+            call_id: message.toolCallId,
+            output: message.content,
+          },
+        ];
+      }
+      const items: any[] = message.content
+        ? [
+            {
+              role: message.role,
+              content: [
+                {
+                  type: message.role === "assistant" ? "output_text" : "input_text",
+                  text: message.content,
+                },
+              ],
+            },
+          ]
+        : [];
+      if (message.role === "assistant") {
+        for (const call of message.toolCalls ?? []) {
+          items.push({
+            type: "function_call",
+            call_id: call.id,
+            name: call.name,
+            arguments: JSON.stringify(call.arguments),
+          });
+        }
+      }
+      return items;
+    });
+    const data = await this.postJson(
+      "https://api.openai.com/v1/responses",
+      { Authorization: `Bearer ${this.apiKey}` },
+      {
+        model: this.model,
+        max_output_tokens: 4096,
+        instructions: request.systemPrompt,
+        input,
+        tools: request.tools.map((tool) => ({
+          type: "function",
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        })),
+      },
+      request.signal,
+    );
+    const calls = (data.output ?? [])
+      .filter((item: any) => item.type === "function_call")
+      .map((item: any) => ({
+        id: String(item.call_id ?? item.id),
+        name: String(item.name),
+        arguments: parseToolArguments(item.arguments),
+      }));
+    const content = (data.output ?? [])
+      .filter((item: any) => item.type === "message")
+      .flatMap((item: any) => item.content ?? [])
+      .filter((item: any) => item.type === "output_text")
+      .map((item: any) => item.text)
+      .join("");
+    if (calls.length) return { kind: "tool_calls", content, calls };
+    if (!content)
+      throw new AIProviderError("Empty response from OpenAI", undefined, "bad_response");
+    return { kind: "message", content };
+  }
 
   protected async complete(req: CompletionRequest): Promise<string> {
     const content = req.parts.map((p) =>
@@ -45,5 +122,15 @@ export class OpenAIProvider extends BaseProvider {
       .join("");
     if (!text) throw new AIProviderError("Empty response from OpenAI", undefined, "bad_response");
     return text;
+  }
+}
+
+function parseToolArguments(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object") return value as Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(String(value ?? "{}"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
   }
 }

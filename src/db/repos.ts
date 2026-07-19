@@ -9,6 +9,7 @@ import {
   biomarkerReferenceRange,
   bpLog,
   diagnosis,
+  healthNote,
   imagingRecord,
   labPanel,
   labResult,
@@ -28,6 +29,7 @@ import {
   type BpLog,
   type Diagnosis,
   type ImagingRecord,
+  type HealthNote,
   type LabPanel,
   type LabResult,
   type LifestyleLog,
@@ -39,6 +41,7 @@ import {
   type NewBpLog,
   type NewDiagnosis,
   type NewImagingRecord,
+  type NewHealthNote,
   type NewLabPanel,
   type NewLabResult,
   type NewLifestyleLog,
@@ -1085,6 +1088,24 @@ export async function upsertLifestyleLog(data: NewLifestyleLog): Promise<number>
 
 export async function deleteLifestyleLog(id: number): Promise<void> {
   await db.delete(lifestyleLog).where(eq(lifestyleLog.id, id));
+}
+
+export async function listHealthNotes(profileId: number): Promise<HealthNote[]> {
+  return db
+    .select()
+    .from(healthNote)
+    .where(eq(healthNote.profileId, profileId))
+    .orderBy(desc(healthNote.date), desc(healthNote.id));
+}
+
+export async function getHealthNote(id: number): Promise<HealthNote | null> {
+  const rows = await db.select().from(healthNote).where(eq(healthNote.id, id));
+  return rows[0] ?? null;
+}
+
+export async function createHealthNote(data: NewHealthNote): Promise<number> {
+  const [row] = await db.insert(healthNote).values(data).returning({ id: healthNote.id });
+  return row.id;
 }
 
 /** Recent lifestyle entries (oldest-first) within the last `days` — AI context + trends. */

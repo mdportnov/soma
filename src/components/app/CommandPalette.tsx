@@ -24,6 +24,7 @@ const GROUP_ORDER: EntityType[] = [
   "vaccine",
   "symptom",
   "imaging",
+  "health_note",
 ];
 
 const PER_GROUP = 5;
@@ -48,6 +49,8 @@ function routeFor(r: SearchResult): string {
       return "/journal?tab=symptoms";
     case "imaging":
       return `/imaging/${r.entityId}`;
+    case "health_note":
+      return "/assistant";
     default:
       return "/";
   }

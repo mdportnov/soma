@@ -15,7 +15,8 @@ import { join } from "node:path";
 import { jsPDF } from "jspdf";
 import { seedBiomarkersIfEmpty, seedReferenceRangesIfEmpty } from "../src/db/seed-biomarkers.ts";
 
-const APP_DIR = join(homedir(), "Library/Application Support/com.soma.health");
+const APP_DIR =
+  process.env.SOMA_APP_DIR ?? join(homedir(), "Library/Application Support/com.soma.health");
 const ATTACH_DIR = join(APP_DIR, "attachments");
 const DB_PATH = join(APP_DIR, "soma.db");
 const MIG_DIR = join(process.cwd(), "src/db/migrations");

@@ -50,6 +50,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, todayISO } from "@/lib/utils";
+import { settingsPath } from "@/lib/settings-navigation";
 
 const ATTENTION_ICON: Record<AttentionType, typeof Activity> = {
   biomarker: TrendingDown,
@@ -250,7 +251,7 @@ export function Dashboard() {
               title={t("dashboard.empty.title")}
               description={t("dashboard.empty.description")}
               action={
-                <Link to="/settings" state={{ openDashboard: true }}>
+                <Link to={settingsPath("dashboard")}>
                   <Button size="sm" variant="outline">
                     <SlidersHorizontal /> {t("dashboard.empty.cta")}
                   </Button>

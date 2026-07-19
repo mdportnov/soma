@@ -6,14 +6,13 @@ import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { settingsPath } from "@/lib/settings-navigation";
 
 type Step = {
   done: boolean;
   icon: LucideIcon;
   label: string;
   to: string;
-  /** Router state — used to deep-link straight into the AI card on Settings. */
-  state?: { openAi: boolean };
   /** Only show a step the user opted into (a med step is noise if meds are off). */
   show: boolean;
 };
@@ -58,8 +57,7 @@ export function GettingStarted({
       done: aiEnabled,
       icon: Sparkles,
       label: t("gettingStarted.enableAi"),
-      to: "/settings",
-      state: { openAi: true },
+      to: settingsPath("ai"),
       show: enabled.has("ai"),
     },
   ].filter((s) => s.show);
@@ -100,7 +98,7 @@ export function GettingStarted({
                 {s.label}
               </span>
               {!s.done && (
-                <Link to={s.to} state={s.state}>
+                <Link to={s.to}>
                   <Button size="sm" variant="outline">
                     {t("gettingStarted.cta")}
                   </Button>

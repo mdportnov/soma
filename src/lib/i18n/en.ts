@@ -610,6 +610,8 @@ export const en = {
     shiftCount: "{{count}} notable change(s) vs previous",
     medsMore: "+{{count}} more medications",
     medsLess: "Show fewer medications",
+    scrollHint: "Scroll horizontally to explore the full history.",
+    scrollAreaLabel: "Scrollable health timeline",
     legend: {
       title: "Legend",
       outOfRange: "Lab out of range",

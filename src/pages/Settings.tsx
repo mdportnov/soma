@@ -76,32 +76,115 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Collapsible } from "@/components/ui/collapsible";
 import { exportAllJson, exportLabsCsv } from "@/lib/export";
 import { GITHUB_RELEASES_URL, checkLatestRelease, type UpdateCheckResult } from "@/lib/releases";
+import { settingsSectionFromSearch, type SettingsSection } from "@/lib/settings-navigation";
 
 export function Settings() {
   const { t } = useI18n();
-  // GettingStarted's "enable AI" deep-links here with state to open the AI card.
   const location = useLocation();
-  const openAi = (location.state as { openAi?: boolean } | null)?.openAi === true;
+  const legacyState = location.state as {
+    openAi?: boolean;
+    openDashboard?: boolean;
+    openSections?: boolean;
+  } | null;
+  const requestedSection =
+    settingsSectionFromSearch(location.search) ??
+    (legacyState?.openAi
+      ? "ai"
+      : legacyState?.openDashboard
+        ? "dashboard"
+        : legacyState?.openSections
+          ? "sections"
+          : null);
+  const [highlighted, setHighlighted] = React.useState<SettingsSection | null>(requestedSection);
+
+  React.useEffect(() => {
+    if (!requestedSection) return;
+    setHighlighted(requestedSection);
+    const scrollTimer = window.setTimeout(() => {
+      const target = document.getElementById(`settings-${requestedSection}`);
+      const container = target?.closest("main");
+      if (!target || !container) return;
+      const top =
+        target.getBoundingClientRect().top -
+        container.getBoundingClientRect().top +
+        container.scrollTop -
+        24;
+      container.scrollTop = Math.max(0, top);
+    }, 100);
+    const highlightTimer = window.setTimeout(() => setHighlighted(null), 2000);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(highlightTimer);
+    };
+  }, [location.key, location.search, requestedSection]);
 
   return (
     <>
       <PageHeader title={t("settings.title")} description={t("settings.description")} />
       <div className="space-y-4">
-        <AppearanceCard />
-        <UpdatesCard />
-        <SectionsCard />
-        <DashboardCard />
-        <ResetPersonalizationCard />
-        <ProfileCard />
-        <EmergencyContactCard />
-        <AiSettingsCard defaultOpen={openAi} />
-        <McpCard />
-        <BackupCard />
-        <EncryptionCard />
-        <ExportCard />
-        <LogsCard />
+        <SettingsTarget section="appearance" highlighted={highlighted}>
+          <AppearanceCard />
+        </SettingsTarget>
+        <SettingsTarget section="updates" highlighted={highlighted}>
+          <UpdatesCard />
+        </SettingsTarget>
+        <SettingsTarget section="sections" highlighted={highlighted}>
+          <SectionsCard />
+        </SettingsTarget>
+        <SettingsTarget section="dashboard" highlighted={highlighted}>
+          <DashboardCard />
+        </SettingsTarget>
+        <SettingsTarget section="reset" highlighted={highlighted}>
+          <ResetPersonalizationCard />
+        </SettingsTarget>
+        <SettingsTarget section="profile" highlighted={highlighted}>
+          <ProfileCard />
+        </SettingsTarget>
+        <SettingsTarget section="emergency" highlighted={highlighted}>
+          <EmergencyContactCard />
+        </SettingsTarget>
+        <SettingsTarget section="ai" highlighted={highlighted}>
+          <AiSettingsCard focused={requestedSection === "ai"} />
+        </SettingsTarget>
+        <SettingsTarget section="mcp" highlighted={highlighted}>
+          <McpCard />
+        </SettingsTarget>
+        <SettingsTarget section="backup" highlighted={highlighted}>
+          <BackupCard />
+        </SettingsTarget>
+        <SettingsTarget section="encryption" highlighted={highlighted}>
+          <EncryptionCard />
+        </SettingsTarget>
+        <SettingsTarget section="export" highlighted={highlighted}>
+          <ExportCard />
+        </SettingsTarget>
+        <SettingsTarget section="logs" highlighted={highlighted}>
+          <LogsCard />
+        </SettingsTarget>
       </div>
     </>
+  );
+}
+
+function SettingsTarget({
+  section,
+  highlighted,
+  children,
+}: {
+  section: SettingsSection;
+  highlighted: SettingsSection | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      id={`settings-${section}`}
+      className={cn(
+        "scroll-mt-6 rounded-xl transition-shadow duration-300",
+        highlighted === section && "ring-2 ring-primary/50 ring-offset-2 ring-offset-background",
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -280,20 +363,7 @@ function AppearanceCard() {
 
 function SectionsCard() {
   const { t } = useI18n();
-  const location = useLocation();
   const [groups, setGroups] = React.useState<Set<SectionGroup>>(() => loadInterests());
-  // Deep-linked from the sidebar's "Manage sections": scroll to and briefly
-  // highlight this card so the user lands exactly on the control they wanted.
-  const [glow, setGlow] = React.useState(false);
-  React.useEffect(() => {
-    if ((location.state as { openSections?: boolean } | null)?.openSections !== true) return;
-    document
-      .getElementById("settings-sections")
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setGlow(true);
-    const timer = setTimeout(() => setGlow(false), 2000);
-    return () => clearTimeout(timer);
-  }, [location.state]);
 
   const toggle = (g: SectionGroup) =>
     setGroups((prev) => {
@@ -305,10 +375,7 @@ function SectionsCard() {
     });
 
   return (
-    <Card
-      id="settings-sections"
-      className={cn("transition-shadow", glow && "ring-2 ring-primary/40")}
-    >
+    <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="size-4 text-muted-foreground" />
@@ -368,24 +435,10 @@ const WIDGET_KEYS: Record<DashboardWidget, { labelKey: string; descKey: string }
 
 function DashboardCard() {
   const { t } = useI18n();
-  const location = useLocation();
   const [enabled, setEnabled] = React.useState<Set<DashboardWidget>>(() => loadDashboardWidgets());
   // Confirm before hiding the safety banner: it's a life-safety surface, so a
   // stray toggle shouldn't silently bury it (the Emergency Card still has it).
   const [confirmSafety, setConfirmSafety] = React.useState(false);
-
-  // Deep-linked from the dashboard's "dashboard is empty" nudge: scroll to and
-  // briefly highlight this card (mirrors SectionsCard).
-  const [glow, setGlow] = React.useState(false);
-  React.useEffect(() => {
-    if ((location.state as { openDashboard?: boolean } | null)?.openDashboard !== true) return;
-    document
-      .getElementById("settings-dashboard")
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    setGlow(true);
-    const timer = setTimeout(() => setGlow(false), 2000);
-    return () => clearTimeout(timer);
-  }, [location.state]);
 
   const apply = (w: DashboardWidget, on: boolean) =>
     setEnabled((prev) => {
@@ -406,10 +459,7 @@ function DashboardCard() {
   };
 
   return (
-    <Card
-      id="settings-dashboard"
-      className={cn("transition-shadow", glow && "ring-2 ring-primary/40")}
-    >
+    <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <LayoutDashboard className="size-4 text-muted-foreground" />
@@ -488,7 +538,7 @@ function ResetPersonalizationCard() {
 
 // ── AI provider / model / key ──────────────────────────────────────────────
 
-function AiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
+function AiSettingsCard({ focused }: { focused: boolean }) {
   const { t } = useI18n();
   const toast = useToast();
   const {
@@ -497,6 +547,7 @@ function AiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
     recheck: recheckKeychain,
   } = useKeychainStatus();
   const [settings, setSettings] = React.useState<AiSettings>(() => loadAiSettings());
+  const [open, setOpen] = React.useState(focused);
   const [keyInput, setKeyInput] = React.useState("");
   const [hasStoredKey, setHasStoredKey] = React.useState<boolean | null>(null);
   const [testState, setTestState] = React.useState<
@@ -507,6 +558,10 @@ function AiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
   // Only multimodal models qualify for the import pipeline (§5); the registry
   // already filters, but guard anyway in case of manual registry edits.
   const usableModels = provider?.models.filter((m) => m.supports_vision && m.supports_pdf) ?? [];
+
+  React.useEffect(() => {
+    if (focused) setOpen(true);
+  }, [focused]);
 
   React.useEffect(() => {
     setHasStoredKey(null);
@@ -574,7 +629,8 @@ function AiSettingsCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
     <Collapsible
       title={t("settings.ai.title")}
       description={t("settings.ai.description")}
-      defaultOpen={defaultOpen}
+      open={open}
+      onOpenChange={setOpen}
       icon={<Sparkles className="size-4" />}
     >
       <div className="grid gap-4 p-5 pt-0">

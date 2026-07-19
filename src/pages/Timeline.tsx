@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CalendarRange, Search, SlidersHorizontal } from "lucide-react";
+import { CalendarRange, MoveHorizontal, Search, SlidersHorizontal } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import {
@@ -216,6 +216,12 @@ export function Timeline() {
                   </button>
                 </>
               )}
+            </p>
+          )}
+
+          {range === null && (
+            <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MoveHorizontal className="size-3.5" /> {t("timeline.scrollHint")}
             </p>
           )}
 

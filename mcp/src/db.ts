@@ -82,7 +82,12 @@ function checkSchema(sqlite: Database): { writable: boolean; note: string | null
       note: `database is behind this checkout (unapplied migrations: ${pending.join(", ")}); open the Soma app once to migrate`,
     };
   }
-  const unknown = [...applied].filter((name) => !EXPECTED_MIGRATIONS.includes(name));
+  // `task:`-prefixed rows are one-time data-backfill markers stamped by the
+  // app's runOnceTask (src/db/migrate.ts), not schema migrations — their
+  // presence says nothing about schema compatibility.
+  const unknown = [...applied].filter(
+    (name) => !name.startsWith("task:") && !EXPECTED_MIGRATIONS.includes(name),
+  );
   if (unknown.length > 0) {
     return {
       writable: false,

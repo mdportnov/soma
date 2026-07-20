@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **MCP server wrongly went read-only** after the app ran a one-time data
+  backfill: `task:`-prefixed markers in `__migrations` were treated as unknown
+  schema migrations, so every write tool refused on an up-to-date database.
+  The schema check now ignores task markers.
 - **AI assistant chat failed with Gemini** (HTTP 400): tool schemas were sent
   verbatim, but Gemini's function-calling API accepts only a strict OpenAPI
   subset and rejected keywords like `additionalProperties`, `oneOf` and

@@ -156,7 +156,10 @@ export async function buildHealthContext(profileId: number): Promise<string> {
   if (findings.length) {
     lines.push(
       `Other findings (non-dictionary / qualitative results, not tracked as biomarkers): ${findings
-        .map((f) => `${f.nameEn ?? f.rawLabel} ${f.valueText}${f.unit ? ` ${f.unit}` : ""} (${f.date})`)
+        .map(
+          (f) =>
+            `${f.nameEn ?? f.rawLabel} ${f.valueText}${f.unit ? ` ${f.unit}` : ""} (${f.date})`,
+        )
         .join("; ")}`,
     );
   }

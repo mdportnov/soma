@@ -38,7 +38,12 @@ import {
   nullableStr,
   numberOrNull,
 } from "../validate";
-import { createAttachment, createPanelFindings, createPanelWithResults, updateAttachment } from "@/db/repos";
+import {
+  createAttachment,
+  createPanelFindings,
+  createPanelWithResults,
+  updateAttachment,
+} from "@/db/repos";
 import { storeAttachmentFile, mimeFromPath } from "@/lib/attachments";
 import { Field } from "@/components/app/Field";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
@@ -165,9 +170,7 @@ function reviewPriority(r: Pick<ReviewRow, "confidence" | "biomarkerId" | "conve
   const p = REVIEW_PRIORITY[r.confidence];
   // A matched row with a broken unit conversion needs attention almost as
   // much as an unmatched one.
-  return r.biomarkerId != null && r.conversion != null && !r.conversion.ok
-    ? Math.min(p, 1)
-    : p;
+  return r.biomarkerId != null && r.conversion != null && !r.conversion.ok ? Math.min(p, 1) : p;
 }
 
 /** Render order: by review priority (neediest first), with duplicate clusters
@@ -583,8 +586,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
     ? [
         ...new Set(
           [customRow.raw.raw_label, customRow.raw.analyte_en].filter(
-            (a): a is string =>
-              !!a && a.trim().toLowerCase() !== customName.trim().toLowerCase(),
+            (a): a is string => !!a && a.trim().toLowerCase() !== customName.trim().toLowerCase(),
           ),
         ),
       ].join(", ")

@@ -24,16 +24,13 @@ export function Labs() {
   const { profileId } = useApp();
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { data, loading } = useQuery(
-    async () => {
-      const [panels, findings] = await Promise.all([
-        listPanels(profileId),
-        getAllFindings(profileId),
-      ]);
-      return { panels, findings };
-    },
-    [profileId],
-  );
+  const { data, loading } = useQuery(async () => {
+    const [panels, findings] = await Promise.all([
+      listPanels(profileId),
+      getAllFindings(profileId),
+    ]);
+    return { panels, findings };
+  }, [profileId]);
 
   // Aggregated cross-panel view: group findings by their (English) name so
   // e.g. every "Anti-HCV" reading lines up together, newest first within a

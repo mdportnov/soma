@@ -305,9 +305,7 @@ export function LabPanelDetail() {
                       {f.valueText}
                       {f.unit ? ` ${f.unit}` : ""}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {f.refRangeText ?? "—"}
-                    </TableCell>
+                    <TableCell className="text-muted-foreground">{f.refRangeText ?? "—"}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
                         <SourcePageLink attachment={source} page={f.sourcePage} />

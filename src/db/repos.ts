@@ -441,7 +441,15 @@ export async function getFindingsByPanel(panelId: number): Promise<LabFinding[]>
 export async function getRecentFindings(
   profileId: number,
   limit = 15,
-): Promise<{ rawLabel: string; nameEn: string | null; valueText: string; unit: string | null; date: string }[]> {
+): Promise<
+  {
+    rawLabel: string;
+    nameEn: string | null;
+    valueText: string;
+    unit: string | null;
+    date: string;
+  }[]
+> {
   return db
     .select({
       rawLabel: labFinding.rawLabel,

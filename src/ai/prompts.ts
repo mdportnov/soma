@@ -154,7 +154,12 @@ export const TEST_PROMPT = `Reply with exactly the word "ok".`;
  * call; the review dialog prefills from it and the user confirms.
  */
 export function buildCustomBiomarkerPrompt(
-  rows: { raw_label: string; analyte_en: string | null; unit: string; ref_range_text: string | null }[],
+  rows: {
+    raw_label: string;
+    analyte_en: string | null;
+    unit: string;
+    ref_range_text: string | null;
+  }[],
   existingCategories: string[],
 ): string {
   return `A lab report import found analytes that do not exist in the user's biomarker dictionary. For EACH analyte below, draft how it should be defined as a NEW biomarker entry, using clinical knowledge plus the printed unit and reference range.

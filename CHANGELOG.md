@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] — 2026-07-20
 
+### Added
+
+- **MCP server: full record coverage** (22 new tools). AI assistants connected
+  over MCP can now read and write every major record type, not just labs:
+  medications as intake periods (`add_medication` / `stop_medication`, with a
+  duplicate-active guard), diagnoses with status transitions (`add_diagnosis` /
+  `update_diagnosis_status`), doctor visits whose id links diagnoses, symptoms
+  and imaging (`add_visit`), home measurements (`log_weight`,
+  `log_blood_pressure` with the normal/stage2/crisis flag), daily lifestyle
+  context with one merged row per day (`log_lifestyle` / `get_lifestyle_trend`),
+  free-form journal notes with vague-date support (`add_health_note` /
+  `list_health_notes`), imaging studies (`add_imaging_record`), re-test
+  reminders with computed due status (`set_retest_schedule` /
+  `list_retest_schedules`), lab browsing (`list_lab_panels` / `get_lab_panel`),
+  full vaccination history (`list_vaccines`), profile lifestyle fields
+  (`update_profile`), and list tools for medications, diagnoses, visits and
+  imaging. Every write validates dates and enums, refuses instead of guessing,
+  and supports `dryRun` previews (updates show a before/after diff);
+  `log_symptom` can now link to a visit.
+
 ### Changed
 
 - **Settings redesign**: the settings page is now organised into four tabs —

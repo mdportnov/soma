@@ -7,27 +7,51 @@ device.
 
 ## Tools
 
-| Tool                  | What it does                                                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `get_medical_summary` | **Call FIRST.** Safety-critical context: profile basics, active allergies (anaphylactic first), active diagnoses, active meds, recent vaccines |
-| `get_profile`         | Demographics, body metrics, lifestyle, conditions — context for interpreting labs                                                              |
-| `search_biomarkers`   | Resolves a name in any language/spelling against the dictionary (same matcher as the import pipeline)                                          |
-| `get_biomarker_trend` | Time series in the default unit + reference/optimal ranges + medications overlapping the period                                                |
-| `get_symptom_trend`   | Severity series for a symptom (case-insensitive) + overlapping meds; lists known names when no match                                           |
-| `get_weight_trend`    | Body-weight series (kg) + target weight                                                                                                        |
-| `get_bp_trend`        | Blood-pressure series with per-reading flag (normal/stage2/crisis) + summary counts                                                            |
-| `add_lab_panel`       | Writes a lab-draw event; strict validation (dictionary mapping, unit conversion), `dryRun` supported                                           |
-| `add_allergy`         | Records an allergy (severity/category enums, date validation), `dryRun` supported                                                              |
-| `add_vaccine`         | Records a vaccination (date validation, expiry), `dryRun` supported                                                                            |
-| `log_symptom`         | Logs a symptom (1–10 severity); reuses an existing symptom's spelling on case-insensitive match                                                |
+| Tool                      | What it does                                                                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_medical_summary`     | **Call FIRST.** Safety-critical context: profile basics, active allergies (anaphylactic first), active diagnoses, active meds, recent vaccines |
+| `get_profile`             | Demographics, body metrics, lifestyle, conditions — context for interpreting labs                                                              |
+| `search_biomarkers`       | Resolves a name in any language/spelling against the dictionary (same matcher as the import pipeline)                                          |
+| `get_biomarker_trend`     | Time series in the default unit + reference/optimal ranges + medications overlapping the period                                                |
+| `get_symptom_trend`       | Severity series for a symptom (case-insensitive) + overlapping meds; lists known names when no match                                           |
+| `get_weight_trend`        | Body-weight series (kg) + target weight                                                                                                        |
+| `get_bp_trend`            | Blood-pressure series with per-reading flag (normal/stage2/crisis) + summary counts                                                            |
+| `get_lifestyle_trend`     | Daily lifestyle series (sleep/training/steps/RHR/stress/energy) + per-field averages                                                           |
+| `list_medications`        | Medications with intake periods; `active` / `past` / `all`                                                                                     |
+| `list_diagnoses`          | Diagnoses with status, ICD code and linked visit                                                                                               |
+| `list_visits`             | Doctor visits with diagnoses linked to each                                                                                                    |
+| `list_lab_panels`         | Lab-draw events with result / out-of-range / finding counts                                                                                    |
+| `get_lab_panel`           | One panel in full: normalized results with ranges/flags + unstructured findings                                                                |
+| `list_vaccines`           | Full vaccination history with `expired` flags                                                                                                  |
+| `list_health_notes`       | Journal notes filtered by category/date/tag/text query                                                                                         |
+| `list_imaging_records`    | Imaging studies (X-ray/CT/MRI/US/PET) with findings                                                                                            |
+| `list_retest_schedules`   | Re-test reminders with computed next-due date and overdue/due_soon status                                                                      |
+| `add_lab_panel`           | Writes a lab-draw event; strict validation (dictionary mapping, unit conversion), `dryRun` supported                                           |
+| `add_allergy`             | Records an allergy (severity/category enums, date validation), `dryRun` supported                                                              |
+| `add_vaccine`             | Records a vaccination (date validation, expiry), `dryRun` supported                                                                            |
+| `log_symptom`             | Logs a symptom (1–10 severity); reuses an existing symptom's spelling; links to a visit via `visitId`                                          |
+| `add_medication`          | Starts an intake period; refuses a duplicate active row for the same name                                                                      |
+| `stop_medication`         | Closes an intake period by id or by (unambiguous) name                                                                                         |
+| `add_diagnosis`           | Records a diagnosis; duplicate-guarded, links to a visit via `visitId`                                                                         |
+| `update_diagnosis_status` | active / remission / resolved transitions with `resolvedDate` stamping                                                                         |
+| `add_visit`               | Records a doctor visit; the returned id links diagnoses/symptoms/imaging                                                                       |
+| `log_weight`              | Body-weight measurement (kg), reports same-date entries                                                                                        |
+| `log_blood_pressure`      | BP reading with position/arm context; echoes the normal/stage2/crisis flag                                                                     |
+| `log_lifestyle`           | One row per day; merges only the fields passed (safe to log sleep and training separately)                                                     |
+| `add_health_note`         | Free-form journal note (verbatim text + optional summary, vague-date support, tags)                                                            |
+| `add_imaging_record`      | Imaging study with verbatim findings                                                                                                           |
+| `set_retest_schedule`     | Creates/updates a re-test cadence (label-matched upsert)                                                                                       |
+| `update_profile`          | Lifestyle/body profile fields (height, weight snapshots, activity, smoking, alcohol, conditions)                                               |
 
 Plus the `soma://biomarkers` resource — the full biomarker dictionary.
 
 > **Rule:** always call `get_medical_summary` before interpreting any health data — allergies and active conditions are safety-critical.
 
-The `add_*` / `log_*` write tools require the DB schema to match this checkout's
-migrations; until the app applies migrations 0002+ they refuse with the
-read-only schema note (see [Database](#database)).
+Every write tool validates dates (no future dates, except a planned medication
+`endDate`) and enums, refuses instead of guessing, and supports `dryRun=true`
+to preview the exact row (updates preview a before/after diff). Write tools
+require the DB schema to match this checkout's migrations; otherwise they
+refuse with the read-only schema note (see [Database](#database)).
 
 ## Build
 
@@ -73,7 +97,7 @@ to **read-only** and write tools explain why.
 
 ## Write access
 
-Write tools (`add_lab_panel`, `add_allergy`, `add_vaccine`, `log_symptom`) are
+Write tools (all `add_*` / `log_*` / `stop_*` / `set_*` / `update_*`) are
 **disabled by default**. Any local process can talk to a stdio MCP server, so
 inserting health records — including safety-critical allergy and vaccine rows —
 requires an explicit opt-in: set `SOMA_MCP_ALLOW_WRITES=1` in the environment of

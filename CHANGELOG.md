@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-20
+
 ### Changed
 
 - **Settings redesign**: the settings page is now organised into four tabs —

@@ -235,14 +235,19 @@ export abstract class BaseProvider implements AIProvider {
 
   /**
    * Records a failed request to the rotating log via console.warn (mirrored by
-   * the app logger). Deliberately logs only provider / model / error taxonomy —
-   * never the request body or model output, which carry medical data.
+   * the app logger). Deliberately never logs the request body or model output,
+   * which carry medical data; for HTTP errors the provider's own error body is
+   * safe and essential for diagnosis, so it is included (truncated).
    */
   private logFailure(e: unknown): void {
     const kind = e instanceof AIProviderError ? e.kind : "unknown";
     const status = e instanceof AIProviderError && e.status != null ? e.status : "-";
+    const detail =
+      e instanceof AIProviderError && e.status != null
+        ? ` detail=${e.message.replace(/\s+/g, " ").slice(0, 300)}`
+        : "";
     console.warn(
-      `AI request failed: provider=${this.id} model=${this.model} kind=${kind} status=${status}`,
+      `AI request failed: provider=${this.id} model=${this.model} kind=${kind} status=${status}${detail}`,
     );
   }
 }

@@ -76,7 +76,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Collapsible } from "@/components/ui/collapsible";
 import { exportAllJson, exportLabsCsv } from "@/lib/export";
 import { GITHUB_RELEASES_URL, checkLatestRelease, type UpdateCheckResult } from "@/lib/releases";
-import { settingsSectionFromSearch, type SettingsSection } from "@/lib/settings-navigation";
+import {
+  SECTION_TAB,
+  SETTINGS_TABS,
+  settingsSectionFromSearch,
+  type SettingsSection,
+  type SettingsTab,
+} from "@/lib/settings-navigation";
 
 export function Settings() {
   const { t } = useI18n();
@@ -96,9 +102,13 @@ export function Settings() {
           ? "sections"
           : null);
   const [highlighted, setHighlighted] = React.useState<SettingsSection | null>(requestedSection);
+  const [tab, setTab] = React.useState<SettingsTab>(
+    requestedSection ? SECTION_TAB[requestedSection] : "general",
+  );
 
   React.useEffect(() => {
     if (!requestedSection) return;
+    setTab(SECTION_TAB[requestedSection]);
     setHighlighted(requestedSection);
     const scrollTimer = window.setTimeout(() => {
       const target = document.getElementById(`settings-${requestedSection}`);
@@ -121,46 +131,82 @@ export function Settings() {
   return (
     <>
       <PageHeader title={t("settings.title")} description={t("settings.description")} />
+      <div className="mb-4 flex w-fit flex-wrap rounded-lg border p-0.5">
+        {SETTINGS_TABS.map((tb) => (
+          <Button
+            key={tb}
+            variant={tab === tb ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 px-3"
+            onClick={() => setTab(tb)}
+          >
+            {t(`settings.tabs.${tb}`)}
+          </Button>
+        ))}
+      </div>
       <div className="space-y-4">
-        <SettingsTarget section="appearance" highlighted={highlighted}>
-          <AppearanceCard />
-        </SettingsTarget>
-        <SettingsTarget section="updates" highlighted={highlighted}>
-          <UpdatesCard />
-        </SettingsTarget>
-        <SettingsTarget section="sections" highlighted={highlighted}>
-          <SectionsCard />
-        </SettingsTarget>
-        <SettingsTarget section="dashboard" highlighted={highlighted}>
-          <DashboardCard />
-        </SettingsTarget>
-        <SettingsTarget section="reset" highlighted={highlighted}>
-          <ResetPersonalizationCard />
-        </SettingsTarget>
-        <SettingsTarget section="profile" highlighted={highlighted}>
-          <ProfileCard />
-        </SettingsTarget>
-        <SettingsTarget section="emergency" highlighted={highlighted}>
-          <EmergencyContactCard />
-        </SettingsTarget>
-        <SettingsTarget section="ai" highlighted={highlighted}>
-          <AiSettingsCard focused={requestedSection === "ai"} />
-        </SettingsTarget>
-        <SettingsTarget section="mcp" highlighted={highlighted}>
-          <McpCard />
-        </SettingsTarget>
-        <SettingsTarget section="backup" highlighted={highlighted}>
-          <BackupCard />
-        </SettingsTarget>
-        <SettingsTarget section="encryption" highlighted={highlighted}>
-          <EncryptionCard />
-        </SettingsTarget>
-        <SettingsTarget section="export" highlighted={highlighted}>
-          <ExportCard />
-        </SettingsTarget>
-        <SettingsTarget section="logs" highlighted={highlighted}>
-          <LogsCard />
-        </SettingsTarget>
+        {tab === "general" && (
+          <>
+            <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+              <SettingsTarget section="appearance" highlighted={highlighted}>
+                <AppearanceCard />
+              </SettingsTarget>
+              <SettingsTarget section="updates" highlighted={highlighted}>
+                <UpdatesCard />
+              </SettingsTarget>
+            </div>
+            <SettingsTarget section="sections" highlighted={highlighted}>
+              <SectionsCard />
+            </SettingsTarget>
+            <SettingsTarget section="dashboard" highlighted={highlighted}>
+              <DashboardCard />
+            </SettingsTarget>
+          </>
+        )}
+        {tab === "ai" && (
+          <>
+            <SettingsTarget section="ai" highlighted={highlighted}>
+              <AiSettingsCard focused={requestedSection === "ai"} />
+            </SettingsTarget>
+            <SettingsTarget section="mcp" highlighted={highlighted}>
+              <McpCard />
+            </SettingsTarget>
+          </>
+        )}
+        {tab === "profile" && (
+          <>
+            <SettingsTarget section="profile" highlighted={highlighted}>
+              <ProfileCard />
+            </SettingsTarget>
+            <SettingsTarget section="emergency" highlighted={highlighted}>
+              <EmergencyContactCard />
+            </SettingsTarget>
+          </>
+        )}
+        {tab === "data" && (
+          <>
+            <SettingsTarget section="backup" highlighted={highlighted}>
+              <BackupCard />
+            </SettingsTarget>
+            <SettingsTarget section="encryption" highlighted={highlighted}>
+              <EncryptionCard />
+            </SettingsTarget>
+            <SettingsTarget section="export" highlighted={highlighted}>
+              <ExportCard />
+            </SettingsTarget>
+            <SettingsTarget section="logs" highlighted={highlighted}>
+              <LogsCard />
+            </SettingsTarget>
+            <div className="space-y-3 border-t pt-4">
+              <p className="text-xs font-medium tracking-wide text-destructive uppercase">
+                {t("settings.dangerZone")}
+              </p>
+              <SettingsTarget section="reset" highlighted={highlighted}>
+                <ResetPersonalizationCard />
+              </SettingsTarget>
+            </div>
+          </>
+        )}
       </div>
     </>
   );

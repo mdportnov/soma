@@ -354,6 +354,13 @@ export const en = {
     title: "Settings",
     description:
       "AI providers, profile and data export. Everything stays on this device unless you say otherwise.",
+    tabs: {
+      general: "General",
+      ai: "AI",
+      profile: "Profile",
+      data: "Data",
+    },
+    dangerZone: "Danger zone",
 
     // Language section
     language: {

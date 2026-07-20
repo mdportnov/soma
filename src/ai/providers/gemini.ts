@@ -1,4 +1,5 @@
 import { BaseProvider, type CompletionRequest } from "./base";
+import { toGeminiParameters } from "./gemini-schema";
 import { AIProviderError, type AgentTurnRequest, type AgentTurnResult } from "../types";
 
 export class GeminiProvider extends BaseProvider {
@@ -24,7 +25,8 @@ export class GeminiProvider extends BaseProvider {
         for (const call of message.toolCalls ?? []) {
           parts.push({ functionCall: { name: call.name, args: call.arguments } });
         }
-        contents.push({ role: "model", parts });
+        // Gemini rejects a content entry with an empty parts list.
+        if (parts.length) contents.push({ role: "model", parts });
       } else {
         contents.push({ role: "user", parts: [{ text: message.content }] });
       }
@@ -38,11 +40,17 @@ export class GeminiProvider extends BaseProvider {
         generationConfig: { maxOutputTokens: 4096 },
         tools: [
           {
-            functionDeclarations: request.tools.map((tool) => ({
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.inputSchema,
-            })),
+            functionDeclarations: request.tools.map((tool) => {
+              // Gemini takes an OpenAPI Schema subset, not full JSON Schema;
+              // unknown keywords are a hard 400. `toGeminiParameters` lowers the
+              // schema and omits `parameters` for no-argument tools.
+              const parameters = toGeminiParameters(tool.inputSchema);
+              return {
+                name: tool.name,
+                description: tool.description,
+                ...(parameters ? { parameters } : {}),
+              };
+            }),
           },
         ],
       },

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Settings redesign**: the settings page is now organised into four tabs —
+  General (appearance and updates side by side, sidebar sections, dashboard
+  layout), AI, Profile (profile and emergency info), and Data (backup,
+  encryption, export, logs). Reset personalization moved to a separated danger
+  zone at the end. All existing deep links into settings sections keep working.
+
+### Fixed
+
+- **AI assistant chat failed with Gemini** (HTTP 400): tool schemas were sent
+  verbatim, but Gemini's function-calling API accepts only a strict OpenAPI
+  subset and rejected keywords like `additionalProperties`, `oneOf` and
+  `const`, so every chat request with tools failed. Schemas are now lowered to
+  Gemini's subset, empty-parameter tools omit the schema entirely, and history
+  entries that would produce empty message parts are skipped.
+- **AI error logs** now include the provider's error message for HTTP failures
+  instead of only the status code.
+
 ## [0.4.0] — 2026-07-19
 
 ### Added

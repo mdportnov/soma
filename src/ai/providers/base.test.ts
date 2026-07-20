@@ -26,7 +26,7 @@ function res(opts: { ok?: boolean; status?: number; json?: unknown; retryAfter?:
     ok: opts.ok ?? true,
     status: opts.status ?? 200,
     headers: { get: (k: string) => headers.get(k.toLowerCase()) ?? null },
-    text: async () => "raw provider error detail (must never be logged)",
+    text: async () => "provider error body: invalid schema field",
     json: async () => opts.json ?? { ok: true },
   };
 }
@@ -100,17 +100,18 @@ describe("postJson — explicit timeout via AbortController", () => {
   });
 });
 
-describe("failure logging is PII-free", () => {
-  it("logs provider/model/kind/status but never the response body", async () => {
+describe("failure logging", () => {
+  it("logs provider/model/kind/status plus the provider's truncated error body", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    fetchMock.mockResolvedValue(res({ ok: false, status: 401 }));
+    fetchMock.mockResolvedValue(res({ ok: false, status: 400 }));
     await expect(new TestProvider("k", "claude-x", fast).call()).rejects.toBeInstanceOf(
       AIProviderError,
     );
     const logged = warn.mock.calls.flat().join(" ");
     expect(logged).toContain("provider=test");
-    expect(logged).toContain("kind=auth");
-    expect(logged).not.toContain("raw provider error detail");
+    expect(logged).toContain("kind=bad_request");
+    expect(logged).toContain("detail=");
+    expect(logged).toContain("invalid schema field");
     warn.mockRestore();
   });
 });

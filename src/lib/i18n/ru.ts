@@ -354,6 +354,13 @@ export const ru = {
     title: "Настройки",
     description:
       "Провайдеры ИИ, профиль и экспорт данных. Всё остаётся на этом устройстве, если вы не решите иначе.",
+    tabs: {
+      general: "Основные",
+      ai: "ИИ",
+      profile: "Профиль",
+      data: "Данные",
+    },
+    dangerZone: "Опасная зона",
 
     // Language section
     language: {

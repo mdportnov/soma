@@ -350,6 +350,16 @@ export const en = {
       installErr: "Couldn't write config: {{msg}}",
       manualShow: "Manual setup (copy config yourself)",
       manualHide: "Hide manual setup",
+      writesTitle: "Allow write access",
+      writesDesc:
+        "Let the assistant add records too (medications, labs, symptoms…), not just read them. Applies to every client below and takes effect after you restart it.",
+      readWrite: "read + write",
+      readOnly: "read-only",
+      writesConfirm: {
+        title: "Allow the assistant to write health records?",
+        body: "With this on, any assistant connected above can add or change entries in your Soma data — medications, diagnoses, vaccines, journal notes and more — not just read them. Turn it off any time from this screen.",
+        confirm: "Enable write access",
+      },
     },
     title: "Settings",
     description:

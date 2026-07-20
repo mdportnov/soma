@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **MCP write access toggle in Settings.** The MCP write tools were opt-in via
+  a `SOMA_MCP_ALLOW_WRITES` env var that had to be hand-edited into a client's
+  config file. Settings → AI → AI assistant access (MCP) now has an **Allow
+  write access** switch that writes (or clears) that flag directly into every
+  already-installed client's config — no manual JSON/TOML editing — and shows
+  a read-only/read+write badge per client.
+
 ## [0.5.0] — 2026-07-20
 
 ### Added

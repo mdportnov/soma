@@ -115,6 +115,9 @@ fn detected(app: &AppHandle, c: &Client) -> bool {
     }
 }
 
+/// Env var that opts the server in to write tools (mirrors `mcp/src/guard.ts`).
+const ALLOW_WRITES_ENV: &str = "SOMA_MCP_ALLOW_WRITES";
+
 /// Is `soma` already registered in this client pointing at `server_path`?
 fn configured(app: &AppHandle, c: &Client, server_path: &str) -> bool {
     let path = match config_path(app, c) {
@@ -156,13 +159,60 @@ fn configured(app: &AppHandle, c: &Client, server_path: &str) -> bool {
     }
 }
 
+/// Does the already-written `soma` entry have write tools enabled
+/// (`env.SOMA_MCP_ALLOW_WRITES` set to a truthy value)?
+fn writes_enabled(app: &AppHandle, c: &Client) -> bool {
+    let path = match config_path(app, c) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    let text = match fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(_) => return false,
+    };
+    let truthy = |s: &str| s == "1" || s.eq_ignore_ascii_case("true");
+    match c.format {
+        Format::TomlCodex => text
+            .parse::<toml_edit::DocumentMut>()
+            .ok()
+            .and_then(|d| {
+                d.get("mcp_servers")?
+                    .get(SERVER_KEY)?
+                    .get("env")?
+                    .get(ALLOW_WRITES_ENV)?
+                    .as_str()
+                    .map(truthy)
+            })
+            .unwrap_or(false),
+        Format::JsonMcpServers | Format::JsonVscode => {
+            let container = match c.format {
+                Format::JsonVscode => "servers",
+                _ => "mcpServers",
+            };
+            serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| {
+                    v.get(container)?
+                        .get(SERVER_KEY)?
+                        .get("env")?
+                        .get(ALLOW_WRITES_ENV)?
+                        .as_str()
+                        .map(truthy)
+                })
+                .unwrap_or(false)
+        }
+    }
+}
+
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientStatus {
     id: String,
     label: String,
     config_path: String,
     detected: bool,
     configured: bool,
+    writes_enabled: bool,
 }
 
 /// Status of every supported client: where its config lives, whether it looks
@@ -181,12 +231,14 @@ pub fn mcp_clients_status(
                 config_path: config_path(&app, c)?.to_string_lossy().into_owned(),
                 detected: detected(&app, c),
                 configured: configured(&app, c, &server_path),
+                writes_enabled: writes_enabled(&app, c),
             })
         })
         .collect()
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InstallResult {
     config_path: String,
     /// "created" if the file was new, "updated" if it already existed.
@@ -194,11 +246,15 @@ pub struct InstallResult {
 }
 
 /// Registers (or refreshes) the Soma server in one client's config file.
+/// `writes_enabled` sets/clears `SOMA_MCP_ALLOW_WRITES=1` in the server's env
+/// so the assistant can call the write tools (add medication, log symptom,
+/// etc.) without the user hand-editing the config — see `mcp/src/guard.ts`.
 #[tauri::command]
 pub fn mcp_install(
     app: AppHandle,
     client: String,
     server_path: String,
+    writes_enabled: bool,
 ) -> Result<InstallResult, String> {
     let c = self::client(&client)?;
     let path = config_path(&app, c)?;
@@ -209,9 +265,11 @@ pub fn mcp_install(
     }
 
     match c.format {
-        Format::TomlCodex => write_toml(&path, &server_path)?,
-        Format::JsonMcpServers => write_json(&path, "mcpServers", &server_path, false)?,
-        Format::JsonVscode => write_json(&path, "servers", &server_path, true)?,
+        Format::TomlCodex => write_toml(&path, &server_path, writes_enabled)?,
+        Format::JsonMcpServers => {
+            write_json(&path, "mcpServers", &server_path, false, writes_enabled)?
+        }
+        Format::JsonVscode => write_json(&path, "servers", &server_path, true, writes_enabled)?,
     }
 
     Ok(InstallResult {
@@ -225,6 +283,7 @@ fn write_json(
     container: &str,
     server_path: &str,
     vscode_stdio: bool,
+    writes_enabled: bool,
 ) -> Result<(), String> {
     let mut root: serde_json::Value = match fs::read_to_string(path) {
         Ok(t) if !t.trim().is_empty() => {
@@ -242,11 +301,16 @@ fn write_json(
     if !cont.is_object() {
         *cont = serde_json::json!({});
     }
-    let entry = if vscode_stdio {
+    let mut entry = if vscode_stdio {
         serde_json::json!({ "type": "stdio", "command": server_path })
     } else {
         serde_json::json!({ "command": server_path })
     };
+    if writes_enabled {
+        let mut env = serde_json::Map::new();
+        env.insert(ALLOW_WRITES_ENV.to_string(), serde_json::json!("1"));
+        entry["env"] = serde_json::Value::Object(env);
+    }
     cont.as_object_mut()
         .unwrap()
         .insert(SERVER_KEY.to_string(), entry);
@@ -255,7 +319,7 @@ fn write_json(
     fs::write(path, text + "\n").map_err(|e| format!("write {}: {e}", path.display()))
 }
 
-fn write_toml(path: &PathBuf, server_path: &str) -> Result<(), String> {
+fn write_toml(path: &PathBuf, server_path: &str, writes_enabled: bool) -> Result<(), String> {
     use toml_edit::{value, DocumentMut, Item, Table};
 
     let mut doc: DocumentMut = match fs::read_to_string(path) {
@@ -274,6 +338,11 @@ fn write_toml(path: &PathBuf, server_path: &str) -> Result<(), String> {
 
     let mut soma = Table::new();
     soma["command"] = value(server_path);
+    if writes_enabled {
+        let mut env = Table::new();
+        env[ALLOW_WRITES_ENV] = value("1");
+        soma.insert("env", Item::Table(env));
+    }
     servers.insert(SERVER_KEY, Item::Table(soma));
 
     fs::write(path, doc.to_string()).map_err(|e| format!("write {}: {e}", path.display()))
@@ -299,7 +368,7 @@ mod tests {
         )
         .unwrap();
 
-        write_json(&path, "mcpServers", "/bin/soma-mcp", false).unwrap();
+        write_json(&path, "mcpServers", "/bin/soma-mcp", false, false).unwrap();
 
         let v: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
@@ -312,7 +381,7 @@ mod tests {
     #[test]
     fn json_vscode_uses_stdio_servers() {
         let path = tmp("vscode.json");
-        write_json(&path, "servers", "/bin/soma-mcp", true).unwrap();
+        write_json(&path, "servers", "/bin/soma-mcp", true, false).unwrap();
         let v: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(v["servers"]["soma"]["type"], "stdio");
@@ -329,7 +398,7 @@ mod tests {
         )
         .unwrap();
 
-        write_toml(&path, "/bin/soma-mcp").unwrap();
+        write_toml(&path, "/bin/soma-mcp", false).unwrap();
 
         let doc: toml_edit::DocumentMut = fs::read_to_string(&path).unwrap().parse().unwrap();
         assert_eq!(doc["model"].as_str(), Some("gpt-5"));
@@ -337,6 +406,38 @@ mod tests {
         assert_eq!(
             doc["mcp_servers"]["soma"]["command"].as_str(),
             Some("/bin/soma-mcp")
+        );
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn json_writes_enabled_sets_env() {
+        let path = tmp("writes-on.json");
+        write_json(&path, "mcpServers", "/bin/soma-mcp", false, true).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(v["mcpServers"]["soma"]["env"]["SOMA_MCP_ALLOW_WRITES"], "1");
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn json_writes_disabled_omits_env() {
+        let path = tmp("writes-off.json");
+        write_json(&path, "mcpServers", "/bin/soma-mcp", false, false).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(v["mcpServers"]["soma"].get("env").is_none());
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn toml_writes_enabled_sets_env() {
+        let path = tmp("writes-on.toml");
+        write_toml(&path, "/bin/soma-mcp", true).unwrap();
+        let doc: toml_edit::DocumentMut = fs::read_to_string(&path).unwrap().parse().unwrap();
+        assert_eq!(
+            doc["mcp_servers"]["soma"]["env"]["SOMA_MCP_ALLOW_WRITES"].as_str(),
+            Some("1")
         );
         fs::remove_file(&path).ok();
     }

@@ -20,6 +20,8 @@ export type McpClientStatus = {
   detected: boolean;
   /** `soma` is already registered and points at the current binary. */
   configured: boolean;
+  /** The registered entry has `SOMA_MCP_ALLOW_WRITES=1` set — write tools are live. */
+  writesEnabled: boolean;
 };
 
 export function mcpClientsStatus(serverPath: string): Promise<McpClientStatus[]> {
@@ -29,8 +31,12 @@ export function mcpClientsStatus(serverPath: string): Promise<McpClientStatus[]>
 export type McpInstallResult = { configPath: string; action: "created" | "updated" };
 
 /** Writes the Soma server into the given client's own config file. */
-export function mcpInstall(client: string, serverPath: string): Promise<McpInstallResult> {
-  return invoke<McpInstallResult>("mcp_install", { client, serverPath });
+export function mcpInstall(
+  client: string,
+  serverPath: string,
+  writesEnabled: boolean,
+): Promise<McpInstallResult> {
+  return invoke<McpInstallResult>("mcp_install", { client, serverPath, writesEnabled });
 }
 
 export type McpClientId = "claude" | "codex" | "gemini" | "cursor";
@@ -54,13 +60,22 @@ function q(path: string): string {
   return JSON.stringify(path);
 }
 
+/** Env var that opts the MCP server in to write tools (see `mcp/src/guard.ts`). */
+export const ALLOW_WRITES_ENV = "SOMA_MCP_ALLOW_WRITES";
+
 /**
  * Builds copy-paste MCP config for each supported client. The Soma server is a
  * local stdio process that reads soma.db directly — no token, no network — so
- * every client just needs the absolute path to the bundled binary.
+ * every client just needs the absolute path to the bundled binary. When
+ * `writesEnabled` is set, the snippet also carries the env var that unlocks
+ * the write tools (add medication, log symptom, …) for that client.
  */
-export function buildMcpSnippets(serverPath: string): McpSnippet[] {
-  const mcpServersJson = JSON.stringify({ mcpServers: { soma: { command: serverPath } } }, null, 2);
+export function buildMcpSnippets(serverPath: string, writesEnabled: boolean): McpSnippet[] {
+  const entry: Record<string, unknown> = { command: serverPath };
+  if (writesEnabled) entry.env = { [ALLOW_WRITES_ENV]: "1" };
+  const mcpServersJson = JSON.stringify({ mcpServers: { soma: entry } }, null, 2);
+
+  const tomlEnv = writesEnabled ? `\n\n[mcp_servers.soma.env]\n${ALLOW_WRITES_ENV} = "1"` : "";
 
   return [
     {
@@ -69,14 +84,16 @@ export function buildMcpSnippets(serverPath: string): McpSnippet[] {
       location: "claude_desktop_config.json · project .mcp.json",
       lang: "json",
       code: mcpServersJson,
-      cli: `claude mcp add soma -- ${q(serverPath)}`,
+      cli: writesEnabled
+        ? `claude mcp add soma --env ${ALLOW_WRITES_ENV}=1 -- ${q(serverPath)}`
+        : `claude mcp add soma -- ${q(serverPath)}`,
     },
     {
       id: "codex",
       label: "Codex CLI",
       location: "~/.codex/config.toml",
       lang: "toml",
-      code: `[mcp_servers.soma]\ncommand = ${q(serverPath)}`,
+      code: `[mcp_servers.soma]\ncommand = ${q(serverPath)}${tomlEnv}`,
     },
     {
       id: "gemini",

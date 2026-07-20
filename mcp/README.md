@@ -101,7 +101,12 @@ Write tools (all `add_*` / `log_*` / `stop_*` / `set_*` / `update_*`) are
 **disabled by default**. Any local process can talk to a stdio MCP server, so
 inserting health records — including safety-critical allergy and vaccine rows —
 requires an explicit opt-in: set `SOMA_MCP_ALLOW_WRITES=1` in the environment of
-the server process. In an MCP client config, add it to the `soma` server entry:
+the server process.
+
+In the Soma app, flip **Allow write access** under Settings → AI → AI assistant
+access (MCP) — it writes the flag into every already-installed client's config
+for you (restart that client afterwards to pick it up). To do it by hand, add
+it to the `soma` server entry in the client config:
 
 ```json
 {

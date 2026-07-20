@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Cable, Check, Copy, Download, Loader2, TriangleAlert } from "lucide-react";
+import { Cable, Check, Copy, Download, Loader2, ShieldAlert, TriangleAlert } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import {
   buildMcpSnippets,
@@ -12,6 +12,8 @@ import {
 import { Collapsible } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ToggleRow } from "@/components/app/ToggleRow";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 function CopyButton({
   text,
@@ -54,12 +56,22 @@ export function McpCard() {
   const [clients, setClients] = React.useState<McpClientStatus[] | null>(null);
   const [rows, setRows] = React.useState<Record<string, RowState>>({});
   const [manual, setManual] = React.useState(false);
+  const [writesEnabled, setWritesEnabled] = React.useState(false);
+  const [confirmWrites, setConfirmWrites] = React.useState(false);
+  const writesInitialized = React.useRef(false);
 
   const serverPath = info?.path ?? "";
 
   const refreshClients = React.useCallback(async (path: string) => {
     try {
-      setClients(await mcpClientsStatus(path));
+      const next = await mcpClientsStatus(path);
+      setClients(next);
+      // Seed the toggle from whatever's already on disk, once — so re-opening
+      // Settings reflects reality instead of always resetting to "off".
+      if (!writesInitialized.current) {
+        writesInitialized.current = true;
+        setWritesEnabled(next.some((c) => c.configured && c.writesEnabled));
+      }
     } catch {
       setClients([]);
     }
@@ -79,10 +91,10 @@ export function McpCard() {
     };
   }, [refreshClients]);
 
-  const install = async (c: McpClientStatus) => {
+  const install = async (c: McpClientStatus, withWrites: boolean) => {
     setRows((r) => ({ ...r, [c.id]: { kind: "busy" } }));
     try {
-      const res = await mcpInstall(c.id, serverPath);
+      const res = await mcpInstall(c.id, serverPath, withWrites);
       setRows((r) => ({
         ...r,
         [c.id]: {
@@ -107,11 +119,24 @@ export function McpCard() {
   const installAllDetected = async () => {
     if (!clients) return;
     for (const c of clients.filter((x) => x.detected)) {
-      await install(c);
+      await install(c, writesEnabled);
     }
   };
 
-  const snippets = React.useMemo(() => buildMcpSnippets(serverPath), [serverPath]);
+  /** Re-writes every already-configured client's config with the new flag —
+   * so flipping the switch takes effect without re-running install by hand. */
+  const applyWritesToggle = async (next: boolean) => {
+    setWritesEnabled(next);
+    if (!clients) return;
+    for (const c of clients.filter((x) => x.configured)) {
+      await install(c, next);
+    }
+  };
+
+  const snippets = React.useMemo(
+    () => buildMcpSnippets(serverPath, writesEnabled),
+    [serverPath, writesEnabled],
+  );
   const detectedCount = clients?.filter((c) => c.detected).length ?? 0;
 
   return (
@@ -131,6 +156,20 @@ export function McpCard() {
         <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">
           {t("settings.mcp.intro")}
         </p>
+
+        {/* Write access toggle */}
+        <div className="rounded-lg border bg-muted/30 p-1">
+          <ToggleRow
+            icon={ShieldAlert}
+            label={t("settings.mcp.writesTitle")}
+            description={t("settings.mcp.writesDesc")}
+            checked={writesEnabled}
+            onChange={(next) => {
+              if (next) setConfirmWrites(true);
+              else void applyWritesToggle(false);
+            }}
+          />
+        </div>
 
         {/* One-click install list */}
         <div className="grid gap-2">
@@ -169,6 +208,13 @@ export function McpCard() {
                           {t("settings.mcp.notFound")}
                         </span>
                       )}
+                      {c.configured && (
+                        <Badge variant={c.writesEnabled ? "warning" : "secondary"}>
+                          {c.writesEnabled
+                            ? t("settings.mcp.readWrite")
+                            : t("settings.mcp.readOnly")}
+                        </Badge>
+                      )}
                     </div>
                     <code className="mt-0.5 block break-all font-mono text-[11px] text-muted-foreground">
                       {c.configPath}
@@ -179,7 +225,7 @@ export function McpCard() {
                     size="sm"
                     className="h-8 shrink-0"
                     disabled={row.kind === "busy" || !serverPath}
-                    onClick={() => install(c)}
+                    onClick={() => install(c, writesEnabled)}
                   >
                     {row.kind === "busy" ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -274,6 +320,19 @@ export function McpCard() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmWrites}
+        title={t("settings.mcp.writesConfirm.title")}
+        description={t("settings.mcp.writesConfirm.body")}
+        confirmLabel={t("settings.mcp.writesConfirm.confirm")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          setConfirmWrites(false);
+          void applyWritesToggle(true);
+        }}
+        onClose={() => setConfirmWrites(false)}
+      />
     </Collapsible>
   );
 }

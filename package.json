@@ -1,7 +1,7 @@
 {
   "name": "soma",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Personal Health Dashboard — privacy-first, local-first health records, labs and medications tracker",
   "type": "module",
   "engines": {

@@ -35,8 +35,8 @@ Domain rules you must follow:
 - Trends: get_symptom_trend (severity over time + overlapping meds), get_weight_trend (kg vs target), get_bp_trend (systolic/diastolic with normal/stage2/crisis flags), get_lifestyle_trend (sleep/training/stress/energy per day).
 - Browse existing records before writing: list_medications, list_diagnoses, list_visits, list_lab_panels + get_lab_panel, list_vaccines, list_health_notes, list_imaging_records, list_retest_schedules. Never claim a record does or does not exist without checking the matching list tool first.
 - Records link together via visitId: add_diagnosis, add_imaging_record and log_symptom accept the id of a visit from add_visit/list_visits — pass it whenever the user says a finding came from a specific appointment.
-- Medications are periods, not events: add_medication starts an intake period (endDate=null means currently taking), stop_medication closes it. Never add a second active row for the same drug — stop the old one or record a dose change as stop + add.
-- Writes are validated strictly: every add_*/log_*/update_*/set_*/stop_* tool validates dates (no future dates except a planned medication endDate) and enums, refuses instead of guessing, and supports dryRun=true to preview the exact row. log_symptom reuses the existing spelling of a known symptom when it matches case-insensitively; log_lifestyle keeps one row per day and merges only the fields you pass. Write tools are disabled unless the user set SOMA_MCP_ALLOW_WRITES=1 for this server; if a write is refused for that reason, tell the user to enable it in their MCP client config rather than retrying.
+- Medications are periods, not events: add_medication starts an intake period (endDate=null means currently taking; a future startDate plans a course that has not begun), stop_medication closes an open period, update_medication edits any field of an existing row (correct a dose, fix a date, re-open a course — pass endDate=null to clear it), and delete_medication removes a mistaken row (with its adherence logs). Never add a second active row for the same drug — stop/update the old one or record a dose change as stop + add.
+- Writes are validated strictly: every add_*/log_*/update_*/set_*/stop_*/delete_* tool validates dates (future dates are refused except a planned medication startDate/endDate) and enums, refuses instead of guessing, and supports dryRun=true to preview the exact row. log_symptom reuses the existing spelling of a known symptom when it matches case-insensitively; log_lifestyle keeps one row per day and merges only the fields you pass. Write tools are disabled unless the user set SOMA_MCP_ALLOW_WRITES=1 for this server; if a write is refused for that reason, tell the user to enable it in their MCP client config rather than retrying.
 - Only record facts the user explicitly stated. Ask for missing required fields instead of inventing values; leave optional fields empty rather than guessing.
 - This is personal medical data. Be precise, never fabricate values, and do not write anything the user did not explicitly provide.`;
 
@@ -968,7 +968,9 @@ server.registerTool(
         .string()
         .regex(ISO_DATE)
         .optional()
-        .describe("First day of intake, YYYY-MM-DD; defaults to today"),
+        .describe(
+          "First day of intake, YYYY-MM-DD; defaults to today. May be in the future to plan a course that has not started yet.",
+        ),
       endDate: z
         .string()
         .regex(ISO_DATE)
@@ -987,7 +989,8 @@ server.registerTool(
     const today = todayIso();
 
     const startDate = input.startDate ?? today;
-    if (startDate > today) return fail(`startDate ${startDate} is in the future.`);
+    // A future startDate is allowed: a course can be planned before it begins
+    // (e.g. a supplement that starts after another one finishes).
     if (input.endDate && input.endDate < startDate) {
       return fail(`endDate ${input.endDate} is before startDate ${startDate}.`);
     }
@@ -1124,6 +1127,164 @@ server.registerTool(
       .where(eq(medication.id, target.id))
       .run();
     return ok({ saved: true, before: medicationSummary(target), after });
+  },
+);
+
+server.registerTool(
+  "update_medication",
+  {
+    title: "Update medication",
+    description:
+      "Edits an existing medication/supplement row identified by medicationId (from list_medications). Only the fields you pass are changed; everything else is kept. Use this to correct a dose, rename, fix a start/end date, or re-open a course that was closed too early. Pass endDate=null to clear the end date (mark it as currently taking); pass purpose or scheduleNotes as an empty string to clear them. Set dryRun=true to preview the before/after diff. Only record what the user explicitly stated.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      medicationId: z.number().int().describe("Id from list_medications"),
+      name: z.string().min(1).optional().describe("New name"),
+      type: z.enum(["drug", "supplement"]).optional(),
+      doseAmount: z.number().positive().optional().describe("New dose per intake"),
+      doseUnit: z.string().min(1).optional().describe("New dose unit, e.g. 'IU', 'mg'"),
+      frequency: z.string().optional().describe("Intake cadence, e.g. 'daily'"),
+      times: z.array(z.string().regex(TIME_RE)).optional().describe("Times of day, HH:MM (24h)"),
+      scheduleNotes: z
+        .string()
+        .optional()
+        .describe("Free-form schedule detail; empty string clears it"),
+      asNeeded: z.boolean().optional().describe("PRN (taken only when needed)"),
+      startDate: z
+        .string()
+        .regex(ISO_DATE)
+        .optional()
+        .describe("New first day of intake, YYYY-MM-DD (may be in the future)"),
+      endDate: z
+        .string()
+        .regex(ISO_DATE)
+        .nullable()
+        .optional()
+        .describe("New last day of intake, YYYY-MM-DD; null clears it (currently taking)"),
+      purpose: z.string().optional().describe("Why it is taken; empty string clears it"),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const w = beginWrite(input.profileId);
+    if (!w.ok) return w.result;
+
+    const target = db.orm
+      .select()
+      .from(medication)
+      .where(eq(medication.id, input.medicationId))
+      .get();
+    if (!target || target.profileId !== w.pid) {
+      return fail(`Medication ${input.medicationId} not found — check list_medications.`);
+    }
+
+    const finalStartDate = input.startDate ?? target.startDate;
+    const finalEndDate = input.endDate === undefined ? target.endDate : input.endDate; // null clears
+    if (finalEndDate != null && finalEndDate < finalStartDate) {
+      return fail(`endDate ${finalEndDate} is before startDate ${finalStartDate}.`);
+    }
+
+    const finalDoseAmount = input.doseAmount ?? target.doseAmount;
+    const finalDoseUnit = input.doseUnit ?? target.doseUnit;
+    if ((finalDoseAmount == null) !== (finalDoseUnit == null)) {
+      return fail("doseAmount and doseUnit must be set together (or neither).");
+    }
+
+    const scheduleTouched =
+      input.frequency !== undefined ||
+      input.times !== undefined ||
+      input.scheduleNotes !== undefined;
+    let finalSchedule = target.schedule;
+    if (scheduleTouched) {
+      const base = target.schedule;
+      const notes =
+        input.scheduleNotes === undefined
+          ? base?.notes
+          : input.scheduleNotes === ""
+            ? undefined
+            : input.scheduleNotes;
+      const timesRaw = input.times === undefined ? base?.times : input.times;
+      const times = timesRaw && timesRaw.length > 0 ? timesRaw : undefined;
+      const frequency = input.frequency ?? base?.frequency ?? "custom";
+      const rebuilt = {
+        frequency,
+        ...(times ? { times } : {}),
+        ...(notes ? { notes } : {}),
+      };
+      finalSchedule = rebuilt.frequency === "custom" && !times && !notes ? null : rebuilt;
+    }
+
+    const finalName = input.name ?? target.name;
+    const today = todayIso();
+    const stillTaking = finalEndDate == null || finalEndDate >= today;
+    if (stillTaking) {
+      const clash = db.orm
+        .select({ id: medication.id, name: medication.name, startDate: medication.startDate })
+        .from(medication)
+        .where(
+          and(
+            eq(medication.profileId, w.pid),
+            sql`lower(${medication.name}) = lower(${finalName})`,
+            sql`${medication.id} <> ${target.id}`,
+            or(isNull(medication.endDate), gte(medication.endDate, today)),
+          ),
+        )
+        .get();
+      if (clash) {
+        return fail(
+          `Another active medication "${clash.name}" already exists (id ${clash.id}, since ${clash.startDate}). Close or delete it first.`,
+        );
+      }
+    }
+
+    const changes = {
+      name: finalName,
+      type: input.type ?? target.type,
+      doseAmount: finalDoseAmount,
+      doseUnit: finalDoseUnit,
+      schedule: finalSchedule,
+      asNeeded: input.asNeeded ?? target.asNeeded,
+      startDate: finalStartDate,
+      endDate: finalEndDate,
+      purpose:
+        input.purpose === undefined ? target.purpose : input.purpose === "" ? null : input.purpose,
+    };
+    const after = { id: target.id, ...changes };
+    if (input.dryRun) {
+      return ok({ saved: false, dryRun: true, before: medicationSummary(target), after });
+    }
+
+    db.orm.update(medication).set(changes).where(eq(medication.id, target.id)).run();
+    return ok({ saved: true, before: medicationSummary(target), after });
+  },
+);
+
+server.registerTool(
+  "delete_medication",
+  {
+    title: "Delete medication",
+    description:
+      "Permanently deletes a medication/supplement row identified by medicationId (from list_medications), along with any adherence logs attached to it. Use only to remove a mistaken entry — to end an ongoing course use stop_medication, to fix a value use update_medication. Set dryRun=true to preview what would be deleted.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      medicationId: z.number().int().describe("Id from list_medications"),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async ({ profileId, medicationId, dryRun }) => {
+    const w = beginWrite(profileId);
+    if (!w.ok) return w.result;
+
+    const target = db.orm.select().from(medication).where(eq(medication.id, medicationId)).get();
+    if (!target || target.profileId !== w.pid) {
+      return fail(`Medication ${medicationId} not found — check list_medications.`);
+    }
+    const deleted = medicationSummary(target);
+    if (dryRun) return ok({ deleted: false, dryRun: true, row: deleted });
+
+    // medication_log rows cascade on delete (foreign_keys pragma is ON).
+    db.orm.delete(medication).where(eq(medication.id, target.id)).run();
+    return ok({ deleted: true, row: deleted });
   },
 );
 

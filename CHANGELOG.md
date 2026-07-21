@@ -9,12 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MCP: edit and delete medications.** Two new write tools round out the
+  medication lifecycle: `update_medication` edits any field of an existing row
+  (correct a dose, rename, fix a start/end date, or re-open a course by passing
+  `endDate=null`), and `delete_medication` removes a mistaken entry along with
+  its cascade of adherence logs. Both support `dryRun` previews with a
+  before/after diff. Previously a planned course end could not be shortened and
+  a bad row could not be removed through MCP at all.
 - **MCP write access toggle in Settings.** The MCP write tools were opt-in via
   a `SOMA_MCP_ALLOW_WRITES` env var that had to be hand-edited into a client's
   config file. Settings → AI → AI assistant access (MCP) now has an **Allow
   write access** switch that writes (or clears) that flag directly into every
   already-installed client's config — no manual JSON/TOML editing — and shows
   a read-only/read+write badge per client.
+
+### Changed
+
+- **MCP: `add_medication` accepts a future `startDate`.** A course can now be
+  planned before it begins (e.g. a supplement that starts after another one
+  finishes) instead of being rejected as a future date.
 
 ## [0.5.0] — 2026-07-20
 

@@ -157,8 +157,11 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 - 🤖 **AI import** (bring your own key) — PDF/photo in any language for **labs, vaccine certificates,
   discharge summaries, imaging reports, prescriptions and allergy records** → structured extraction →
   deterministic dictionary mapping → **mandatory human review** before anything is saved
-- ✨ **AI assistant** (bring your own key) — a **health-context chat** and one-tap **trend
-  interpretation** on any biomarker; vendor-agnostic, with a not-medical-advice disclaimer on every answer
+- ✨ **Soma AI** (bring your own key) — a **health-context chat** that reads your records through
+  typed tools and drafts new entries for your review, plus one-tap **trend interpretation** on any
+  biomarker; vendor-agnostic, with a not-medical-advice disclaimer on every answer
+- 🗒️ **Health notes** — free-form context (family history, concerns, symptom patterns) that no typed
+  record fits, written by you or saved by Soma AI, searchable and fed back into its context
 - 🌙 **Lifestyle context** — daily **sleep, training and stress/energy** cards that enrich the AI
   health context; manual entry today, with a designed path to Apple Health / Google Fit sync
 - 🔔 **Reminders feed** — medication-intake nudges and **scheduled re-testing** (every N months) as

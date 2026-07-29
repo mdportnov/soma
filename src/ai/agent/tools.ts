@@ -15,6 +15,7 @@ import {
   listAllergies,
   listBpLog,
   listDiagnoses,
+  listHealthNotes,
   listLifestyleLog,
   listMedications,
   listSymptomNames,
@@ -97,6 +98,18 @@ export const agentToolDefinitions: AIToolDefinition[] = [
       },
       ["kind"],
     ),
+  },
+  {
+    name: "get_health_notes",
+    description:
+      "Returns free-form health notes (family history, concerns, symptom patterns) newest first, optionally filtered by category.",
+    inputSchema: objectSchema({
+      category: {
+        type: "string",
+        enum: ["general", "concern", "symptom_pattern", "treatment", "history", "other"],
+      },
+      limit: { type: "integer", minimum: 1, maximum: 50 },
+    }),
   },
   {
     name: "get_lifestyle_log",
@@ -196,6 +209,17 @@ export async function executeReadTool(
     if (kind === "blood_pressure")
       return { kind, points: (await listBpLog(profileId)).slice(0, limit) };
     throw new Error("Unsupported vitals kind");
+  }
+  if (name === "get_health_notes") {
+    const category = optionalTextArg(args.category);
+    const limit = intArg(args.limit, 20, 1, 50);
+    const rows = await listHealthNotes(profileId);
+    return {
+      records: rows
+        .filter((row) => !category || row.category === category)
+        .slice(0, limit)
+        .map((row) => ({ ...row, ref: `health_note:${row.id}` })),
+    };
   }
   if (name === "get_lifestyle_log") {
     const limit = intArg(args.limit, 30, 1, 60);

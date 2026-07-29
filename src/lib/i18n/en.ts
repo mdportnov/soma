@@ -3,7 +3,7 @@ export const en = {
   nav: {
     dashboard: "Dashboard",
     timeline: "Timeline",
-    assistant: "AI assistant",
+    assistant: "Soma AI",
     biomarkers: "Biomarkers",
     labResults: "Lab results",
     medications: "Medications",
@@ -13,6 +13,7 @@ export const en = {
     vaccines: "Vaccines",
     imaging: "Imaging",
     journal: "Journal",
+    notes: "Health notes",
     lifestyle: "Lifestyle",
     notifications: "Notifications",
     report: "Doctor report",
@@ -28,7 +29,7 @@ export const en = {
 
   // AI analysis (v0.3)
   aiAnalysis: {
-    title: "AI assistant",
+    title: "Soma AI",
     description: "Ask about your record or add health data in natural language.",
     stubTitle: "AI is turned off",
     stubDescription: "Add an API key in Settings to enable AI analysis.",
@@ -555,7 +556,7 @@ export const en = {
       vaccines: { label: "Vaccines", desc: "Records, series and travel guidance" },
       imaging: { label: "Imaging", desc: "X-ray, CT, MRI, ultrasound reports" },
       vitals: { label: "Journal & lifestyle", desc: "Weight, blood pressure, sleep, stress" },
-      ai: { label: "AI assistant & import", desc: "Chat and photo/PDF import" },
+      ai: { label: "Soma AI & import", desc: "Chat and photo/PDF import" },
     },
   },
 
@@ -958,6 +959,72 @@ export const en = {
     },
     deleteAnaphylacticTooltip: "Anaphylactic allergy cannot be deleted — resolve it first.",
     drugGuardWarning: "⚠ {{allergen}} — you have a {{severity}} allergy",
+  },
+
+  // Health notes (free-form record entries, incl. ones the assistant saved)
+  healthNotes: {
+    title: "Health notes",
+    description:
+      "Free-form context that doesn't fit a structured record — yours and the ones you saved from the assistant.",
+    emptyTitle: "No notes yet",
+    emptyDescription:
+      "Family history, a concern, a symptom pattern, a treatment story — anything that has no form to fill in. Soma AI saves notes here too.",
+    addFirst: "Add the first note",
+    searchPlaceholder: "Search notes…",
+    noMatchesTitle: "Nothing matches",
+    noMatchesDescription: "Try a different category or search term.",
+    noDate: "No date",
+    showOriginal: "Show original text",
+    hideOriginal: "Hide original text",
+    dialog: {
+      titleAdd: "Add note",
+      titleEdit: "Edit note",
+    },
+    fields: {
+      category: "Category",
+      titleOptional: "Title (optional)",
+      text: "Note",
+      summaryOptional: "Summary (optional)",
+      dateOptional: "Date (optional)",
+      datePrecision: "Date precision",
+      dateRawOptional: "Date as stated (optional)",
+      tagsOptional: "Tags (optional, comma-separated)",
+    },
+    placeholders: {
+      title: "e.g. Family history — autoimmune",
+      text: "Write it in your own words",
+      summary: "One line a doctor could skim",
+      dateRaw: "e.g. last spring, in childhood",
+      tags: "e.g. family, thyroid",
+    },
+  },
+
+  // Health note category options
+  healthNoteCategory: {
+    general: "General",
+    concern: "Concern",
+    symptom_pattern: "Symptom pattern",
+    treatment: "Treatment",
+    history: "History",
+    other: "Other",
+  },
+  healthNoteCategoryDescription: {
+    general: "Context that fits nowhere else",
+    concern: "Something that worries you",
+    symptom_pattern: "A pattern over time, not a single event",
+    treatment: "A therapy, procedure or its outcome",
+    history: "Personal or family medical history",
+    other: "Anything else worth keeping",
+  },
+
+  // How precisely a date is known
+  datePrecision: {
+    day: "Exact day",
+    month: "Month",
+    year: "Year",
+    approximate: "Approximate",
+    range: "Range",
+    unknown: "Unknown",
   },
 
   // Allergy category options
@@ -1910,11 +1977,9 @@ export const en = {
     logToday: "Log today",
     logEntry: "Log day",
     emptyTitle: "No lifestyle entries yet",
-    emptyDescription:
-      "Log how you slept, trained and felt. It enriches your trends and the AI assistant.",
+    emptyDescription: "Log how you slept, trained and felt. It enriches your trends and Soma AI.",
     addFirst: "Log your first day",
-    aiNote:
-      "Your logged lifestyle context is included in the AI assistant and trend interpretation.",
+    aiNote: "Your logged lifestyle context is included in Soma AI and trend interpretation.",
     windowNote: "Averages over the last {{days}} days, from {{count}} logged day(s).",
     noWindowData: "No entries in the last {{days}} days.",
     cards: {

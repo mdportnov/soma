@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Health notes page.** Free-form notes — family history, a concern, a symptom
+  pattern, a treatment story — now have a home of their own under Records
+  instead of existing only as rows the assistant wrote and nobody could see.
+  Filter by category, search across text and tags, add, edit and delete with
+  undo. Dates render at the precision they were recorded with (`≈`, a year, a
+  month, or the user's own phrase such as "last spring"), so a vague memory
+  never masquerades as a specific day.
+- **Soma AI can read notes back.** A new `get_health_notes` read tool lists
+  notes (optionally by category), and the health context handed to every turn
+  now includes them. Previously the assistant saved a note and forgot it existed
+  by the next message; only a full-text search could surface it again.
+
+### Changed
+
+- **The built-in assistant is now called Soma AI** across navigation, the chat
+  page, onboarding and its system prompt. The MCP integration keeps its own name
+  — that one is about *external* assistants reading your record.
+
+### Fixed
+
+- **Health-note links no longer dead-end.** Command-palette results and the
+  "open record" link on a saved change card pointed at the chat page (or at
+  nothing); both now open the note on the Health notes page. Those links also
+  used plain hrefs, which under the app's hash routing navigated out of the
+  application shell — they are real router links now.
+- **Dead space under the chat composer.** The chat column's height was a fixed
+  `calc(100vh - 12rem)` guess that undershot the actual layout; it now measures
+  its own offset and fills the window exactly, so the input sits on the bottom
+  edge.
+
 ## [0.6.0] — 2026-07-21
 
 ### Added

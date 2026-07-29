@@ -50,7 +50,7 @@ function routeFor(r: SearchResult): string {
     case "imaging":
       return `/imaging/${r.entityId}`;
     case "health_note":
-      return "/assistant";
+      return "/notes";
     default:
       return "/";
   }

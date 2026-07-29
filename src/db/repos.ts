@@ -1237,6 +1237,14 @@ export async function createHealthNote(data: NewHealthNote): Promise<number> {
   return row.id;
 }
 
+export async function updateHealthNote(id: number, data: Partial<NewHealthNote>): Promise<void> {
+  await db.update(healthNote).set(data).where(eq(healthNote.id, id));
+}
+
+export async function deleteHealthNote(id: number): Promise<void> {
+  await db.delete(healthNote).where(eq(healthNote.id, id));
+}
+
 /** Recent lifestyle entries (oldest-first) within the last `days` — AI context + trends. */
 export async function getRecentLifestyle(profileId: number, days = 30): Promise<LifestyleLog[]> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);

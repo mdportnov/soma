@@ -4,7 +4,7 @@ export function buildHealthAgentSystem(input: {
   localDate: string;
   timezone: string;
 }): string {
-  return `You are Soma's health-record assistant. Answer in ${input.language === "ru" ? "Russian" : "English"} unless the user asks for another language.
+  return `You are Soma AI, the health-record assistant built into the Soma app. Answer in ${input.language === "ru" ? "Russian" : "English"} unless the user asks for another language.
 
 Current local date: ${input.localDate}
 User timezone: ${input.timezone}

@@ -3,7 +3,7 @@ export const ru = {
   nav: {
     dashboard: "Главная",
     timeline: "Временная шкала",
-    assistant: "AI-ассистент",
+    assistant: "Soma AI",
     biomarkers: "Биомаркеры",
     labResults: "Анализы",
     medications: "Лекарства",
@@ -13,6 +13,7 @@ export const ru = {
     vaccines: "Прививки",
     imaging: "Снимки",
     journal: "Дневник",
+    notes: "Заметки",
     lifestyle: "Образ жизни",
     notifications: "Уведомления",
     report: "Отчёт для врача",
@@ -28,7 +29,7 @@ export const ru = {
 
   // AI-анализ (v0.3)
   aiAnalysis: {
-    title: "AI-ассистент",
+    title: "Soma AI",
     description: "Спросите о своей карте или добавьте данные о здоровье обычным текстом.",
     stubTitle: "AI выключен",
     stubDescription: "Добавьте API-ключ в настройках, чтобы включить AI-анализ.",
@@ -556,7 +557,7 @@ export const ru = {
       vaccines: { label: "Прививки", desc: "Записи, серии и советы для поездок" },
       imaging: { label: "Снимки", desc: "Рентген, КТ, МРТ, УЗИ" },
       vitals: { label: "Дневник и образ жизни", desc: "Вес, давление, сон, стресс" },
-      ai: { label: "AI-ассистент и импорт", desc: "Чат и импорт фото/PDF" },
+      ai: { label: "Soma AI и импорт", desc: "Чат и импорт фото/PDF" },
     },
   },
 
@@ -959,6 +960,72 @@ export const ru = {
     },
     deleteAnaphylacticTooltip: "Анафилактическую аллергию нельзя удалить — сначала разрешите её.",
     drugGuardWarning: "⚠ {{allergen}} — у вас {{severity}} аллергия",
+  },
+
+  // Health notes (free-form record entries, incl. ones the assistant saved)
+  healthNotes: {
+    title: "Заметки о здоровье",
+    description:
+      "Свободный контекст, который не укладывается в структурированную запись — ваш и сохранённый Soma AI.",
+    emptyTitle: "Заметок пока нет",
+    emptyDescription:
+      "Семейный анамнез, беспокойство, паттерн симптомов, история лечения — всё, для чего нет отдельной формы. Сюда же Soma AI сохраняет свои заметки.",
+    addFirst: "Добавить первую заметку",
+    searchPlaceholder: "Поиск по заметкам…",
+    noMatchesTitle: "Ничего не найдено",
+    noMatchesDescription: "Попробуйте другую категорию или запрос.",
+    noDate: "Без даты",
+    showOriginal: "Показать исходный текст",
+    hideOriginal: "Скрыть исходный текст",
+    dialog: {
+      titleAdd: "Новая заметка",
+      titleEdit: "Редактировать заметку",
+    },
+    fields: {
+      category: "Категория",
+      titleOptional: "Заголовок (необязательно)",
+      text: "Заметка",
+      summaryOptional: "Краткое изложение (необязательно)",
+      dateOptional: "Дата (необязательно)",
+      datePrecision: "Точность даты",
+      dateRawOptional: "Дата словами (необязательно)",
+      tagsOptional: "Теги (необязательно, через запятую)",
+    },
+    placeholders: {
+      title: "напр. Семейный анамнез — аутоиммунное",
+      text: "Своими словами",
+      summary: "Одна строка, которую врач прочитает по диагонали",
+      dateRaw: "напр. прошлой весной, в детстве",
+      tags: "напр. семья, щитовидка",
+    },
+  },
+
+  // Health note category options
+  healthNoteCategory: {
+    general: "Общее",
+    concern: "Беспокойство",
+    symptom_pattern: "Паттерн симптомов",
+    treatment: "Лечение",
+    history: "Анамнез",
+    other: "Другое",
+  },
+  healthNoteCategoryDescription: {
+    general: "Контекст, которому нет другого места",
+    concern: "То, что вас беспокоит",
+    symptom_pattern: "Закономерность во времени, а не разовый эпизод",
+    treatment: "Терапия, процедура или её результат",
+    history: "Личный или семейный анамнез",
+    other: "Всё остальное, что стоит сохранить",
+  },
+
+  // How precisely a date is known
+  datePrecision: {
+    day: "Точный день",
+    month: "Месяц",
+    year: "Год",
+    approximate: "Примерно",
+    range: "Период",
+    unknown: "Неизвестно",
   },
 
   // Allergy category options
@@ -1918,10 +1985,9 @@ export const ru = {
     logEntry: "Записать день",
     emptyTitle: "Записей об образе жизни пока нет",
     emptyDescription:
-      "Записывайте, как вы спали, тренировались и чувствовали себя. Это обогащает ваши тренды и AI-ассистента.",
+      "Записывайте, как вы спали, тренировались и чувствовали себя. Это обогащает ваши тренды и Soma AI.",
     addFirst: "Записать первый день",
-    aiNote:
-      "Записанный контекст образа жизни учитывается в AI-ассистенте и при интерпретации трендов.",
+    aiNote: "Записанный контекст образа жизни учитывается в Soma AI и при интерпретации трендов.",
     windowNote: "Средние за последние {{days}} дн., по {{count}} записанным дням.",
     noWindowData: "Нет записей за последние {{days}} дн.",
     cards: {

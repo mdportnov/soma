@@ -18,6 +18,7 @@ import {
   listAllergies,
   listBiomarkers,
   listDiagnoses,
+  listHealthNotes,
   listMedications,
 } from "@/db/repos";
 import type { LifestyleLog } from "@/db/schema";
@@ -27,6 +28,10 @@ const MAX_ABNORMAL = 25;
 
 /** Window (days) of lifestyle entries folded into the AI context summary. */
 const LIFESTYLE_WINDOW_DAYS = 30;
+
+/** Cap on health notes listed, and on the characters taken from each one. */
+const MAX_NOTES = 15;
+const MAX_NOTE_CHARS = 240;
 
 /** Mean of the defined numeric values, or null when none are present. */
 function mean(values: (number | null)[]): number | null {
@@ -82,17 +87,27 @@ function bloodTypeLabel(
  * handed an empty context that invites speculation.
  */
 export async function buildHealthContext(profileId: number): Promise<string> {
-  const [profile, allergies, diagnoses, medications, latest, biomarkers, lifestyle, findings] =
-    await Promise.all([
-      getProfile(profileId),
-      listAllergies(profileId),
-      listDiagnoses(profileId),
-      listMedications(profileId),
-      getLatestResults(profileId),
-      listBiomarkers(),
-      getRecentLifestyle(profileId, LIFESTYLE_WINDOW_DAYS),
-      getRecentFindings(profileId),
-    ]);
+  const [
+    profile,
+    allergies,
+    diagnoses,
+    medications,
+    latest,
+    biomarkers,
+    lifestyle,
+    findings,
+    notes,
+  ] = await Promise.all([
+    getProfile(profileId),
+    listAllergies(profileId),
+    listDiagnoses(profileId),
+    listMedications(profileId),
+    getLatestResults(profileId),
+    listBiomarkers(),
+    getRecentLifestyle(profileId, LIFESTYLE_WINDOW_DAYS),
+    getRecentFindings(profileId),
+    listHealthNotes(profileId),
+  ]);
   if (!profile) return "No profile data is available yet.";
 
   const lines: string[] = [];
@@ -166,6 +181,19 @@ export async function buildHealthContext(profileId: number): Promise<string> {
 
   const lifestyleLine = lifestyleSummaryLine(lifestyle);
   if (lifestyleLine) lines.push(lifestyleLine);
+
+  // Free-form notes the user (or a previous chat turn) saved: family history,
+  // symptom patterns, vague-dated events — facts no typed record can hold, and
+  // otherwise invisible to the model that wrote them.
+  if (notes.length) {
+    const listed = notes.slice(0, MAX_NOTES).map((n) => {
+      const when = n.dateRaw || n.date || "no date";
+      const body = (n.summary || n.originalText).replace(/\s+/g, " ").trim();
+      const text = body.length > MAX_NOTE_CHARS ? `${body.slice(0, MAX_NOTE_CHARS)}…` : body;
+      return `[${n.category}, ${when}] ${n.title ? `${n.title}: ` : ""}${text}`;
+    });
+    lines.push(`Health notes (free-form, user-recorded): ${listed.join(" | ")}`);
+  }
 
   return lines.join("\n");
 }

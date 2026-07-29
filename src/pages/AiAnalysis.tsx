@@ -83,6 +83,24 @@ export function AiAnalysis() {
   const [showContext, setShowContext] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const abortRef = React.useRef<AbortController | null>(null);
+  const chatRef = React.useRef<HTMLDivElement>(null);
+  // The chat column has to end exactly at the bottom of the viewport: a fixed
+  // `calc(100vh - Xrem)` guess leaves dead space under the composer whenever the
+  // header takes less room than assumed. Measure the column's own offset instead
+  // and give it the rest of the window, minus the page's bottom padding.
+  const [chatHeight, setChatHeight] = React.useState<number>();
+  React.useLayoutEffect(() => {
+    const el = chatRef.current;
+    if (!el) return;
+    const fit = () => {
+      const parent = el.parentElement;
+      const padding = parent ? parseFloat(getComputedStyle(parent).paddingBottom) || 0 : 0;
+      setChatHeight(window.innerHeight - el.getBoundingClientRect().top - padding);
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [boot]);
 
   React.useEffect(() => {
     if (!boot) return;
@@ -234,7 +252,11 @@ export function AiAnalysis() {
   return (
     <>
       <PageHeader title={t("aiAnalysis.title")} description={t("aiAnalysis.description")} />
-      <div className="mx-auto flex max-w-3xl flex-col" style={{ height: "calc(100vh - 12rem)" }}>
+      <div
+        ref={chatRef}
+        className="mx-auto flex max-w-3xl flex-col"
+        style={{ height: chatHeight != null ? `${chatHeight}px` : "calc(100vh - 12rem)" }}
+      >
         <div className="mb-2 flex items-center justify-between gap-2">
           <button
             type="button"

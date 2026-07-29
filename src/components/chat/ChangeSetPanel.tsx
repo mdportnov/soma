@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Database, ExternalLink, X } from "lucide-react";
 import type { ChangeSetWithItems } from "@/db/chat-repos";
 import { Button } from "@/components/ui/button";
@@ -70,13 +71,13 @@ export function ChangeSetPanel(props: {
                     {t(`aiAnalysis.changes.entity.${item.entityType}`)}
                   </p>
                   {committed && item.entityId != null && (
-                    <a
-                      href={recordHref(item.entityType, item.entityId)}
+                    <Link
+                      to={recordHref(item.entityType, item.entityId)}
                       className="text-primary"
                       title={t("aiAnalysis.changes.openRecord")}
                     >
                       <ExternalLink className="size-3.5" />
-                    </a>
+                    </Link>
                   )}
                 </div>
                 <dl className="mt-2 grid gap-x-3 gap-y-1 text-xs sm:grid-cols-2">
@@ -167,6 +168,7 @@ function recordHref(entityType: string, entityId: number): string {
   if (entityType === "vaccine") return "/vaccines";
   if (entityType === "profile") return "/settings";
   if (entityType === "retest_schedule") return "/notifications";
+  if (entityType === "health_note") return "/notes";
   if (["symptom", "weight", "blood_pressure", "lifestyle"].includes(entityType)) return "/journal";
   return "/timeline";
 }

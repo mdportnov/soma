@@ -127,7 +127,9 @@ export function Labs() {
                   <TableCell className="tabular-nums">{p.resultCount}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1">
-                      {p.outOfRangeCount > 0 ? (
+                      {p.resultCount === 0 ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : p.outOfRangeCount > 0 ? (
                         <Badge variant="warning">{p.outOfRangeCount}</Badge>
                       ) : (
                         <Badge variant="success">0</Badge>
@@ -193,19 +195,32 @@ export function Labs() {
                         onClick={() => navigate(`/labs/${f.panelId}`)}
                       >
                         <TableCell className="max-w-56 text-xs text-muted-foreground">
-                          <span className="truncate" title={f.rawLabel}>
+                          <span className="block truncate" title={f.rawLabel}>
                             {f.rawLabel.toLowerCase() !== g.name.toLowerCase() ? f.rawLabel : "—"}
                           </span>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap tabular-nums">
-                          {f.valueText}
-                          {f.unit ? ` ${f.unit}` : ""}
+                        <TableCell className="max-w-48 tabular-nums">
+                          <span
+                            className="block truncate"
+                            title={`${f.valueText}${f.unit ? ` ${f.unit}` : ""}`}
+                          >
+                            {f.valueText}
+                            {f.unit ? ` ${f.unit}` : ""}
+                          </span>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {f.refRangeText ?? "—"}
+                        <TableCell className="max-w-56 text-muted-foreground">
+                          <span className="block truncate" title={f.refRangeText ?? undefined}>
+                            {f.refRangeText ?? "—"}
+                          </span>
                         </TableCell>
-                        <TableCell className="font-medium">{formatDate(f.date)}</TableCell>
-                        <TableCell>{f.labName ?? "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap font-medium">
+                          {formatDate(f.date)}
+                        </TableCell>
+                        <TableCell className="max-w-48">
+                          <span className="block truncate" title={f.labName ?? undefined}>
+                            {f.labName ?? "—"}
+                          </span>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </React.Fragment>

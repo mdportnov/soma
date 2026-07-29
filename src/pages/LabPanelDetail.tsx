@@ -85,10 +85,17 @@ export function LabPanelDetail() {
         title={panelLabel}
         description={[
           [panel.city, panel.country].filter(Boolean).join(", "),
-          `${results.length} ${t("labs.tableColumns.results").toLowerCase()}`,
-          outOfRange
-            ? `${outOfRange} ${t("labPanelDetail.outOfRange")}`
-            : t("labPanelDetail.allInRange"),
+          results.length > 0
+            ? `${results.length} ${t("labs.tableColumns.results").toLowerCase()}`
+            : findings.length > 0
+              ? `${findings.length} ${t("labPanelDetail.findingsTitle").toLowerCase()}`
+              : null,
+          // "all in range" only means something when something was measured.
+          results.length === 0
+            ? null
+            : outOfRange
+              ? `${outOfRange} ${t("labPanelDetail.outOfRange")}`
+              : t("labPanelDetail.allInRange"),
           panel.cost != null ? `$${panel.cost.toLocaleString()}` : null,
         ]
           .filter(Boolean)
@@ -176,104 +183,116 @@ export function LabPanelDetail() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.value")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.change")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.reference")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {results.map((r) => (
-                <TableRow key={r.id} className={r.reviewedAt == null ? "bg-warning/5" : undefined}>
-                  <TableCell>
-                    <Link
-                      to={`/biomarkers/${r.biomarkerId}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {r.biomarker.canonicalName}
-                    </Link>
-                    <p className="text-[11px] text-muted-foreground">{r.biomarker.category}</p>
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatValue(r.value)} {r.unit}
-                  </TableCell>
-                  <TableCell>
-                    {(() => {
-                      const pc = changeByResult.get(r.id);
-                      if (pc?.change)
-                        return <DeltaBadge change={pc.change} unit={r.unitNormalized ?? r.unit} />;
-                      // Has a prior reading but no change = units weren't comparable.
-                      if (pc?.previous)
-                        return (
-                          <span
-                            className="text-[11px] text-muted-foreground"
-                            title={t("insights.unitChanged")}
-                          >
-                            {t("insights.unitChangedShort")}
-                          </span>
-                        );
-                      return <span className="text-xs text-muted-foreground">—</span>;
-                    })()}
-                  </TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {r.valueNormalized != null && r.unitNormalized !== r.unit
-                      ? `${formatValue(r.valueNormalized)} ${r.unitNormalized}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {r.biomarker.refLow != null || r.biomarker.refHigh != null
-                      ? `${r.biomarker.refLow != null ? formatValue(r.biomarker.refLow) : ""}–${r.biomarker.refHigh != null ? formatValue(r.biomarker.refHigh) : ""} ${r.biomarker.defaultUnit}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <FlagBadge
-                      flag={r.outOfRange ? r.flag : null}
-                      evaluated={r.valueNormalized != null}
-                    />
-                  </TableCell>
-                  <TableCell className="max-w-52 text-xs text-muted-foreground">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="truncate" title={r.rawLabel ?? undefined}>
-                        {r.rawLabel ?? "—"}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        {/* Trusted rows (exact/manual) carry no badge — the absence
-                            is the signal; only uncertain mappings are flagged. */}
-                        {r.confidence === "translated" || r.confidence === "fuzzy" ? (
-                          <Badge variant="warning" className="text-[10px]">
-                            {r.confidence}
-                          </Badge>
-                        ) : r.confidence === "ai" ? (
-                          <Badge className="text-[10px]">AI</Badge>
-                        ) : null}
-                        <SourcePageLink attachment={source} page={r.sourcePage} />
-                      </div>
-                      {r.reviewedAt == null && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-5 px-1 text-[10px]"
-                          onClick={async () => {
-                            await markResultReviewed(r.id);
-                            await reload();
-                            toast.show(t("needsReview.confirmedToast"));
-                          }}
-                        >
-                          {t("needsReview.confirm")}
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+          {results.length === 0 ? (
+            <p className="p-5 text-sm text-muted-foreground">
+              {t("labPanelDetail.noResults")}
+              {findings.length > 0 ? ` ${t("labPanelDetail.findingsOnly")}` : ""}
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.value")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.change")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.reference")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {results.map((r) => (
+                  <TableRow
+                    key={r.id}
+                    className={r.reviewedAt == null ? "bg-warning/5" : undefined}
+                  >
+                    <TableCell>
+                      <Link
+                        to={`/biomarkers/${r.biomarkerId}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {r.biomarker.canonicalName}
+                      </Link>
+                      <p className="text-[11px] text-muted-foreground">{r.biomarker.category}</p>
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {formatValue(r.value)} {r.unit}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const pc = changeByResult.get(r.id);
+                        if (pc?.change)
+                          return (
+                            <DeltaBadge change={pc.change} unit={r.unitNormalized ?? r.unit} />
+                          );
+                        // Has a prior reading but no change = units weren't comparable.
+                        if (pc?.previous)
+                          return (
+                            <span
+                              className="text-[11px] text-muted-foreground"
+                              title={t("insights.unitChanged")}
+                            >
+                              {t("insights.unitChangedShort")}
+                            </span>
+                          );
+                        return <span className="text-xs text-muted-foreground">—</span>;
+                      })()}
+                    </TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground">
+                      {r.valueNormalized != null && r.unitNormalized !== r.unit
+                        ? `${formatValue(r.valueNormalized)} ${r.unitNormalized}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {r.biomarker.refLow != null || r.biomarker.refHigh != null
+                        ? `${r.biomarker.refLow != null ? formatValue(r.biomarker.refLow) : ""}–${r.biomarker.refHigh != null ? formatValue(r.biomarker.refHigh) : ""} ${r.biomarker.defaultUnit}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <FlagBadge
+                        flag={r.outOfRange ? r.flag : null}
+                        evaluated={r.valueNormalized != null}
+                      />
+                    </TableCell>
+                    <TableCell className="max-w-52 text-xs text-muted-foreground">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="block truncate" title={r.rawLabel ?? undefined}>
+                          {r.rawLabel ?? "—"}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {/* Trusted rows (exact/manual) carry no badge — the absence
+                            is the signal; only uncertain mappings are flagged. */}
+                          {r.confidence === "translated" || r.confidence === "fuzzy" ? (
+                            <Badge variant="warning" className="text-[10px]">
+                              {r.confidence}
+                            </Badge>
+                          ) : r.confidence === "ai" ? (
+                            <Badge className="text-[10px]">AI</Badge>
+                          ) : null}
+                          <SourcePageLink attachment={source} page={r.sourcePage} />
+                        </div>
+                        {r.reviewedAt == null && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 px-1 text-[10px]"
+                            onClick={async () => {
+                              await markResultReviewed(r.id);
+                              await reload();
+                              toast.show(t("needsReview.confirmedToast"));
+                            }}
+                          >
+                            {t("needsReview.confirm")}
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 

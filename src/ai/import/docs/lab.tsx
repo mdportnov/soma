@@ -456,11 +456,12 @@ export const labModule: DocTypeModule<LabDraft> = {
     // user left flagged "save as finding".
     const findingsToSave = [
       ...draft.findings
-        .filter((f) => f.include)
+        // A finding whose value the user blanked out carries no information.
+        .filter((f) => f.include && f.valueText.trim())
         .map((f) => ({
           rawLabel: f.rawLabel,
           nameEn: f.nameEn,
-          valueText: f.valueText,
+          valueText: f.valueText.trim(),
           valueNumeric: f.valueNumeric,
           unit: f.unit,
           refRangeText: f.refRangeText,
@@ -518,7 +519,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
   const includedCount = rows.filter((r) => r.include && r.biomarkerId != null).length;
   // Findings = staged qualitative rows + unmapped numeric rows left flagged.
   const findingsCount =
-    findings.filter((f) => f.include).length +
+    findings.filter((f) => f.include && f.valueText.trim()).length +
     rows.filter((r) => r.biomarkerId == null && r.saveAsFinding).length;
   // Clusters colliding rows together; flagged rows are styled as a group.
   const orderedRows = React.useMemo(() => clusterForDisplay(rows), [rows]);
@@ -631,168 +632,173 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
         <CardHeader>
           <CardTitle>{t("importWizard.reviewExtractedResults")}</CardTitle>
           <CardDescription>
-            Check each mapping before saving. Green = the printed label is an exact dictionary
-            match; amber = matched via translation or fuzzy similarity (verify these); blue =
-            AI-suggested; red = unrecognized. Original labels are kept for audit.
+            {rows.length === 0
+              ? "No numeric results were recognized in this document — only the findings below will be saved with the panel."
+              : "Check each mapping before saving. Green = the printed label is an exact dictionary match; amber = matched via translation or fuzzy similarity (verify these); blue = AI-suggested; red = unrecognized. Original labels are kept for audit."}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">{t("common.save")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
-                <TableHead>{t("fields.value")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
-                <TableHead>{t("importWizard.matchColumn")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orderedRows.map((row) => {
-                const bio = row.biomarkerId != null ? index.byId.get(row.biomarkerId) : undefined;
-                const secondary = secondaryDupKeys.has(row.key);
-                return (
-                  <TableRow
-                    key={row.key}
-                    className={
-                      row.duplicate
-                        ? secondary
-                          ? "bg-warning/5 text-muted-foreground"
-                          : "bg-warning/5"
-                        : undefined
-                    }
-                  >
-                    <TableCell>
-                      {secondary ? (
-                        <button
-                          type="button"
-                          title={t("importWizard.swapDuplicateHint")}
-                          aria-label={t("importWizard.swapDuplicateHint")}
-                          className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-warning/20 hover:text-foreground"
-                          onClick={() => promoteDuplicate(row.key)}
-                        >
-                          <ArrowLeftRight className="size-3.5" />
-                        </button>
-                      ) : (
-                        <input
-                          type="checkbox"
-                          className="size-4 accent-[var(--primary)]"
-                          checked={row.include}
-                          disabled={row.biomarkerId == null}
-                          onChange={() =>
-                            updateRows((rs) => {
-                              const r = rs.find((x) => x.key === row.key)!;
-                              r.include = !r.include && r.biomarkerId != null;
-                            })
-                          }
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-44">
-                      <p className="truncate text-sm" title={row.raw.raw_label}>
-                        {secondary && (
-                          <CornerDownRight className="mr-1 inline size-3 text-muted-foreground" />
-                        )}
-                        {row.raw.raw_label}
-                      </p>
-                      {row.raw.analyte_en &&
-                        row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase() && (
-                          <p
-                            className="truncate text-[10px] italic text-muted-foreground"
-                            title={row.raw.analyte_en}
+          {rows.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">{t("common.save")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
+                  <TableHead>{t("fields.value")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
+                  <TableHead>{t("importWizard.matchColumn")}</TableHead>
+                  <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orderedRows.map((row) => {
+                  const bio = row.biomarkerId != null ? index.byId.get(row.biomarkerId) : undefined;
+                  const secondary = secondaryDupKeys.has(row.key);
+                  return (
+                    <TableRow
+                      key={row.key}
+                      className={
+                        row.duplicate
+                          ? secondary
+                            ? "bg-warning/5 text-muted-foreground"
+                            : "bg-warning/5"
+                          : undefined
+                      }
+                    >
+                      <TableCell>
+                        {secondary ? (
+                          <button
+                            type="button"
+                            title={t("importWizard.swapDuplicateHint")}
+                            aria-label={t("importWizard.swapDuplicateHint")}
+                            className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-warning/20 hover:text-foreground"
+                            onClick={() => promoteDuplicate(row.key)}
                           >
-                            ≈ {row.raw.analyte_en}
+                            <ArrowLeftRight className="size-3.5" />
+                          </button>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-[var(--primary)]"
+                            checked={row.include}
+                            disabled={row.biomarkerId == null}
+                            onChange={() =>
+                              updateRows((rs) => {
+                                const r = rs.find((x) => x.key === row.key)!;
+                                r.include = !r.include && r.biomarkerId != null;
+                              })
+                            }
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-44">
+                        <p className="truncate text-sm" title={row.raw.raw_label}>
+                          {secondary && (
+                            <CornerDownRight className="mr-1 inline size-3 text-muted-foreground" />
+                          )}
+                          {row.raw.raw_label}
+                        </p>
+                        {row.raw.analyte_en &&
+                          row.raw.analyte_en.toLowerCase() !== row.raw.raw_label.toLowerCase() && (
+                            <p
+                              className="truncate text-[10px] italic text-muted-foreground"
+                              title={row.raw.analyte_en}
+                            >
+                              ≈ {row.raw.analyte_en}
+                            </p>
+                          )}
+                        {row.raw.ref_range_text && (
+                          <p className="text-[10px] text-muted-foreground">
+                            ref: {row.raw.ref_range_text}
                           </p>
                         )}
-                      {row.raw.ref_range_text && (
-                        <p className="text-[10px] text-muted-foreground">
-                          ref: {row.raw.ref_range_text}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums">
-                      {formatValue(row.raw.value)} {row.raw.unit}
-                    </TableCell>
-                    <TableCell className="min-w-52">
-                      <Combobox
-                        value={row.biomarkerId != null ? String(row.biomarkerId) : null}
-                        onChange={(v) =>
-                          updateRows((rs) => {
-                            const r = rs.find((x) => x.key === row.key)!;
-                            r.biomarkerId = v ? Number(v) : null;
-                            r.confidence = r.biomarkerId == null ? "none" : r.confidence;
-                            r.include = r.biomarkerId != null ? r.include : false;
-                            reconvertRow(r, index);
-                          })
-                        }
-                        options={biomarkerOptions}
-                        placeholder={t("importWizard.notMapped")}
-                      />
-                      {row.biomarkerId == null && (
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <button
-                            className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-primary hover:underline"
-                            onClick={() => setCustomForKey(row.key)}
-                          >
-                            <Plus className="size-3" /> Create custom biomarker
-                            {row.suggestion && (
-                              <Badge variant="secondary" title={t("importWizard.aiSuggestionHint")}>
-                                {t("importWizard.aiSuggestionBadge")}
-                              </Badge>
-                            )}
-                          </button>
-                          <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              className="size-3 accent-[var(--primary)]"
-                              checked={row.saveAsFinding}
-                              onChange={() =>
-                                updateRows((rs) => {
-                                  const r = rs.find((x) => x.key === row.key)!;
-                                  r.saveAsFinding = !r.saveAsFinding;
-                                })
-                              }
-                            />
-                            {t("importWizard.saveToFindings")}
-                          </label>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {formatValue(row.raw.value)} {row.raw.unit}
+                      </TableCell>
+                      <TableCell className="min-w-52">
+                        <Combobox
+                          value={row.biomarkerId != null ? String(row.biomarkerId) : null}
+                          onChange={(v) =>
+                            updateRows((rs) => {
+                              const r = rs.find((x) => x.key === row.key)!;
+                              r.biomarkerId = v ? Number(v) : null;
+                              r.confidence = r.biomarkerId == null ? "none" : r.confidence;
+                              r.include = r.biomarkerId != null ? r.include : false;
+                              reconvertRow(r, index);
+                            })
+                          }
+                          options={biomarkerOptions}
+                          placeholder={t("importWizard.notMapped")}
+                        />
+                        {row.biomarkerId == null && (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <button
+                              className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-primary hover:underline"
+                              onClick={() => setCustomForKey(row.key)}
+                            >
+                              <Plus className="size-3" /> Create custom biomarker
+                              {row.suggestion && (
+                                <Badge
+                                  variant="secondary"
+                                  title={t("importWizard.aiSuggestionHint")}
+                                >
+                                  {t("importWizard.aiSuggestionBadge")}
+                                </Badge>
+                              )}
+                            </button>
+                            <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                className="size-3 accent-[var(--primary)]"
+                                checked={row.saveAsFinding}
+                                onChange={() =>
+                                  updateRows((rs) => {
+                                    const r = rs.find((x) => x.key === row.key)!;
+                                    r.saveAsFinding = !r.saveAsFinding;
+                                  })
+                                }
+                              />
+                              {t("importWizard.saveToFindings")}
+                            </label>
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col items-start gap-1">
+                          <ConfidenceBadge confidence={row.confidence} />
+                          {row.duplicate && (
+                            <Badge
+                              variant={row.include ? "warning" : "secondary"}
+                              title={t("importWizard.duplicateGroupHint")}
+                            >
+                              {t("importWizard.duplicateBadge")}
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col items-start gap-1">
-                        <ConfidenceBadge confidence={row.confidence} />
-                        {row.duplicate && (
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {row.conversion == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : row.conversion.ok ? (
+                          <span className="tabular-nums text-muted-foreground">
+                            {formatValue(row.conversion.value)} {row.conversion.unit}
+                          </span>
+                        ) : (
                           <Badge
-                            variant={row.include ? "warning" : "secondary"}
-                            title={t("importWizard.duplicateGroupHint")}
+                            variant="warning"
+                            title={`No known conversion ${row.raw.unit} → ${bio?.defaultUnit}`}
                           >
-                            {t("importWizard.duplicateBadge")}
+                            unit?
                           </Badge>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-xs">
-                      {row.conversion == null ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : row.conversion.ok ? (
-                        <span className="tabular-nums text-muted-foreground">
-                          {formatValue(row.conversion.value)} {row.conversion.unit}
-                        </span>
-                      ) : (
-                        <Badge
-                          variant="warning"
-                          title={`No known conversion ${row.raw.unit} → ${bio?.defaultUnit}`}
-                        >
-                          unit?
-                        </Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
           <div className="px-5 pb-4">
             <AiDisclaimer />
           </div>
@@ -834,6 +840,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
                 </div>
                 <Input
                   className="w-44"
+                  aria-invalid={f.include && !f.valueText.trim()}
                   value={f.valueText}
                   onChange={(e) =>
                     setDraft({
@@ -928,9 +935,19 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
             {t("importWizard.duplicatesUnresolved", { count: String(unresolvedDups) })}
           </p>
         )}
-        <Button onClick={onSave} disabled={includedCount === 0 || !meta.date || unresolvedDups > 0}>
-          Confirm & save {includedCount} result{includedCount === 1 ? "" : "s"}
-          {findingsCount > 0 && ` + ${findingsCount} finding${findingsCount === 1 ? "" : "s"}`}
+        <Button
+          onClick={onSave}
+          disabled={
+            (includedCount === 0 && findingsCount === 0) || !meta.date || unresolvedDups > 0
+          }
+        >
+          {includedCount === 0 && findingsCount > 0
+            ? `Confirm & save ${findingsCount} finding${findingsCount === 1 ? "" : "s"}`
+            : `Confirm & save ${includedCount} result${includedCount === 1 ? "" : "s"}${
+                findingsCount > 0
+                  ? ` + ${findingsCount} finding${findingsCount === 1 ? "" : "s"}`
+                  : ""
+              }`}
         </Button>
       </div>
 

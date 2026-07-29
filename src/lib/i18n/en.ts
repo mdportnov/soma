@@ -740,6 +740,8 @@ export const en = {
       "Results saved without a biomarker (unmapped or qualitative). Editable, not trended.",
     editFindingTitle: "Edit finding",
     panelNotFound: "Panel not found",
+    noResults: "No numeric results in this panel.",
+    findingsOnly: "This panel holds only non-numeric findings — nothing is trended.",
     tableColumns: {
       biomarker: "Biomarker",
       value: "Value",

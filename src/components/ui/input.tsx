@@ -9,6 +9,7 @@ export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInp
         "placeholder:text-muted-foreground/70",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring",
         "disabled:cursor-not-allowed disabled:opacity-50",
+        "aria-[invalid=true]:border-destructive aria-[invalid=true]:focus-visible:ring-destructive/30",
         className,
       )}
       {...props}

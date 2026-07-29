@@ -1445,6 +1445,8 @@ export const en = {
     droppedRows: "{{count}} non-numeric row(s) were skipped (e.g. positive/negative, titres).",
     showDropped: "Show skipped rows",
     dateNotRecognized: "Couldn't read the collection date — defaulted to today. Please set it.",
+    truncated:
+      "The AI reply hit its length limit and was cut off — rows after the cut are missing. Check the document and add anything missing by hand.",
     genericTitle: "Import failed",
   },
 

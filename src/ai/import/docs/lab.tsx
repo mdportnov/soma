@@ -14,7 +14,12 @@ import * as React from "react";
 import { AlertTriangle, ArrowLeftRight, CornerDownRight, Plus, TestTubes, X } from "lucide-react";
 import type { Biomarker, SampleType } from "@/db/schema";
 import { SAMPLE_TYPES } from "@/db/schema";
-import { EXTRACTION_PROMPT, buildCustomBiomarkerPrompt, extractJson } from "../../prompts";
+import {
+  EXTRACTION_PROMPT,
+  buildCustomBiomarkerPrompt,
+  extractJson,
+  wasTruncated,
+} from "../../prompts";
 import type {
   LabExtraction,
   RawExtraction,
@@ -107,6 +112,9 @@ export type LabDraft = {
   skipped: { label: string; rawValue: string }[];
   /** Collection date couldn't be read and we fell back to today — warn the user. */
   dateGuessed: boolean;
+  /** The model's reply hit the token cap and was salvaged mid-way: rows after the
+   *  cut are missing from this draft, so the review screen has to say so. */
+  truncated: boolean;
 };
 
 /** Parses the free-text cost field into a non-negative USD number, or null. */
@@ -400,6 +408,7 @@ export const labModule: DocTypeModule<LabDraft> = {
       },
       skipped: extraction.skipped ?? [],
       dateGuessed: extraction.collectionDate == null,
+      truncated: wasTruncated(parsed),
     };
   },
 
@@ -514,7 +523,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
   const [showSkipped, setShowSkipped] = React.useState(false);
 
   const index = React.useMemo(() => buildBiomarkerIndex(ctx.biomarkers), [ctx.biomarkers]);
-  const { rows, findings, meta, skipped, dateGuessed } = draft;
+  const { rows, findings, meta, skipped, dateGuessed, truncated } = draft;
 
   const includedCount = rows.filter((r) => r.include && r.biomarkerId != null).length;
   // Findings = staged qualitative rows + unmapped numeric rows left flagged.
@@ -595,6 +604,12 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
 
   return (
     <>
+      {truncated && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <p>{t("importErrors.truncated")}</p>
+        </div>
+      )}
       {skipped.length > 0 && !skippedDismissed && (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />

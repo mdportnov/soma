@@ -258,6 +258,23 @@ function stripTrailingCommas(s: string): string {
   return s.replace(/,(\s*[}\]])/g, "$1");
 }
 
+/** Marks a value that had to be salvaged from a reply the model cut off at the
+ *  token cap — rows are missing, so the UI must say so. Non-enumerable, so
+ *  validators and `JSON.stringify` never see it. */
+const TRUNCATED = Symbol.for("soma.truncatedExtraction");
+
+function markTruncated<T>(value: T): T {
+  if (value != null && typeof value === "object") {
+    Object.defineProperty(value, TRUNCATED, { value: true, enumerable: false });
+  }
+  return value;
+}
+
+/** True when `extractJson` recovered this value from a truncated reply. */
+export function wasTruncated(value: unknown): boolean {
+  return value != null && typeof value === "object" && TRUNCATED in value;
+}
+
 /** Robustly pulls a JSON value out of a model response (fences, preamble). */
 export function extractJson<T>(text: string): T {
   const cleaned = text
@@ -270,13 +287,11 @@ export function extractJson<T>(text: string): T {
     // Fall back to the first balanced JSON array/object in the text.
     const start = cleaned.search(/[[{]/);
     if (start === -1) throw new Error("No JSON found in model response");
-    const open = cleaned[start];
-    const close = open === "[" ? "]" : "}";
-    let depth = 0;
     let inString = false;
-    // Index just past the last complete top-level element of an array — used to
-    // salvage a response the model truncated at the token cap (no closing `]`).
-    let lastElementEnd = -1;
+    // Open containers, innermost last. `lastGood` is the index just past the
+    // last COMPLETE element/property of that container — the cut point if the
+    // response turns out to be truncated.
+    const stack: { close: string; lastGood: number }[] = [];
     for (let i = start; i < cleaned.length; i++) {
       const ch = cleaned[i];
       if (inString) {
@@ -285,10 +300,11 @@ export function extractJson<T>(text: string): T {
         continue;
       }
       if (ch === '"') inString = true;
-      else if (ch === "[" || ch === "{") depth++;
-      else if (ch === "]" || ch === "}") {
-        depth--;
-        if (depth === 0 && ch === close) {
+      else if (ch === "[" || ch === "{") {
+        stack.push({ close: ch === "[" ? "]" : "}", lastGood: i + 1 });
+      } else if (ch === "]" || ch === "}") {
+        stack.pop();
+        if (stack.length === 0) {
           const slice = cleaned.slice(start, i + 1);
           try {
             return JSON.parse(slice) as T;
@@ -297,17 +313,42 @@ export function extractJson<T>(text: string): T {
             return JSON.parse(stripTrailingCommas(slice)) as T;
           }
         }
-        // Closing back to depth 1 inside an array = one element finished.
-        if (depth === 1 && open === "[") lastElementEnd = i + 1;
+        // A nested container just closed = one element of its parent finished.
+        stack[stack.length - 1].lastGood = i + 1;
+      } else if (ch === "," && stack.length > 0) {
+        // Everything before the separator is a complete element/property.
+        stack[stack.length - 1].lastGood = i;
       }
     }
-    // Truncated array: recover the complete elements and close it. Every doc
+    // Truncated at the token cap: cut back to the innermost container's last
+    // complete element and close every container the model left open. Every doc
     // module reviews 100% of extracted rows, so a partial recovery surfaces on
     // the review screen rather than failing the whole import.
-    if (open === "[" && lastElementEnd !== -1) {
-      const salvaged = cleaned.slice(start, lastElementEnd) + "]";
+    if (stack.length > 0) {
+      // Cut at the innermost open ARRAY (rows live there, and its half-written
+      // trailing element is dropped whole); fall back to the innermost container.
+      let cutAt = stack.length - 1;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].close === "]") {
+          cutAt = i;
+          break;
+        }
+      }
+      const salvaged =
+        cleaned.slice(start, stack[cutAt].lastGood) +
+        stack
+          .slice(0, cutAt + 1)
+          .map((s) => s.close)
+          .reverse()
+          .join("");
       try {
-        return JSON.parse(stripTrailingCommas(salvaged)) as T;
+        const value = JSON.parse(stripTrailingCommas(salvaged));
+        // Nothing actually survived (e.g. the very first row was cut in half) —
+        // an empty result is more misleading than a hard failure.
+        const empty = Array.isArray(value)
+          ? value.length === 0
+          : value != null && typeof value === "object" && Object.keys(value).length === 0;
+        if (!empty) return markTruncated(value) as T;
       } catch {
         /* fall through to the hard error below */
       }

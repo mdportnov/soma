@@ -40,4 +40,25 @@ describe("extractJson — salvage imperfect model output", () => {
   it("still throws when not even one array element is complete", () => {
     expect(() => extractJson('[{"analyte":"HGB","value')).toThrow();
   });
+
+  // The lab prompt returns an OBJECT whose `results` array carries the rows, so
+  // a token-cap truncation lands inside a nested array, not the top level.
+  it("salvages rows from a truncated top-level object", () => {
+    const truncated =
+      '{"collection_date":"2026-07-28","lab_name":"KING FAISAL","results":[{"raw_label":"HGB","value":14},{"raw_label":"WBC","va';
+    expect(extractJson(truncated)).toEqual({
+      collection_date: "2026-07-28",
+      lab_name: "KING FAISAL",
+      results: [{ raw_label: "HGB", value: 14 }],
+    });
+  });
+
+  it("keeps the metadata when a truncated object's array has no complete row", () => {
+    const truncated = '{"lab_name":"KING FAISAL","results":[{"raw_label":"HG';
+    expect(extractJson(truncated)).toEqual({ lab_name: "KING FAISAL", results: [] });
+  });
+
+  it("closes a truncated object that was cut between properties", () => {
+    expect(extractJson('{"lab_name":"KING FAISAL","cit')).toEqual({ lab_name: "KING FAISAL" });
+  });
 });

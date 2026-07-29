@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Vaccine records can be deleted.** A dose recorded by mistake — or one the
+  certificate importer read wrong — could be edited but never removed. The
+  vaccine table now has a delete action with undo, backed by a new repository
+  function.
+- **Prescriptions on a visit can be deleted.** The visit page could add
+  prescriptions but never remove one; each row now has a delete action with
+  undo.
+
+### Fixed
+
+- **Four dialogs had no save button.** `Dialog` renders no footer of its own —
+  each form supplies one — and the allergy, diagnosis, vaccine and health-note
+  forms never did, so the only way to submit them was ⌘/Ctrl+Enter, which is
+  undiscoverable. The cancel/save footer is now a shared `DialogActions`
+  component used by every form (the journal's private copy was folded into it),
+  so a form can no longer ship without one by omission.
+
 ## [0.7.0] — 2026-07-29
 
 ### Added

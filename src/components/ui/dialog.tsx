@@ -211,3 +211,45 @@ export function Dialog({
     document.body,
   );
 }
+
+/**
+ * The standard cancel/confirm footer for a {@link Dialog}. The dialog itself
+ * renders no buttons — a form that forgets this footer is only submittable by
+ * ⌘/Ctrl+Enter, which no one discovers. Pass the same handler as the dialog's
+ * `onSubmit` so both paths agree.
+ */
+export function DialogActions({
+  onClose,
+  onSubmit,
+  submitLabel,
+  cancelLabel,
+  disabled,
+  destructive,
+  extra,
+}: {
+  onClose: () => void;
+  onSubmit: () => void;
+  submitLabel: string;
+  cancelLabel?: string;
+  disabled?: boolean;
+  destructive?: boolean;
+  /** Rendered left of the cancel button — e.g. a destructive "remove" action. */
+  extra?: React.ReactNode;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="mt-4 flex items-center justify-end gap-2 border-t pt-4">
+      {extra && <div className="mr-auto">{extra}</div>}
+      <Button variant="outline" onClick={onClose}>
+        {cancelLabel ?? t("common.cancel")}
+      </Button>
+      <Button
+        variant={destructive ? "destructive" : "default"}
+        onClick={onSubmit}
+        disabled={disabled}
+      >
+        {submitLabel}
+      </Button>
+    </div>
+  );
+}

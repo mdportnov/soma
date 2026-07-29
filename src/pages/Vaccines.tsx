@@ -1,9 +1,16 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { Pencil, Plus, Sparkles, Syringe } from "lucide-react";
+import { Pencil, Plus, Sparkles, Syringe, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createVaccine, getAttachment, getProfile, listVaccines, updateVaccine } from "@/db/repos";
+import {
+  createVaccine,
+  deleteVaccine,
+  getAttachment,
+  getProfile,
+  listVaccines,
+  updateVaccine,
+} from "@/db/repos";
 import type { Attachment, Vaccine } from "@/db/schema";
 import { SourceFileButton } from "@/components/app/SourceFile";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -19,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -36,6 +43,7 @@ import { useI18n } from "@/lib/i18n";
 export function Vaccines() {
   const { profileId } = useApp();
   const { t } = useI18n();
+  const toast = useToast();
   const { data: vaccines, loading, reload } = useQuery(() => listVaccines(profileId), [profileId]);
   const { data: profile } = useQuery(() => getProfile(profileId), [profileId]);
   const { data: attachmentMap } = useQuery(async () => {
@@ -187,6 +195,29 @@ export function Vaccines() {
                                       }}
                                     >
                                       <Pencil />
+                                    </Button>
+                                  </Tooltip>
+                                  <Tooltip content={t("common.delete")}>
+                                    <Button
+                                      variant="ghost"
+                                      size="iconSm"
+                                      aria-label={t("common.delete")}
+                                      className="text-destructive"
+                                      onClick={async () => {
+                                        const { id: _id, ...data } = v;
+                                        await deleteVaccine(v.id);
+                                        void reload();
+                                        toast.showAction(
+                                          t("toasts.deleted", { name: v.vaccineName }),
+                                          t("common.undo"),
+                                          async () => {
+                                            await createVaccine(data);
+                                            void reload();
+                                          },
+                                        );
+                                      }}
+                                    >
+                                      <Trash2 />
                                     </Button>
                                   </Tooltip>
                                 </div>
@@ -389,6 +420,13 @@ function VaccineForm({
             placeholder="Additional notes"
           />
         </Field>
+
+        <DialogActions
+          onClose={onClose}
+          onSubmit={() => void save()}
+          submitLabel={editing ? t("common.saveChanges") : t("common.add")}
+          disabled={saving || !canSave}
+        />
       </div>
     </Dialog>
   );

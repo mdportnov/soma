@@ -6,6 +6,7 @@ import { useQuery } from "@/hooks/useQuery";
 import {
   createPrescription,
   createVisit,
+  deletePrescription,
   deleteVisit,
   getLinkedAttachment,
   getVisit,
@@ -168,24 +169,47 @@ export function VisitDetail() {
             ) : (
               <ul className="divide-y">
                 {prescriptions.map((p) => (
-                  <li key={p.id} className="py-2.5">
-                    {p.drugName && (
-                      <p className="text-sm font-medium">
-                        {p.drugName}
-                        {p.doseAmount != null && ` — ${p.doseAmount} ${p.doseUnit ?? ""}`.trimEnd()}
-                        {p.frequency && `, ${p.frequency}`}
-                        {p.durationDays != null &&
-                          `, ${p.durationDays} ${t("visitDetail.fields.days")}`}
-                      </p>
-                    )}
-                    {p.notes && (
-                      <p
-                        className={`whitespace-pre-wrap text-sm ${p.drugName ? "mt-0.5 text-xs text-muted-foreground" : ""}`}
-                      >
-                        {p.notes}
-                      </p>
-                    )}
-                    {!p.drugName && !p.notes && <p className="text-sm">—</p>}
+                  <li key={p.id} className="flex items-start justify-between gap-2 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      {p.drugName && (
+                        <p className="text-sm font-medium">
+                          {p.drugName}
+                          {p.doseAmount != null &&
+                            ` — ${p.doseAmount} ${p.doseUnit ?? ""}`.trimEnd()}
+                          {p.frequency && `, ${p.frequency}`}
+                          {p.durationDays != null &&
+                            `, ${p.durationDays} ${t("visitDetail.fields.days")}`}
+                        </p>
+                      )}
+                      {p.notes && (
+                        <p
+                          className={`whitespace-pre-wrap text-sm ${p.drugName ? "mt-0.5 text-xs text-muted-foreground" : ""}`}
+                        >
+                          {p.notes}
+                        </p>
+                      )}
+                      {!p.drugName && !p.notes && <p className="text-sm">—</p>}
+                    </div>
+                    <IconAction
+                      label={t("common.delete")}
+                      icon={<Trash2 />}
+                      destructive
+                      onClick={async () => {
+                        const { id: _id, ...rx } = p;
+                        await deletePrescription(p.id);
+                        void reload();
+                        toast.showAction(
+                          t("toasts.deleted", {
+                            name: p.drugName ?? t("visitDetail.fields.prescription"),
+                          }),
+                          t("common.undo"),
+                          async () => {
+                            await createPrescription(rx);
+                            void reload();
+                          },
+                        );
+                      }}
+                    />
                   </li>
                 ))}
               </ul>

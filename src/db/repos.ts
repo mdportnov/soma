@@ -882,6 +882,10 @@ export async function createPrescription(data: NewPrescription): Promise<number>
   return row.id;
 }
 
+export async function deletePrescription(id: number) {
+  await db.delete(prescription).where(eq(prescription.id, id));
+}
+
 export async function listDiagnosesForVisit(visitId: number) {
   return db.select().from(diagnosis).where(eq(diagnosis.visitId, visitId));
 }
@@ -1033,6 +1037,10 @@ export async function createVaccine(data: NewVaccine): Promise<number> {
 
 export async function updateVaccine(id: number, data: Partial<NewVaccine>) {
   await db.update(vaccine).set(data).where(eq(vaccine.id, id));
+}
+
+export async function deleteVaccine(id: number) {
+  await db.delete(vaccine).where(eq(vaccine.id, id));
 }
 
 // ── symptom log ────────────────────────────────────────────────────────────

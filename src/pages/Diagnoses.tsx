@@ -33,7 +33,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { DurationTimeline, type DurationItem } from "@/components/charts/DurationTimeline";
@@ -575,6 +575,13 @@ export function DiagnosisForm({
         <Field label={t("diagnoses.fields.notesOptional")}>
           <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
+
+        <DialogActions
+          onClose={onClose}
+          onSubmit={() => void save()}
+          submitLabel={editing ? t("common.saveChanges") : t("common.add")}
+          disabled={saving || !canSave}
+        />
       </div>
     </Dialog>
   );

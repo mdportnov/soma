@@ -50,7 +50,7 @@ import { DateInput } from "@/components/ui/date-input";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { JournalOverview } from "@/components/charts/JournalOverview";
 import { WeightGoalDialog } from "@/components/app/WeightGoalDialog";
@@ -64,7 +64,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn, formatDate, formatValue, todayISO, uiLocale } from "@/lib/utils";
+import { formatDate, formatValue, todayISO, uiLocale } from "@/lib/utils";
 import { kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
 import { isCrisis, isStage2 } from "@/lib/vitals";
 import { useToast } from "@/components/app/Toast";
@@ -553,11 +553,10 @@ function WeightForm({
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <DialogActions
-          editing={!!editing}
-          saving={saving}
-          valid={!!valid}
           onClose={onClose}
-          onSave={save}
+          onSubmit={() => void save()}
+          submitLabel={editing ? t("common.saveChanges") : t("common.add")}
+          disabled={saving || !valid}
         />
       </div>
     </Dialog>
@@ -945,11 +944,10 @@ function BpForm({
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <DialogActions
-          editing={!!editing}
-          saving={saving}
-          valid={!!valid}
           onClose={onClose}
-          onSave={save}
+          onSubmit={() => void save()}
+          submitLabel={editing ? t("common.saveChanges") : t("common.add")}
+          disabled={saving || !valid}
         />
       </div>
     </Dialog>
@@ -1265,11 +1263,10 @@ function SymptomForm({
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <DialogActions
-          editing={!!editing}
-          saving={saving}
-          valid={!!valid}
           onClose={onClose}
-          onSave={save}
+          onSubmit={() => void save()}
+          submitLabel={editing ? t("common.saveChanges") : t("common.add")}
+          disabled={saving || !valid}
         />
       </div>
     </Dialog>
@@ -1333,31 +1330,5 @@ function ShowAll({ count, onClick }: { count: number; onClick: () => void }) {
     >
       {t("symptoms.showAll")} ({count})
     </button>
-  );
-}
-
-function DialogActions({
-  editing,
-  saving,
-  valid,
-  onClose,
-  onSave,
-}: {
-  editing: boolean;
-  saving: boolean;
-  valid: boolean;
-  onClose: () => void;
-  onSave: () => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <div className={cn("mt-1 flex justify-end gap-2")}>
-      <Button variant="outline" onClick={onClose}>
-        {t("common.cancel")}
-      </Button>
-      <Button onClick={onSave} disabled={saving || !valid}>
-        {editing ? t("common.saveChanges") : t("common.add")}
-      </Button>
-    </div>
   );
 }

@@ -412,6 +412,53 @@ export async function createPanelWithResults(
   return panelRow.id;
 }
 
+/** Panel metadata the user may correct after the fact (the results themselves
+ *  are edited row by row). */
+export type PanelMetaPatch = Partial<
+  Pick<
+    LabPanel,
+    | "date"
+    | "labName"
+    | "city"
+    | "country"
+    | "sampleTypes"
+    | "cost"
+    | "collectionTime"
+    | "fasting"
+    | "menstrualCycleDay"
+    | "notes"
+  >
+>;
+
+/**
+ * Edit a panel's metadata. Moving the date changes the age the profile had at
+ * the draw, and reference ranges can be age-specific — so out-of-range flags are
+ * recomputed for every result of the panel whenever the date moves.
+ */
+export async function updatePanel(panelId: number, patch: PanelMetaPatch): Promise<void> {
+  const current = await getPanel(panelId);
+  if (!current) return;
+  await db.update(labPanel).set(patch).where(eq(labPanel.id, panelId));
+  const nextDate = patch.date ?? current.date;
+  if (nextDate === current.date) return;
+
+  const results = await getPanelResults(panelId);
+  if (!results.length) return;
+  const prof = await getProfile(current.profileId);
+  const ctx: ProfileContext = {
+    sex: prof?.sex ?? null,
+    ageYears: ageYearsFrom(prof?.birthDate, new Date(`${nextDate.slice(0, 10)}T00:00:00Z`)),
+  };
+  const rangesByBiomarker = await getReferenceRangesByBiomarker();
+  for (const r of results) {
+    if (r.valueNormalized == null) continue;
+    const effective = resolveRange(r.biomarker, rangesByBiomarker.get(r.biomarkerId), ctx);
+    const { outOfRange, flag } = computeFlag(r.valueNormalized, effective, r.biomarker);
+    if (outOfRange === r.outOfRange && flag === r.flag) continue;
+    await db.update(labResult).set({ outOfRange, flag }).where(eq(labResult.id, r.id));
+  }
+}
+
 // ── lab_finding ──────────────────────────────────────────────────────────────
 
 /**

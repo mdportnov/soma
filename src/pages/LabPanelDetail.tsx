@@ -12,9 +12,11 @@ import {
   getPanelChanges,
   getPanelResults,
   getPanelSource,
+  getProfile,
   markPanelReviewed,
   markResultReviewed,
   updateFinding,
+  updatePanel,
 } from "@/db/repos";
 import { SourceFileButton, SourcePageLink } from "@/components/app/SourceFile";
 import { useToast } from "@/components/app/Toast";
@@ -31,7 +33,12 @@ import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/app/Field";
 import { Input } from "@/components/ui/input";
-import type { LabFinding } from "@/db/schema";
+import type { LabFinding, LabPanel, SampleType } from "@/db/schema";
+import { SAMPLE_TYPES } from "@/db/schema";
+import { useApp } from "@/app/AppContext";
+import { DateInput } from "@/components/ui/date-input";
+import { SelectMenu } from "@/components/ui/select-menu";
+import { ChipSelect } from "@/components/ui/chip-select";
 import {
   Table,
   TableBody,
@@ -43,8 +50,44 @@ import {
 import { formatDate, formatValue } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
+/** Editable panel metadata, held as strings while the dialog is open. */
+type PanelDraft = {
+  date: string;
+  labName: string;
+  city: string;
+  country: string;
+  cost: string;
+  sampleTypes: SampleType[];
+  collectionTime: string;
+  fasting: string;
+  cycleDay: string;
+  notes: string;
+};
+
+function toPanelDraft(p: LabPanel): PanelDraft {
+  return {
+    date: p.date.slice(0, 10),
+    labName: p.labName ?? "",
+    city: p.city ?? "",
+    country: p.country ?? "",
+    cost: p.cost != null ? String(p.cost) : "",
+    sampleTypes: p.sampleTypes ?? ["blood"],
+    collectionTime: p.collectionTime ?? "",
+    fasting: p.fasting == null ? "" : p.fasting ? "yes" : "no",
+    cycleDay: p.menstrualCycleDay != null ? String(p.menstrualCycleDay) : "",
+    notes: p.notes ?? "",
+  };
+}
+
+/** Parses the free-text USD cost field into a non-negative number, or null. */
+function parseCostUsd(raw: string): number | null {
+  const n = Number.parseFloat(raw.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 export function LabPanelDetail() {
   const { id } = useParams();
+  const { profileId } = useApp();
   const panelId = Number(id);
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -52,17 +95,19 @@ export function LabPanelDetail() {
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [editFinding, setEditFinding] = React.useState<LabFinding | null>(null);
   const [editDraft, setEditDraft] = React.useState({ valueText: "", unit: "", refRangeText: "" });
+  const [editPanel, setEditPanel] = React.useState<PanelDraft | null>(null);
 
   const { data, loading, reload } = useQuery(async () => {
-    const [panel, results, changes, source, findings] = await Promise.all([
+    const [panel, results, changes, source, findings, profile] = await Promise.all([
       getPanel(panelId),
       getPanelResults(panelId),
       getPanelChanges(panelId),
       getPanelSource(panelId),
       getFindingsByPanel(panelId),
+      getProfile(profileId),
     ]);
-    return { panel, results, changes, source, findings };
-  }, [panelId]);
+    return { panel, results, changes, source, findings, profile };
+  }, [panelId, profileId]);
 
   if (loading || !data) return <Loading />;
   if (!data.panel) return <EmptyState icon={TestTubes} title={t("labPanelDetail.panelNotFound")} />;
@@ -113,6 +158,14 @@ export function LabPanelDetail() {
               </Badge>
             ))}
             <SourceFileButton attachment={source} />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setEditPanel(toPanelDraft(panel))}
+              aria-label={t("labPanelDetail.editPanel")}
+            >
+              <Pencil />
+            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -410,6 +463,128 @@ export function LabPanelDetail() {
             </Button>
           </div>
         </div>
+      </Dialog>
+
+      <Dialog
+        open={editPanel != null}
+        onClose={() => setEditPanel(null)}
+        title={t("labPanelDetail.editPanelTitle")}
+        description={t("labPanelDetail.editPanelDescription")}
+      >
+        {editPanel && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("fields.date")}>
+              <DateInput
+                value={editPanel.date}
+                onChange={(v) => setEditPanel({ ...editPanel, date: v })}
+              />
+            </Field>
+            <Field label={t("labPanelNew.fields.labName")}>
+              <Input
+                value={editPanel.labName}
+                onChange={(e) => setEditPanel({ ...editPanel, labName: e.target.value })}
+              />
+            </Field>
+            <Field label={t("fields.city")}>
+              <Input
+                value={editPanel.city}
+                onChange={(e) => setEditPanel({ ...editPanel, city: e.target.value })}
+              />
+            </Field>
+            <Field label={t("fields.country")}>
+              <Input
+                value={editPanel.country}
+                onChange={(e) => setEditPanel({ ...editPanel, country: e.target.value })}
+              />
+            </Field>
+            <Field label={t("fields.cost")} hint={t("fields.costHint")}>
+              <div className="relative">
+                <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-sm text-muted-foreground">
+                  $
+                </span>
+                <Input
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="pl-6"
+                  value={editPanel.cost}
+                  onChange={(e) => setEditPanel({ ...editPanel, cost: e.target.value })}
+                />
+              </div>
+            </Field>
+            <Field label={t("labPanelNew.fields.collectionTime")}>
+              <Input
+                type="time"
+                value={editPanel.collectionTime}
+                onChange={(e) => setEditPanel({ ...editPanel, collectionTime: e.target.value })}
+              />
+            </Field>
+            <Field label={t("fields.sampleTypes")} className="sm:col-span-2">
+              <ChipSelect<SampleType>
+                value={editPanel.sampleTypes}
+                onChange={(next) => setEditPanel({ ...editPanel, sampleTypes: next })}
+                options={SAMPLE_TYPES.map((s) => ({ value: s, label: t(`types.${s}`) }))}
+              />
+            </Field>
+            <Field label={t("labPanelNew.fields.fasting")}>
+              <SelectMenu
+                value={editPanel.fasting}
+                onChange={(v) => setEditPanel({ ...editPanel, fasting: v })}
+                options={[
+                  { value: "", label: t("labPanelNew.fasting.unknown") },
+                  { value: "yes", label: t("labPanelNew.fasting.yes") },
+                  { value: "no", label: t("labPanelNew.fasting.no") },
+                ]}
+              />
+            </Field>
+            {data.profile?.sex === "female" && (
+              <Field label={t("labPanelNew.fields.cycleDay")}>
+                <Input
+                  type="number"
+                  min={1}
+                  max={45}
+                  value={editPanel.cycleDay}
+                  onChange={(e) => setEditPanel({ ...editPanel, cycleDay: e.target.value })}
+                />
+              </Field>
+            )}
+            <Field label={t("labPanelNew.fields.notes")} className="sm:col-span-2">
+              <Input
+                value={editPanel.notes}
+                onChange={(e) => setEditPanel({ ...editPanel, notes: e.target.value })}
+                placeholder={t("labPanelNew.notesPlaceholder")}
+              />
+            </Field>
+            <div className="mt-1 flex justify-end gap-2 sm:col-span-2">
+              <Button variant="outline" onClick={() => setEditPanel(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                disabled={!editPanel.date}
+                onClick={async () => {
+                  await updatePanel(panelId, {
+                    date: editPanel.date,
+                    labName: editPanel.labName.trim() || null,
+                    city: editPanel.city.trim() || null,
+                    country: editPanel.country.trim() || null,
+                    cost: parseCostUsd(editPanel.cost),
+                    sampleTypes: editPanel.sampleTypes.length ? editPanel.sampleTypes : ["blood"],
+                    collectionTime: editPanel.collectionTime.trim() || null,
+                    fasting: editPanel.fasting === "" ? null : editPanel.fasting === "yes",
+                    menstrualCycleDay: editPanel.cycleDay.trim()
+                      ? Number(editPanel.cycleDay)
+                      : null,
+                    notes: editPanel.notes.trim() || null,
+                  });
+                  setEditPanel(null);
+                  await reload();
+                  toast.show(t("labPanelDetail.panelUpdatedToast"));
+                }}
+              >
+                {t("common.save")}
+              </Button>
+            </div>
+          </div>
+        )}
       </Dialog>
 
       <Dialog

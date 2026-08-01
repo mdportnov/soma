@@ -322,3 +322,9 @@ itself must stay vendor-agnostic.
 > **Disclaimer:** Soma is a personal data-organization tool, not a medical device. Nothing in the
 > app — including AI-generated summaries — is medical advice. Always consult a qualified
 > clinician.
+
+---
+
+<p align="center">
+  Built by <a href="https://mikeportnov.com/en/projects">Mike Portnov</a> · <a href="https://github.com/mdportnov">@mdportnov</a>
+</p>

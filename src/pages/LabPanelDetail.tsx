@@ -17,9 +17,12 @@ import {
   markResultReviewed,
   updateFinding,
   updatePanel,
+  updateResultValue,
+  type ResultWithBiomarker,
 } from "@/db/repos";
 import { SourceFileButton, SourcePageLink } from "@/components/app/SourceFile";
 import { useToast } from "@/components/app/Toast";
+import { convertToAlternateScale } from "@/lib/units";
 import { PageHeader } from "@/components/app/PageHeader";
 import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
@@ -29,7 +32,8 @@ import { DeltaBadge } from "@/components/app/DeltaBadge";
 import { NotableChanges } from "@/components/app/NotableChanges";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/app/Field";
 import { Input } from "@/components/ui/input";
@@ -95,6 +99,8 @@ export function LabPanelDetail() {
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [editFinding, setEditFinding] = React.useState<LabFinding | null>(null);
   const [editDraft, setEditDraft] = React.useState({ valueText: "", unit: "", refRangeText: "" });
+  const [editResult, setEditResult] = React.useState<ResultWithBiomarker | null>(null);
+  const [resultDraft, setResultDraft] = React.useState({ valueText: "", unit: "" });
   const [editPanel, setEditPanel] = React.useState<PanelDraft | null>(null);
 
   const { data, loading, reload } = useQuery(async () => {
@@ -108,6 +114,76 @@ export function LabPanelDetail() {
     ]);
     return { panel, results, changes, source, findings, profile };
   }, [panelId, profileId]);
+
+  const resultDraftValid =
+    resultDraft.valueText.trim() !== "" &&
+    Number.isFinite(Number(resultDraft.valueText)) &&
+    resultDraft.unit.trim() !== "";
+
+  const removePanel = async () => {
+    // Capture before delete so Undo can re-create the panel + results.
+    const { id: _id, createdAt: _c, ...panelData } = panel;
+    const resultInputs = results.map((r) => ({
+      biomarkerId: r.biomarkerId,
+      value: r.value,
+      unit: r.unit,
+      rawLabel: r.rawLabel,
+      sourcePage: r.sourcePage,
+      confidence: r.confidence,
+      reviewedAt: r.reviewedAt,
+    }));
+    const biosById = new Map(results.map((r) => [r.biomarkerId, r.biomarker]));
+    const findingInputs = findings.map(({ id: _i, panelId: _p, createdAt: _c2, ...f }) => f);
+    await deletePanel(panelId);
+    setConfirmDelete(false);
+    navigate("/labs");
+    toast.showAction(t("labPanelDetail.deletedToast"), t("common.undo"), () => {
+      void createPanelWithResults(panelData, resultInputs, biosById).then((newId) =>
+        createPanelFindings(newId, findingInputs),
+      );
+    });
+  };
+
+  const saveFinding = async () => {
+    if (!editFinding || !editDraft.valueText.trim()) return;
+    await updateFinding(editFinding.id, {
+      valueText: editDraft.valueText.trim(),
+      unit: editDraft.unit.trim() || null,
+      refRangeText: editDraft.refRangeText.trim() || null,
+    });
+    setEditFinding(null);
+    await reload();
+  };
+
+  const savePanelMeta = async () => {
+    if (!editPanel?.date) return;
+    await updatePanel(panelId, {
+      date: editPanel.date,
+      labName: editPanel.labName.trim() || null,
+      city: editPanel.city.trim() || null,
+      country: editPanel.country.trim() || null,
+      cost: parseCostUsd(editPanel.cost),
+      sampleTypes: editPanel.sampleTypes.length ? editPanel.sampleTypes : ["blood"],
+      collectionTime: editPanel.collectionTime.trim() || null,
+      fasting: editPanel.fasting === "" ? null : editPanel.fasting === "yes",
+      menstrualCycleDay: editPanel.cycleDay.trim() ? Number(editPanel.cycleDay) : null,
+      notes: editPanel.notes.trim() || null,
+    });
+    setEditPanel(null);
+    await reload();
+    toast.show(t("labPanelDetail.panelUpdatedToast"));
+  };
+
+  const saveResultValue = async () => {
+    if (!editResult || !resultDraftValid) return;
+    await updateResultValue(editResult.id, {
+      value: Number(resultDraft.valueText),
+      unit: resultDraft.unit.trim(),
+    });
+    setEditResult(null);
+    await reload();
+    toast.show(t("labPanelDetail.resultUpdatedToast"));
+  };
 
   if (loading || !data) return <Loading />;
   if (!data.panel) return <EmptyState icon={TestTubes} title={t("labPanelDetail.panelNotFound")} />;
@@ -298,9 +374,24 @@ export function LabPanelDetail() {
                         : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {r.biomarker.refLow != null || r.biomarker.refHigh != null
-                        ? `${r.biomarker.refLow != null ? formatValue(r.biomarker.refLow) : ""}–${r.biomarker.refHigh != null ? formatValue(r.biomarker.refHigh) : ""} ${r.biomarker.defaultUnit}`
-                        : "—"}
+                      {(() => {
+                        // A result normalized onto an alternate scale (Lp(a) in
+                        // mg/dL) was flagged against that scale's range, so the
+                        // dictionary range in the default unit does not apply.
+                        const alt =
+                          r.unitNormalized != null && r.unitNormalized !== r.biomarker.defaultUnit
+                            ? convertToAlternateScale(r.value, r.unit, r.biomarker)
+                            : null;
+                        const { refLow, refHigh, unit } = alt
+                          ? { refLow: alt.refLow, refHigh: alt.refHigh, unit: alt.unit }
+                          : {
+                              refLow: r.biomarker.refLow,
+                              refHigh: r.biomarker.refHigh,
+                              unit: r.biomarker.defaultUnit,
+                            };
+                        if (refLow == null && refHigh == null) return "—";
+                        return `${refLow != null ? formatValue(refLow) : ""}–${refHigh != null ? formatValue(refHigh) : ""} ${unit}`;
+                      })()}
                     </TableCell>
                     <TableCell>
                       <FlagBadge
@@ -314,6 +405,17 @@ export function LabPanelDetail() {
                           {r.rawLabel ?? "—"}
                         </span>
                         <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
+                            aria-label={t("common.edit")}
+                            onClick={() => {
+                              setEditResult(r);
+                              setResultDraft({ valueText: String(r.value), unit: r.unit });
+                            }}
+                          >
+                            <Pencil />
+                          </Button>
                           {/* Trusted rows (exact/manual) carry no badge — the absence
                             is the signal; only uncertain mappings are flagged. */}
                           {r.confidence === "translated" || r.confidence === "fuzzy" ? (
@@ -422,6 +524,9 @@ export function LabPanelDetail() {
         onClose={() => setEditFinding(null)}
         title={t("labPanelDetail.editFindingTitle")}
         description={editFinding?.rawLabel}
+        onSubmit={() => void saveFinding()}
+        submitDisabled={!editDraft.valueText.trim()}
+        guardUnsaved
       >
         <div className="grid gap-3">
           <Field label={t("labPanelDetail.tableColumns.value")}>
@@ -442,26 +547,48 @@ export function LabPanelDetail() {
               onChange={(e) => setEditDraft({ ...editDraft, refRangeText: e.target.value })}
             />
           </Field>
-          <div className="mt-1 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditFinding(null)}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              disabled={!editDraft.valueText.trim()}
-              onClick={async () => {
-                if (!editFinding) return;
-                await updateFinding(editFinding.id, {
-                  valueText: editDraft.valueText.trim(),
-                  unit: editDraft.unit.trim() || null,
-                  refRangeText: editDraft.refRangeText.trim() || null,
-                });
-                setEditFinding(null);
-                await reload();
-              }}
-            >
-              {t("common.save")}
-            </Button>
-          </div>
+          <DialogActions
+            onClose={() => setEditFinding(null)}
+            onSubmit={() => void saveFinding()}
+            submitLabel={t("common.save")}
+            disabled={!editDraft.valueText.trim()}
+          />
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={editResult != null}
+        onClose={() => setEditResult(null)}
+        title={t("labPanelDetail.editResultTitle")}
+        description={editResult?.biomarker.canonicalName}
+        onSubmit={() => void saveResultValue()}
+        submitDisabled={!resultDraftValid}
+        guardUnsaved
+      >
+        <div className="grid gap-3">
+          <p className="text-xs text-muted-foreground">
+            {t("labPanelDetail.editResultDescription")}
+          </p>
+          <Field label={t("labPanelDetail.tableColumns.value")}>
+            <Input
+              type="number"
+              step="any"
+              value={resultDraft.valueText}
+              onChange={(e) => setResultDraft({ ...resultDraft, valueText: e.target.value })}
+            />
+          </Field>
+          <Field label={t("biomarkers.createDialog.unitLabel")}>
+            <Input
+              value={resultDraft.unit}
+              onChange={(e) => setResultDraft({ ...resultDraft, unit: e.target.value })}
+            />
+          </Field>
+          <DialogActions
+            onClose={() => setEditResult(null)}
+            onSubmit={() => void saveResultValue()}
+            submitLabel={t("common.save")}
+            disabled={!resultDraftValid}
+          />
         </div>
       </Dialog>
 
@@ -470,6 +597,9 @@ export function LabPanelDetail() {
         onClose={() => setEditPanel(null)}
         title={t("labPanelDetail.editPanelTitle")}
         description={t("labPanelDetail.editPanelDescription")}
+        onSubmit={() => void savePanelMeta()}
+        submitDisabled={!editPanel?.date}
+        guardUnsaved
       >
         {editPanel && (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -554,81 +684,28 @@ export function LabPanelDetail() {
                 placeholder={t("labPanelNew.notesPlaceholder")}
               />
             </Field>
-            <div className="mt-1 flex justify-end gap-2 sm:col-span-2">
-              <Button variant="outline" onClick={() => setEditPanel(null)}>
-                {t("common.cancel")}
-              </Button>
-              <Button
+            <div className="sm:col-span-2">
+              <DialogActions
+                onClose={() => setEditPanel(null)}
+                onSubmit={() => void savePanelMeta()}
+                submitLabel={t("common.save")}
                 disabled={!editPanel.date}
-                onClick={async () => {
-                  await updatePanel(panelId, {
-                    date: editPanel.date,
-                    labName: editPanel.labName.trim() || null,
-                    city: editPanel.city.trim() || null,
-                    country: editPanel.country.trim() || null,
-                    cost: parseCostUsd(editPanel.cost),
-                    sampleTypes: editPanel.sampleTypes.length ? editPanel.sampleTypes : ["blood"],
-                    collectionTime: editPanel.collectionTime.trim() || null,
-                    fasting: editPanel.fasting === "" ? null : editPanel.fasting === "yes",
-                    menstrualCycleDay: editPanel.cycleDay.trim()
-                      ? Number(editPanel.cycleDay)
-                      : null,
-                    notes: editPanel.notes.trim() || null,
-                  });
-                  setEditPanel(null);
-                  await reload();
-                  toast.show(t("labPanelDetail.panelUpdatedToast"));
-                }}
-              >
-                {t("common.save")}
-              </Button>
+              />
             </div>
           </div>
         )}
       </Dialog>
 
-      <Dialog
+      <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title={t("labPanelDetail.deletePanelTitle")}
         description={t("labPanelDetail.deletePanelDescription")}
-      >
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={async () => {
-              // Capture before delete so Undo can re-create the panel + results.
-              const { id: _id, createdAt: _c, ...panelData } = panel;
-              const resultInputs = results.map((r) => ({
-                biomarkerId: r.biomarkerId,
-                value: r.value,
-                unit: r.unit,
-                rawLabel: r.rawLabel,
-                sourcePage: r.sourcePage,
-                confidence: r.confidence,
-                reviewedAt: r.reviewedAt,
-              }));
-              const biosById = new Map(results.map((r) => [r.biomarkerId, r.biomarker]));
-              const findingInputs = findings.map(
-                ({ id: _i, panelId: _p, createdAt: _c, ...f }) => f,
-              );
-              await deletePanel(panelId);
-              setConfirmDelete(false);
-              navigate("/labs");
-              toast.showAction(t("labPanelDetail.deletedToast"), t("common.undo"), () => {
-                void createPanelWithResults(panelData, resultInputs, biosById).then((newId) =>
-                  createPanelFindings(newId, findingInputs),
-                );
-              });
-            }}
-          >
-            {t("labPanelDetail.deletePanel")}
-          </Button>
-        </div>
-      </Dialog>
+        confirmLabel={t("labPanelDetail.deletePanel")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => void removePanel()}
+      />
     </>
   );
 }

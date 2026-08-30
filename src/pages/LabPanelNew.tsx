@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { todayISO } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
-import { allKnownUnits, convertibleUnits, convertToDefaultUnit, normalizeUnit } from "@/lib/units";
+import { allKnownUnits, convertibleUnits, normalizeUnit, unitAccepted } from "@/lib/units";
 import type { Biomarker, SampleType } from "@/db/schema";
 import { SAMPLE_TYPES } from "@/db/schema";
 
@@ -152,7 +152,7 @@ export function LabPanelNew() {
             <Input
               value={labName}
               onChange={(e) => setLabName(e.target.value)}
-              placeholder="e.g. Invitro"
+              placeholder={t("placeholders.labName")}
             />
           </Field>
           <Field label={t("fields.city")}>
@@ -229,7 +229,7 @@ export function LabPanelNew() {
           {rows.map((row) => {
             const bio = row.biomarkerId !== "" ? byId.get(row.biomarkerId) : undefined;
             const unitUnknown =
-              bio != null && row.unit.trim() !== "" && !convertToDefaultUnit(1, row.unit, bio).ok;
+              bio != null && row.unit.trim() !== "" && !unitAccepted(row.unit, bio);
             return (
               <div key={row.key} className="flex flex-wrap items-end gap-2">
                 <Field label={t("labPanelNew.fields.biomarker")} className="min-w-56 flex-1">

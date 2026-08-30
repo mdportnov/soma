@@ -219,7 +219,7 @@ export type TrendInterpretationInput = {
   /** "higher_better" | "lower_better" | "range". */
   direction: string;
   /** Oldest-first readings. */
-  points: { date: string; value: number; flag: string | null }[];
+  points: { date: string; value: number; flag: string | null; unit?: string }[];
   /** Names of medications taken during the charted period. */
   medications: string[];
 };
@@ -227,7 +227,7 @@ export type TrendInterpretationInput = {
 /** User message describing a biomarker's trend for interpretation. */
 export function buildTrendInterpretationPrompt(input: TrendInterpretationInput): string {
   const series = input.points
-    .map((p) => `${p.date}: ${p.value} ${input.unit}${p.flag ? ` (${p.flag})` : ""}`)
+    .map((p) => `${p.date}: ${p.value} ${p.unit ?? input.unit}${p.flag ? ` (${p.flag})` : ""}`)
     .join("\n");
   const direction =
     input.direction === "higher_better"

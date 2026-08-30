@@ -15,7 +15,7 @@ export function interpretationKey(parts: {
   direction: string | null;
   referenceRange: string | null;
   optimalRange: string | null;
-  points: { date: string; value: number }[];
+  points: { date: string; value: number; unit?: string }[];
   medications: string[];
 }): string {
   const serialized = JSON.stringify([
@@ -23,7 +23,7 @@ export function interpretationKey(parts: {
     parts.direction,
     parts.referenceRange,
     parts.optimalRange,
-    parts.points.map((p) => [p.date, p.value]),
+    parts.points.map((p) => [p.date, p.value, p.unit ?? null]),
     [...parts.medications].sort(),
   ]);
   // djb2 → base36; short, collision-resistant enough for a per-user cache key.

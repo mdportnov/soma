@@ -15,14 +15,34 @@ import type { Biomarker } from "@/db/schema";
  * equivalents. Replacement order matters: longest Cyrillic tokens first
  * ("ммоль" before "моль" before "мм"/"мг"), single letters last.
  */
+const SUPERSCRIPT_DIGITS: Record<string, string> = {
+  "⁰": "0",
+  "¹": "1",
+  "²": "2",
+  "³": "3",
+  "⁴": "4",
+  "⁵": "5",
+  "⁶": "6",
+  "⁷": "7",
+  "⁸": "8",
+  "⁹": "9",
+};
+
 export function normalizeUnit(u: string): string {
   return (
     u
       .trim()
       .toLowerCase()
+      // Superscript digits → "^N" so "10⁹/L" meets "10^9/l"; "m^2"/"м²" style
+      // exponents on meters collapse to the plain "m2" spelling further down.
+      .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (run) =>
+        run.replace(/./gu, (c, i) => (i === 0 ? "^" : "") + SUPERSCRIPT_DIGITS[c]),
+      )
+      .replace(/(\d),(\d)/g, "$1.$2")
       .replace(/μ|µ/g, "µ")
       .replace(/ме(?=\/|$)/g, "iu") // МЕ (междунар. единицы) = IU
       .replace(/ед(?=\/|$)/g, "u") // Ед = U
+      .replace(/мин/g, "min")
       .replace(/мк/g, "µ")
       .replace(/ммоль/g, "mmol")
       .replace(/нмоль/g, "nmol")
@@ -42,6 +62,9 @@ export function normalizeUnit(u: string): string {
       .replace(/л/g, "l")
       .replace(/м/g, "m")
       .replace(/\s+/g, "")
+      // Squared/cubed meters lose the caret ("m^2" → "m2") so the eGFR
+      // "/1.73m2", "/1.73 m²" and "/1.73m^2" spellings all normalize alike.
+      .replace(/m\^([23])/g, "m$1")
   );
 }
 
@@ -261,6 +284,67 @@ function round(v: number): number {
   return Math.round(v * 1000) / 1000;
 }
 
+// ── alternate measurement scales ────────────────────────────────────────────
+
+type AlternateScale = {
+  /** Canonical display unit of the scale. */
+  unit: string;
+  /** Normalized source unit → factor to the canonical unit (same scale only). */
+  factors: Record<string, number>;
+  refLow: number | null;
+  refHigh: number | null;
+};
+
+/**
+ * Analytes measured on two scales with NO universal factor between them.
+ * Lp(a): particle count (nmol/L, the default unit) vs mass (mg/dL, g/L) —
+ * apo(a) isoform size varies between individuals, so mass ↔ molar conversion
+ * is not defined and must never be attempted. Mass-unit results are kept on
+ * their own scale with a scale-specific reference range instead.
+ */
+const ALTERNATE_SCALES: Record<string, AlternateScale> = {
+  // Lipoprotein(a) mass scale; risk threshold ≈ 30 mg/dL (= 0.30 g/L).
+  "10835-7": {
+    unit: "mg/dL",
+    factors: { "mg/dl": 1, "g/l": 100, "g/dl": 1000, "mg/l": 0.1 },
+    refLow: 0,
+    refHigh: 30,
+  },
+};
+
+export type ScaleConversion = {
+  value: number;
+  unit: string;
+  refLow: number | null;
+  refHigh: number | null;
+};
+
+/**
+ * Converts `value` into a known alternate scale of the biomarker, when its unit
+ * belongs to one. Returns the scale's own reference range alongside the value —
+ * the biomarker's default-unit range does not apply on another scale.
+ */
+export function convertToAlternateScale(
+  value: number,
+  fromUnit: string,
+  bio: Pick<Biomarker, "code" | "defaultUnit">,
+): ScaleConversion | null {
+  if (!Number.isFinite(value)) return null;
+  const scale = bio.code ? ALTERNATE_SCALES[bio.code] : undefined;
+  if (!scale) return null;
+  const factor = scale.factors[normalizeUnit(fromUnit)];
+  if (factor == null) return null;
+  const out = round(value * factor);
+  if (!Number.isFinite(out)) return null;
+  return { value: out, unit: scale.unit, refLow: scale.refLow, refHigh: scale.refHigh };
+}
+
+/** True when the biomarker can absorb a value in `unit` — either by conversion
+ *  to its default unit or via one of its alternate scales. */
+export function unitAccepted(unit: string, bio: Pick<Biomarker, "code" | "defaultUnit">): boolean {
+  return convertToDefaultUnit(1, unit, bio).ok || convertToAlternateScale(1, unit, bio) != null;
+}
+
 // ── unit catalog (for unit pickers) ─────────────────────────────────────────
 
 /** Display spellings for normalized unit tokens that appear in factor keys. */
@@ -320,7 +404,7 @@ export function convertibleUnits(
   const out = [bio.defaultUnit];
   for (const u of catalog) {
     if (normalizeUnit(u) === defaultNorm) continue;
-    if (convertToDefaultUnit(1, u, bio).ok) out.push(u);
+    if (unitAccepted(u, bio)) out.push(u);
   }
   return out;
 }

@@ -6,7 +6,12 @@ import {
   type SuggestedBiomarker,
 } from "../types";
 import { normalizeLabel, similarity } from "@/lib/fuzzy";
-import { convertToDefaultUnit, type ConversionResult } from "@/lib/units";
+import {
+  convertToAlternateScale,
+  convertToDefaultUnit,
+  unitAccepted,
+  type ConversionResult,
+} from "@/lib/units";
 
 /**
  * Phase 2 — deterministic dictionary mapping (§4).
@@ -171,7 +176,11 @@ function conversionFor(
   if (biomarkerId == null) return null;
   const bio = index.byId.get(biomarkerId);
   if (!bio) return null;
-  return convertToDefaultUnit(raw.value, raw.unit || bio.defaultUnit, bio);
+  const unit = raw.unit || bio.defaultUnit;
+  const conv = convertToDefaultUnit(raw.value, unit, bio);
+  if (conv.ok) return conv;
+  const alt = convertToAlternateScale(raw.value, unit, bio);
+  return alt ? { ok: true, value: alt.value, unit: alt.unit } : conv;
 }
 
 /**
@@ -187,12 +196,12 @@ function preferUnitCompatibleSibling(row: MappedRow, index: BiomarkerIndex): voi
   if (row.biomarkerId == null || !row.raw.unit) return;
   const matched = index.byId.get(row.biomarkerId);
   if (!matched) return;
-  if (convertToDefaultUnit(row.raw.value, row.raw.unit, matched).ok) return;
+  if (unitAccepted(row.raw.unit, matched)) return;
   const siblings = index.byBase.get(baseKey(matched.canonicalName)) ?? [];
   const compatible = siblings.filter((id) => {
     if (id === row.biomarkerId) return false;
     const b = index.byId.get(id);
-    return !!b && convertToDefaultUnit(row.raw.value, row.raw.unit, b).ok;
+    return !!b && unitAccepted(row.raw.unit, b);
   });
   if (compatible.length === 1) {
     row.biomarkerId = compatible[0];

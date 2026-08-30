@@ -246,6 +246,10 @@ export function BiomarkerDetail() {
               date: p.date,
               value: p.value,
               flag: p.outOfRange ? (p.flag ?? null) : null,
+              // Readings kept on another scale (or in an unrecognized unit)
+              // carry their own unit, so the prompt never labels them with the
+              // biomarker's default one.
+              unit: p.unit,
             }))}
             medications={meds.filter((m) => !m.endDate).map((m) => m.name)}
           />

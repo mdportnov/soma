@@ -15,7 +15,7 @@ import {
   setInterpretation,
 } from "@/lib/interpretation-cache";
 
-type Point = { date: string; value: number; flag: string | null };
+type Point = { date: string; value: number; flag: string | null; unit?: string };
 
 type BioRanges = Pick<
   Biomarker,

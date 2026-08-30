@@ -71,9 +71,18 @@ export function TrendChart({
   // from the line and surface a count instead. Fall back to raw only if nothing
   // normalized exists, so a custom-unit marker still renders something.
   const evaluatedData = allData.filter((d) => d.evaluated);
-  const data = evaluatedData.length ? evaluatedData : allData;
-  const hiddenCount = allData.length - evaluatedData.length;
-  const usingRawFallback = evaluatedData.length === 0 && allData.length > 0;
+  // Normalized points can still sit on different scales (e.g. Lp(a) nmol/L vs
+  // mg/dL, scales with no conversion between them) — one axis takes one unit:
+  // the default unit when any point has it, otherwise the most common unit.
+  const unitCounts = new Map<string, number>();
+  for (const d of evaluatedData) unitCounts.set(d.unit, (unitCounts.get(d.unit) ?? 0) + 1);
+  const axisUnit = unitCounts.has(biomarker.defaultUnit)
+    ? biomarker.defaultUnit
+    : [...unitCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const axisData = evaluatedData.filter((d) => d.unit === axisUnit);
+  const data = axisData.length ? axisData : allData;
+  const hiddenCount = allData.length - data.length;
+  const usingRawFallback = axisData.length === 0 && allData.length > 0;
   // Captured once per mount: keeps render pure and the domain stable.
   const [now] = useState(() => Date.now());
 
@@ -83,7 +92,13 @@ export function TrendChart({
   const domain: [number, number] = [tMin - pad, tMax + pad];
 
   const values = data.map((d) => d.value);
-  const { refLow, refHigh, optimalLow, optimalHigh } = biomarker;
+  // Dictionary ranges are stated in the default unit — they only apply when
+  // that is the unit on the axis (alternate-scale points carry their own
+  // per-point flags computed against the scale's range).
+  const rangesApply = axisUnit === biomarker.defaultUnit;
+  const { refLow, refHigh, optimalLow, optimalHigh } = rangesApply
+    ? biomarker
+    : { refLow: null, refHigh: null, optimalLow: null, optimalHigh: null };
   const yCandidates = [...values, refLow, refHigh, optimalLow, optimalHigh].filter(
     (v): v is number => v != null,
   );

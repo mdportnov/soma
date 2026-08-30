@@ -66,6 +66,7 @@ import {
 import {
   ageYearsFrom,
   computeFlag,
+  convertToAlternateScale,
   convertToDefaultUnit,
   resolveRange,
   type DemographicRange,
@@ -130,6 +131,68 @@ export async function updateProfile(id: number, data: ProfileUpdate) {
   }
 }
 
+type NormalizedResult = {
+  unitNormalized: string | null;
+  valueNormalized: number | null;
+  outOfRange: boolean;
+  flag: "low" | "high" | "critical" | null;
+  convertible: boolean;
+};
+
+/**
+ * Derives the stored normalization + flag columns for one result value.
+ * Default-unit conversions are range-checked against the profile's effective
+ * (sex/age-specific) range; values on a known alternate scale (e.g. Lp(a) in
+ * mg/dL, which has no defined conversion to nmol/L) are kept on that scale and
+ * checked against the scale's own reference range — never escalated to
+ * "critical", since the critical policy is defined in the default unit.
+ */
+function normalizeResultValue(
+  value: number,
+  unit: string,
+  bio: Biomarker,
+  ranges: DemographicRange[] | undefined,
+  ctx: ProfileContext,
+): NormalizedResult {
+  const conv = convertToDefaultUnit(value, unit, bio);
+  if (conv.ok) {
+    const effective = resolveRange(bio, ranges, ctx);
+    const { outOfRange, flag } = computeFlag(conv.value, effective, bio);
+    return {
+      unitNormalized: conv.unit,
+      valueNormalized: conv.value,
+      outOfRange,
+      flag,
+      convertible: true,
+    };
+  }
+  const alt = convertToAlternateScale(value, unit, bio);
+  if (alt) {
+    // Policy without the code: the absolute panic cutoffs are stated in the
+    // default unit and would be nonsense here, but the generic "twice past the
+    // dangerous edge" rule holds on any scale, so a mass-unit Lp(a) escalates
+    // like a molar one instead of silently capping at "high".
+    const { outOfRange, flag } = computeFlag(alt.value, alt, {
+      code: null,
+      direction: bio.direction,
+    });
+    return {
+      unitNormalized: alt.unit,
+      valueNormalized: alt.value,
+      outOfRange,
+      flag,
+      convertible: true,
+    };
+  }
+  return {
+    unitNormalized: null,
+    valueNormalized: null,
+    outOfRange: false,
+    flag: null,
+    convertible: false,
+  };
+}
+
 /**
  * Re-derives normalization + out-of-range flags for every lab result of a
  * profile, using the profile's current sex/age-specific ranges. Called when the
@@ -156,23 +219,21 @@ export async function recomputeFlagsForProfile(profileId: number): Promise<void>
     .where(eq(labPanel.profileId, profileId));
   for (const r of rows) {
     const bio = bioById.get(r.biomarkerId);
-    let unitNormalized: string | null = null;
-    let valueNormalized: number | null = null;
-    let outOfRange = false;
-    let flag: "low" | "high" | "critical" | null = null;
+    let normalized: NormalizedResult = {
+      unitNormalized: null,
+      valueNormalized: null,
+      outOfRange: false,
+      flag: null,
+      convertible: false,
+    };
     if (bio) {
-      const conv = convertToDefaultUnit(r.value, r.unit, bio);
-      if (conv.ok) {
-        unitNormalized = conv.unit;
-        valueNormalized = conv.value;
-        const ctx: ProfileContext = {
-          sex: prof.sex ?? null,
-          ageYears: ageYearsFrom(prof.birthDate, new Date(`${r.date.slice(0, 10)}T00:00:00Z`)),
-        };
-        const effective = resolveRange(bio, ranges.get(r.biomarkerId), ctx);
-        ({ outOfRange, flag } = computeFlag(conv.value, effective, bio));
-      }
+      const ctx: ProfileContext = {
+        sex: prof.sex ?? null,
+        ageYears: ageYearsFrom(prof.birthDate, new Date(`${r.date.slice(0, 10)}T00:00:00Z`)),
+      };
+      normalized = normalizeResultValue(r.value, r.unit, bio, ranges.get(r.biomarkerId), ctx);
     }
+    const { unitNormalized, valueNormalized, outOfRange, flag } = normalized;
     await db
       .update(labResult)
       .set({ unitNormalized, valueNormalized, outOfRange, flag })
@@ -361,21 +422,15 @@ export async function createPanelWithResults(
     const now = new Date().toISOString();
     const values: NewLabResult[] = results.map((r) => {
       const bio = biomarkersById.get(r.biomarkerId);
-      let unitNormalized: string | null = null;
-      let valueNormalized: number | null = null;
-      let outOfRange = false;
-      let flag: "low" | "high" | "critical" | null = null;
-      let convertible = false;
-      if (bio) {
-        const conv = convertToDefaultUnit(r.value, r.unit, bio);
-        if (conv.ok) {
-          convertible = true;
-          unitNormalized = conv.unit;
-          valueNormalized = conv.value;
-          const effective = resolveRange(bio, rangesByBiomarker.get(r.biomarkerId), ctx);
-          ({ outOfRange, flag } = computeFlag(conv.value, effective, bio));
-        }
-      }
+      const { unitNormalized, valueNormalized, outOfRange, flag, convertible } = bio
+        ? normalizeResultValue(r.value, r.unit, bio, rangesByBiomarker.get(r.biomarkerId), ctx)
+        : {
+            unitNormalized: null,
+            valueNormalized: null,
+            outOfRange: false,
+            flag: null,
+            convertible: false,
+          };
       const confidence: ResultConfidence = r.confidence ?? (isAi ? "ai" : "manual");
       const uncertain =
         confidence === "translated" || confidence === "fuzzy" || confidence === "ai";
@@ -457,6 +512,65 @@ export async function updatePanel(panelId: number, patch: PanelMetaPatch): Promi
     if (outOfRange === r.outOfRange && flag === r.flag) continue;
     await db.update(labResult).set({ outOfRange, flag }).where(eq(labResult.id, r.id));
   }
+}
+
+/**
+ * Corrects one result's value/unit after the fact (AI misreads included).
+ * Normalization and flags are re-derived; a value whose unit stays unrecognized
+ * is saved anyway — raw, unnormalized and unflagged — never blocked. A manual
+ * correction is author-trusted, so the row leaves the needs-review queue.
+ */
+export async function updateResultValue(
+  resultId: number,
+  patch: { value: number; unit: string },
+): Promise<void> {
+  const rows = await db
+    .select({
+      biomarkerId: labResult.biomarkerId,
+      date: labPanel.date,
+      profileId: labPanel.profileId,
+    })
+    .from(labResult)
+    .innerJoin(labPanel, eq(labResult.panelId, labPanel.id))
+    .where(eq(labResult.id, resultId));
+  const row = rows[0];
+  if (!row) return;
+  const [bioRows, prof, rangesByBiomarker] = await Promise.all([
+    db.select().from(biomarker).where(eq(biomarker.id, row.biomarkerId)),
+    getProfile(row.profileId),
+    getReferenceRangesByBiomarker(),
+  ]);
+  const bio = bioRows[0];
+  const ctx: ProfileContext = {
+    sex: prof?.sex ?? null,
+    ageYears: ageYearsFrom(prof?.birthDate, new Date(`${row.date.slice(0, 10)}T00:00:00Z`)),
+  };
+  const { unitNormalized, valueNormalized, outOfRange, flag } = bio
+    ? normalizeResultValue(
+        patch.value,
+        patch.unit,
+        bio,
+        rangesByBiomarker.get(row.biomarkerId),
+        ctx,
+      )
+    : {
+        unitNormalized: null,
+        valueNormalized: null,
+        outOfRange: false,
+        flag: null,
+      };
+  await db
+    .update(labResult)
+    .set({
+      value: patch.value,
+      unit: patch.unit,
+      unitNormalized,
+      valueNormalized,
+      outOfRange,
+      flag,
+      reviewedAt: new Date().toISOString(),
+    })
+    .where(eq(labResult.id, resultId));
 }
 
 // ── lab_finding ──────────────────────────────────────────────────────────────

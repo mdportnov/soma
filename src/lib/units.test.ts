@@ -13,6 +13,8 @@ import {
   ftInToCm,
   allKnownUnits,
   convertibleUnits,
+  convertToAlternateScale,
+  unitAccepted,
   type DemographicRange,
 } from "./units";
 
@@ -36,6 +38,30 @@ describe("normalizeUnit (Cyrillic → Latin)", () => {
 
   it("lowercases and removes whitespace", () => {
     expect(normalizeUnit(" MG / DL ")).toBe("mg/dl");
+  });
+});
+
+describe("normalizeUnit (spelling variants)", () => {
+  it("collapses every eGFR body-surface spelling to one form", () => {
+    for (const u of [
+      "mL/min/1.73m2",
+      "mL/min/1.73 m2",
+      "mL/min/1.73m\u00b2",
+      "ml/min/1.73 m\u00b2",
+      "mL/min/1.73m^2",
+      "\u043c\u043b/\u043c\u0438\u043d/1,73 \u043c\u00b2",
+    ]) {
+      expect(normalizeUnit(u)).toBe("ml/min/1.73m2");
+    }
+  });
+
+  it("maps superscript exponents to caret notation", () => {
+    expect(normalizeUnit("10\u2079/L")).toBe("10^9/l");
+    expect(normalizeUnit("10\u00b9\u00b2/L")).toBe("10^12/l");
+  });
+
+  it("uses dot decimals for comma-decimal spellings", () => {
+    expect(normalizeUnit("\u043c\u043b/\u043c\u0438\u043d/1,73\u043c2")).toBe("ml/min/1.73m2");
   });
 });
 
@@ -232,6 +258,59 @@ describe("convertToDefaultUnit — unknown conversions are flagged, never guesse
   it("routes NaN/Infinity readings to manual review instead of asserting them", () => {
     expect(convertToDefaultUnit(NaN, "mmol/L", bio("1558-6", "mmol/L")).ok).toBe(false);
     expect(convertToDefaultUnit(Infinity, "mg/dL", bio("1558-6", "mmol/L")).ok).toBe(false);
+  });
+});
+
+describe("convertToDefaultUnit — identical-unit passthrough after normalization", () => {
+  it("eGFR needs no conversion regardless of spelling (issue #47)", () => {
+    const egfr = bio("62238-1", "mL/min/1.73m\u00b2");
+    for (const u of ["mL/min/1.73m2", "mL/min/1.73 m\u00b2", "ml/min/1.73m^2"]) {
+      const r = convertToDefaultUnit(95, u, egfr);
+      expect(r.ok && r.value).toBe(95);
+      expect(unitsEquivalent(u, egfr.defaultUnit)).toBe(true);
+    }
+  });
+});
+
+describe("convertToAlternateScale — Lp(a) mass scale (issue #46)", () => {
+  const lpa = bio("10835-7", "nmol/L");
+
+  it("never invents a mass \u2194 molar factor for Lp(a)", () => {
+    expect(convertToDefaultUnit(30, "mg/dL", lpa).ok).toBe(false);
+    expect(convertToDefaultUnit(0.3, "g/L", lpa).ok).toBe(false);
+  });
+
+  it("keeps mg/dL values on the mass scale with its own range", () => {
+    expect(convertToAlternateScale(25, "mg/dL", lpa)).toEqual({
+      value: 25,
+      unit: "mg/dL",
+      refLow: 0,
+      refHigh: 30,
+    });
+  });
+
+  it("converts g/L \u2192 mg/dL within the mass scale (\u00d7100)", () => {
+    const r = convertToAlternateScale(0.3, "g/L", lpa);
+    expect(r?.value).toBe(30);
+    expect(r?.unit).toBe("mg/dL");
+  });
+
+  it("does not hijack the default molar scale", () => {
+    expect(convertToAlternateScale(80, "nmol/L", lpa)).toBeNull();
+  });
+
+  it("applies only to biomarkers that declare a scale", () => {
+    expect(convertToAlternateScale(90, "mg/dL", bio(null, "nmol/L"))).toBeNull();
+    expect(convertToAlternateScale(NaN, "mg/dL", lpa)).toBeNull();
+  });
+});
+
+describe("unitAccepted", () => {
+  it("accepts default-unit conversions and alternate scales alike", () => {
+    expect(unitAccepted("mg/dL", bio("1558-6", "mmol/L"))).toBe(true);
+    expect(unitAccepted("mg/dL", bio("10835-7", "nmol/L"))).toBe(true);
+    expect(unitAccepted("g/L", bio("10835-7", "nmol/L"))).toBe(true);
+    expect(unitAccepted("mg/dL", bio(null, "nmol/L"))).toBe(false);
   });
 });
 

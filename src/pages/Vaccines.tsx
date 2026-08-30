@@ -341,7 +341,7 @@ function VaccineForm({
               value={vaccineName || null}
               onChange={setVaccineName}
               options={nameOptions}
-              placeholder="e.g. COVID-19, Influenza"
+              placeholder={t("placeholders.vaccineName")}
               allowCustom
             />
           </Field>
@@ -364,14 +364,14 @@ function VaccineForm({
             <Input
               value={manufacturer}
               onChange={(e) => setManufacturer(e.target.value)}
-              placeholder="e.g. Pfizer"
+              placeholder={t("placeholders.manufacturer")}
             />
           </Field>
           <Field label={t("vaccines.fields.batchNumber")}>
             <Input
               value={batchNumber}
               onChange={(e) => setBatchNumber(e.target.value)}
-              placeholder="e.g. EK5730"
+              placeholder={t("placeholders.lotNumber")}
             />
           </Field>
         </div>
@@ -397,7 +397,7 @@ function VaccineForm({
             <Input
               value={country}
               onChange={(e) => setCountry(e.target.value)}
-              placeholder="e.g. Germany"
+              placeholder={t("placeholders.country")}
             />
           </Field>
           {expiryBeforeDose && (
@@ -409,7 +409,7 @@ function VaccineForm({
             <Input
               value={administeredBy}
               onChange={(e) => setAdministeredBy(e.target.value)}
-              placeholder="e.g. City clinic"
+              placeholder={t("placeholders.clinic")}
             />
           </Field>
         </div>
@@ -417,7 +417,7 @@ function VaccineForm({
           <Input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Additional notes"
+            placeholder={t("placeholders.notes")}
           />
         </Field>
 

@@ -3,11 +3,10 @@ import { AlertTriangle } from "lucide-react";
 import type { Biomarker } from "@/db/schema";
 import { updateBiomarkerDictionary } from "@/db/repos";
 import { parseAliases, parseNumberOrNull, validateRanges } from "@/lib/biomarker-edit";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Field } from "@/components/app/Field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
@@ -123,14 +122,12 @@ export function EditBiomarkerDialog({
             {error}
           </p>
         )}
-        <div className="mt-1 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={submit} disabled={saving}>
-            {t("common.saveChanges")}
-          </Button>
-        </div>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={submit}
+          submitLabel={t("common.saveChanges")}
+          disabled={saving}
+        />
       </div>
     </Dialog>
   );

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -185,7 +185,7 @@ export function VisitForm({
             <Input
               value={specialty}
               onChange={(e) => setSpecialty(e.target.value)}
-              placeholder="endocrinologist…"
+              placeholder={t("placeholders.specialty")}
             />
           </Field>
         </div>
@@ -208,14 +208,12 @@ export function VisitForm({
         <Field label={t("fields.notes")}>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
-        <div className="mt-1 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={save} disabled={saving || !date}>
-            {editing ? t("common.saveChanges") : t("common.addVisit")}
-          </Button>
-        </div>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={save}
+          submitLabel={editing ? t("common.saveChanges") : t("common.addVisit")}
+          disabled={saving || !date}
+        />
       </div>
     </Dialog>
   );

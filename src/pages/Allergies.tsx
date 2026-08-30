@@ -304,7 +304,7 @@ function AllergyForm({
             <Input
               value={allergen}
               onChange={(e) => setAllergen(e.target.value)}
-              placeholder="e.g. Penicillin, Peanuts"
+              placeholder={t("placeholders.allergen")}
             />
           </Field>
           <Field label={t("allergies.fields.category")}>
@@ -368,14 +368,14 @@ function AllergyForm({
             value={reaction}
             onChange={(e) => setReaction(e.target.value)}
             rows={2}
-            placeholder="e.g. Hives, swelling, anaphylaxis"
+            placeholder={t("placeholders.reaction")}
           />
         </Field>
         <Field label={t("allergies.fields.notesOptional")}>
           <Input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Additional notes"
+            placeholder={t("placeholders.notes")}
           />
         </Field>
 

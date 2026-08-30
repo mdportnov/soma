@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn, formatDate, formatValue, todayISO } from "@/lib/utils";
+import { formatDate, formatValue, todayISO } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
@@ -477,14 +477,12 @@ function LifestyleForm({
         <Field label={t("lifestyle.fields.notesOptional")}>
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
-        <div className={cn("mt-1 flex justify-end gap-2")}>
-          <Button variant="outline" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={save} disabled={saving || !valid}>
-            {editing ? t("common.saveChanges") : t("common.add")}
-          </Button>
-        </div>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={save}
+          submitLabel={editing ? t("common.saveChanges") : t("common.add")}
+          disabled={saving || !valid}
+        />
       </div>
     </Dialog>
   );

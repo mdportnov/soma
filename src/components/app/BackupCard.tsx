@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Field } from "@/components/app/Field";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   applyRestore,
@@ -358,14 +358,12 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
 
             <p className="text-[11px] text-muted-foreground">{t("backup.subfolderNote")}</p>
 
-            <div className="mt-2 flex justify-end gap-2">
-              <Button variant="ghost" onClick={onClose}>
-                {t("common.cancel")}
-              </Button>
-              <Button disabled={!destDir} onClick={() => setStep(2)}>
-                {t("common.continue")}
-              </Button>
-            </div>
+            <DialogActions
+              onClose={onClose}
+              onSubmit={() => setStep(2)}
+              submitLabel={t("common.continue")}
+              disabled={!destDir}
+            />
           </div>
         )}
 
@@ -542,15 +540,17 @@ export function RestoreDialog({ onClose }: { onClose: () => void }) {
                 <XCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
               </p>
             )}
-            <div className="mt-1 flex justify-end gap-2">
-              <Button variant="ghost" onClick={close}>
-                {t("common.cancel")}
-              </Button>
-              <Button disabled={!filePath || !pass || busy} onClick={inspect}>
-                {busy ? <Loader2 className="animate-spin" /> : null}
-                {t("common.continue")}
-              </Button>
-            </div>
+            <DialogActions
+              onClose={close}
+              onSubmit={inspect}
+              submitLabel={
+                <>
+                  {busy ? <Loader2 className="animate-spin" /> : null}
+                  {t("common.continue")}
+                </>
+              }
+              disabled={!filePath || !pass || busy}
+            />
           </div>
         ) : (
           <div className="grid gap-3">

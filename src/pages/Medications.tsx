@@ -37,7 +37,7 @@ import { DateInput } from "@/components/ui/date-input";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { DurationTimeline, type DurationItem } from "@/components/charts/DurationTimeline";
 import { formatDate, formatValue, todayISO } from "@/lib/utils";
@@ -385,7 +385,7 @@ function MedicationForm({
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Magnesium glycinate"
+              placeholder={t("placeholders.medicationName")}
             />
           </Field>
           <Field label={t("fields.type")}>
@@ -426,7 +426,7 @@ function MedicationForm({
                 t("medications.doseUnits.capsules"),
                 t("medications.doseUnits.sprays"),
               ].map((u) => ({ value: u, label: u }))}
-              placeholder="mg / IU / g"
+              placeholder={t("placeholders.medicationDoseUnit")}
               allowCustom
             />
           </Field>
@@ -449,7 +449,7 @@ function MedicationForm({
           <Input
             value={scheduleNotes}
             onChange={(e) => setScheduleNotes(e.target.value)}
-            placeholder="with food, before sleep, 5 on / 2 off…"
+            placeholder={t("placeholders.schedule")}
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
@@ -469,17 +469,15 @@ function MedicationForm({
           <Input
             value={purpose}
             onChange={(e) => setPurpose(e.target.value)}
-            placeholder="sleep quality, ferritin…"
+            placeholder={t("placeholders.purpose")}
           />
         </Field>
-        <div className="mt-1 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={save} disabled={saving || !canSave}>
-            {editing ? t("common.saveChanges") : t("common.add")}
-          </Button>
-        </div>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={save}
+          submitLabel={editing ? t("common.saveChanges") : t("common.add")}
+          disabled={saving || !canSave}
+        />
       </div>
     </Dialog>
   );

@@ -8,7 +8,7 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   disableEncryption,
@@ -243,15 +243,17 @@ function PassphraseDialog({
             <XCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
           </p>
         )}
-        <div className="mt-1 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={submit} disabled={busy || !pass || !pass2 || !understood}>
-            {busy ? <Loader2 className="animate-spin" /> : <Lock />}
-            {t("dbEncryption.enable")}
-          </Button>
-        </div>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={submit}
+          submitLabel={
+            <>
+              {busy ? <Loader2 className="animate-spin" /> : <Lock />}
+              {t("dbEncryption.enable")}
+            </>
+          }
+          disabled={busy || !pass || !pass2 || !understood}
+        />
       </div>
     </Dialog>
   );

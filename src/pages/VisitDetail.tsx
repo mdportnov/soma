@@ -24,7 +24,8 @@ import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VisitForm } from "./Visits";
@@ -61,6 +62,16 @@ export function VisitDetail() {
   const { visit, diagnoses, prescriptions, medications, source } = data;
 
   const visitLabel = `${formatDate(visit.date)}${visit.doctorName ? ` — ${visit.doctorName}` : ""}`;
+
+  const removeVisit = async () => {
+    const { id: _id, ...visitData } = visit;
+    const label = visit.doctorName || visit.clinic || visit.specialty || t("nav.visits");
+    await deleteVisit(visitId);
+    navigate("/visits");
+    toast.showAction(t("toasts.deleted", { name: label }), t("common.undo"), async () => {
+      await createVisit(visitData);
+    });
+  };
 
   return (
     <>
@@ -298,32 +309,16 @@ export function VisitDetail() {
         }}
       />
 
-      <Dialog
+      <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title={t("visitDetail.deleteVisitTitle")}
         description={t("visitDetail.deleteVisitDescription")}
-      >
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={async () => {
-              const { id: _id, ...visitData } = visit;
-              const label = visit.doctorName || visit.clinic || visit.specialty || t("nav.visits");
-              await deleteVisit(visitId);
-              navigate("/visits");
-              toast.showAction(t("toasts.deleted", { name: label }), t("common.undo"), async () => {
-                await createVisit(visitData);
-              });
-            }}
-          >
-            {t("visitDetail.deleteVisit")}
-          </Button>
-        </div>
-      </Dialog>
+        confirmLabel={t("visitDetail.deleteVisit")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => void removeVisit()}
+      />
     </>
   );
 }
@@ -397,7 +392,7 @@ function PrescriptionDialog({
           <Input
             value={drugName}
             onChange={(e) => setDrugName(e.target.value)}
-            placeholder="e.g. Vitamin D3"
+            placeholder={t("placeholders.drugExample")}
           />
         </Field>
         <div className="grid grid-cols-4 gap-3">
@@ -413,14 +408,14 @@ function PrescriptionDialog({
             <Input
               value={doseUnit}
               onChange={(e) => setDoseUnit(e.target.value)}
-              placeholder="IU"
+              placeholder={t("placeholders.doseUnit")}
             />
           </Field>
           <Field label={t("medications.fields.frequency")}>
             <Input
               value={frequency}
               onChange={(e) => setFrequency(e.target.value)}
-              placeholder="daily"
+              placeholder={t("placeholders.frequency")}
             />
           </Field>
           <Field label={t("visitDetail.fields.durationDays")}>
@@ -435,17 +430,15 @@ function PrescriptionDialog({
           <Textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g. for 3 months, retest 25-OH after"
+            placeholder={t("placeholders.prescriptionNotes")}
           />
         </Field>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button disabled={saving || !valid} onClick={addPrescription}>
-            {t("common.add")}
-          </Button>
-        </div>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={addPrescription}
+          submitLabel={t("common.add")}
+          disabled={saving || !valid}
+        />
       </div>
     </Dialog>
   );

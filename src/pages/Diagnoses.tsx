@@ -536,7 +536,7 @@ export function DiagnosisForm({
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Subclinical hypothyroidism"
+            placeholder={t("placeholders.diagnosisName")}
           />
         </Field>
         <div className="grid grid-cols-3 gap-3">

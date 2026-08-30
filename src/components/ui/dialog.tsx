@@ -229,7 +229,8 @@ export function DialogActions({
 }: {
   onClose: () => void;
   onSubmit: () => void;
-  submitLabel: string;
+  /** Node, not just text, so a submit button can carry a busy spinner. */
+  submitLabel: React.ReactNode;
   cancelLabel?: string;
   disabled?: boolean;
   destructive?: boolean;

@@ -7,7 +7,7 @@ import { useToast } from "@/components/app/Toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
 import { readWeightGoal } from "@/lib/weightGoal";
 import { todayISO } from "@/lib/utils";
@@ -163,23 +163,19 @@ export function WeightGoalDialog({
           </Field>
         </div>
 
-        <div className="mt-1 flex items-center justify-between gap-2">
-          {hadGoal ? (
-            <Button variant="ghost" size="sm" className="text-destructive" onClick={remove}>
-              <Trash2 /> {t("weightGoal.remove")}
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={save} disabled={saving || !valid}>
-              {hadGoal ? t("common.saveChanges") : t("weightGoal.save")}
-            </Button>
-          </div>
-        </div>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={save}
+          submitLabel={hadGoal ? t("common.saveChanges") : t("weightGoal.save")}
+          disabled={saving || !valid}
+          extra={
+            hadGoal ? (
+              <Button variant="ghost" size="sm" className="text-destructive" onClick={remove}>
+                <Trash2 /> {t("weightGoal.remove")}
+              </Button>
+            ) : undefined
+          }
+        />
       </div>
     </Dialog>
   );

@@ -15,7 +15,7 @@ import { EditBiomarkerDialog } from "@/components/app/EditBiomarkerDialog";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
@@ -346,6 +346,7 @@ export function CreateBiomarkerDialog({
       description={t("biomarkers.createDialog.description")}
       onSubmit={submit}
       submitDisabled={saving || !name.trim() || !unit.trim()}
+      guardUnsaved
     >
       <div className="grid gap-3">
         <Field label={t("biomarkers.createDialog.nameLabel")}>
@@ -416,14 +417,12 @@ export function CreateBiomarkerDialog({
             placeholder={t("biomarkers.createDialog.aliasesPlaceholder")}
           />
         </Field>
-        <div className="mt-1 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={submit} disabled={saving || !name.trim() || !unit.trim()}>
-            {t("biomarkers.createDialog.create")}
-          </Button>
-        </div>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={submit}
+          submitLabel={t("biomarkers.createDialog.create")}
+          disabled={saving || !name.trim() || !unit.trim()}
+        />
       </div>
     </Dialog>
   );

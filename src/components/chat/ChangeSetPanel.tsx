@@ -1,5 +1,6 @@
+import * as React from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, Database, ExternalLink, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Database, ExternalLink, X } from "lucide-react";
 import type { ChangeSetWithItems } from "@/db/chat-repos";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,17 +20,28 @@ export function ChangeSetPanel(props: {
   const blocked = selected.some((item) => item.status === "blocked");
   const committed = changeSet.status === "committed";
   const closed = committed || changeSet.status === "discarded";
+  // A set awaiting review is the whole point of the turn and stays open; once it
+  // is saved or discarded there is nothing left to do with it, so it collapses
+  // to its one-line receipt and the transcript stays readable. The details are
+  // one click away — the record of what was written is never removed.
+  const [expanded, setExpanded] = React.useState(!closed);
+  const detailsShown = !closed || expanded;
   return (
-    <div className="mt-2 w-full max-w-2xl rounded-xl border bg-card p-3 text-sm">
+    <div
+      className={cn(
+        "mt-2 w-full max-w-2xl rounded-xl border bg-card p-3 text-sm",
+        changeSet.status === "discarded" && "opacity-70",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2 font-medium">
             {committed ? (
-              <CheckCircle2 className="size-4 text-emerald-600" />
+              <CheckCircle2 className="size-4 shrink-0 text-success" />
             ) : (
-              <Database className="size-4" />
+              <Database className="size-4 shrink-0" />
             )}
-            {changeSet.summary}
+            <span className="min-w-0">{changeSet.summary}</span>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {committed
@@ -37,13 +49,30 @@ export function ChangeSetPanel(props: {
               : changeSet.status === "discarded"
                 ? t("aiAnalysis.changes.discarded")
                 : t("aiAnalysis.changes.review")}
+            {closed &&
+              ` · ${t("aiAnalysis.changes.itemCount", { count: String(changeSet.items.length) })}`}
           </p>
         </div>
-        <Badge variant={changeSet.riskLevel === "elevated" ? "warning" : "secondary"}>
-          {t(`aiAnalysis.changes.risk.${changeSet.riskLevel}`)}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-2">
+          {closed && (
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              aria-expanded={expanded}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown
+                className={cn("size-3 transition-transform", expanded && "rotate-180")}
+              />
+              {expanded ? t("aiAnalysis.changes.hideDetails") : t("aiAnalysis.changes.showDetails")}
+            </button>
+          )}
+          <Badge variant={changeSet.riskLevel === "elevated" ? "warning" : "secondary"}>
+            {t(`aiAnalysis.changes.risk.${changeSet.riskLevel}`)}
+          </Badge>
+        </div>
       </div>
-      <div className="mt-3 space-y-2">
+      <div className={cn("mt-3 space-y-2", !detailsShown && "hidden")}>
         {changeSet.items.map((item) => (
           <label
             key={item.id}
@@ -82,34 +111,24 @@ export function ChangeSetPanel(props: {
                 </div>
                 <dl className="mt-2 grid gap-x-3 gap-y-1 text-xs sm:grid-cols-2">
                   {Object.entries(item.payloadJson)
-                    .filter(
-                      ([key, value]) =>
-                        ![
-                          "kind",
-                          "assertionType",
-                          "draftRef",
-                          "visitDraftRef",
-                          "prescribedAtVisitRef",
-                        ].includes(key) && value != null,
-                    )
+                    .filter(([key, value]) => !HIDDEN_FIELDS.has(key) && hasValue(value))
                     .map(([key, value]) => (
                       <div key={key} className="flex min-w-0 gap-1">
-                        <dt className="text-muted-foreground">{fieldLabel(key)}:</dt>
-                        <dd className="truncate">{displayValue(value)}</dd>
+                        <dt className="text-muted-foreground">{fieldLabel(key, t)}:</dt>
+                        <dd className="truncate" title={displayValue(value)}>
+                          {displayValue(value)}
+                        </dd>
                       </div>
                     ))}
                 </dl>
                 {item.candidateMatchesJson.length > 0 && (
-                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                  <p className="mt-2 text-xs text-warning">
                     {t("aiAnalysis.changes.matches")}:{" "}
                     {item.candidateMatchesJson.map((candidate) => candidate.label).join(", ")}
                   </p>
                 )}
                 {item.warningsJson.map((warning) => (
-                  <p
-                    key={warning}
-                    className="mt-2 flex gap-1 text-xs text-amber-700 dark:text-amber-400"
-                  >
+                  <p key={warning} className="mt-2 flex gap-1 text-xs text-warning">
                     <AlertTriangle className="mt-0.5 size-3 shrink-0" /> {warning}
                   </p>
                 ))}
@@ -148,7 +167,39 @@ export function ChangeSetPanel(props: {
   );
 }
 
-function fieldLabel(key: string): string {
+/**
+ * Internal plumbing and foreign keys: they carry no meaning for the person
+ * reviewing what will be written, only noise.
+ */
+const HIDDEN_FIELDS = new Set([
+  "kind",
+  "assertionType",
+  "draftRef",
+  "visitDraftRef",
+  "prescribedAtVisitRef",
+  "medicationId",
+  "diagnosisId",
+  "allergyId",
+  "visitId",
+  "panelId",
+  "profileId",
+]);
+
+/** An empty string, list or object says nothing — do not render a bare label. */
+function hasValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value as object).length > 0;
+  return true;
+}
+
+/** Translated field name, falling back to the humanized key for anything the
+ *  dictionary does not know yet (new agent payload fields ship ahead of copy). */
+function fieldLabel(key: string, t: (key: string) => string): string {
+  const dictKey = `aiAnalysis.changes.field.${key}`;
+  const translated = t(dictKey);
+  if (translated !== dictKey) return translated;
   return key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (value) => value.toUpperCase());
 }
 

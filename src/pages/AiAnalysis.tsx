@@ -3,10 +3,13 @@ import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   ChevronDown,
+  FileUp,
   Loader2,
-  Paperclip,
   Send,
   Settings as SettingsIcon,
+  ArrowDown,
+  Copy,
+  RefreshCw,
   Sparkles,
   Square,
   Trash2,
@@ -21,6 +24,7 @@ import { AIProviderError } from "@/ai/types";
 import {
   addChatMessage,
   archiveChatThread,
+  deleteChatMessage,
   discardChatChangeSet,
   getOrCreateChatThread,
   listChatMessages,
@@ -31,15 +35,19 @@ import {
 import type { ChatMessageRecord } from "@/db/schema";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
+import { useToast } from "@/components/app/Toast";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { aiErrorMessage } from "@/components/app/AiInterpretation";
 import { ChangeSetPanel } from "@/components/chat/ChangeSetPanel";
 import { AssistantContent } from "@/components/chat/AssistantContent";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip } from "@/components/ui/tooltip";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { formatTime } from "@/lib/utils";
 import { settingsPath } from "@/lib/settings-navigation";
 import { clearChat as clearLegacyChat, loadChat as loadLegacyChat } from "@/lib/chat-store";
 
@@ -48,6 +56,7 @@ const MAX_AGENT_MESSAGES = 40;
 export function AiAnalysis() {
   const { profileId } = useApp();
   const { t, lang } = useI18n();
+  const toast = useToast();
   const { data: boot, loading } = useQuery(async () => {
     const provider = await getConfiguredProvider();
     const thread = await getOrCreateChatThread(profileId);
@@ -82,26 +91,15 @@ export function AiAnalysis() {
   const [error, setError] = React.useState<string | null>(null);
   const [showContext, setShowContext] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  // Auto-scroll follows the transcript only while the reader is already at the
+  // bottom: yanking the view down while they are re-reading an earlier answer is
+  // the classic chat annoyance. When they are up in the history, a button
+  // offers the jump instead of forcing it.
+  const atBottomRef = React.useRef(true);
+  const [showJump, setShowJump] = React.useState(false);
+  const [confirmClear, setConfirmClear] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
-  const chatRef = React.useRef<HTMLDivElement>(null);
-  // The chat column has to end exactly at the bottom of the viewport: a fixed
-  // `calc(100vh - Xrem)` guess leaves dead space under the composer whenever the
-  // header takes less room than assumed. Measure the column's own offset instead
-  // and give it the rest of the window, minus the page's bottom padding.
-  const [chatHeight, setChatHeight] = React.useState<number>();
-  React.useLayoutEffect(() => {
-    const el = chatRef.current;
-    if (!el) return;
-    const fit = () => {
-      const parent = el.parentElement;
-      const padding = parent ? parseFloat(getComputedStyle(parent).paddingBottom) || 0 : 0;
-      setChatHeight(window.innerHeight - el.getBoundingClientRect().top - padding);
-    };
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [boot]);
-
   React.useEffect(() => {
     if (!boot) return;
     setThreadId(boot.thread.id);
@@ -111,8 +109,18 @@ export function AiAnalysis() {
   }, [boot]);
 
   React.useEffect(() => {
+    if (!atBottomRef.current) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, changeSets, pending]);
+
+  // The composer grows with the draft up to the CSS max height, then scrolls —
+  // a fixed two-row box hides everything a longer question says.
+  React.useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   React.useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -181,6 +189,9 @@ export function AiAnalysis() {
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || pending) return;
+    // Sending is an explicit "I want to see what happens next".
+    atBottomRef.current = true;
+    setShowJump(false);
     const user = await addChatMessage({ threadId, role: "user", content: trimmed });
     const history = [...messages, user];
     setMessages(history);
@@ -205,6 +216,33 @@ export function AiAnalysis() {
     const last = messages[messages.length - 1];
     if (!last || last.role !== "user") return;
     void complete(messages, last);
+  };
+
+  // Re-ask the question that produced this answer. The old answer is dropped
+  // from the view first, so the thread never shows two replies to one question;
+  // it stays in the database as the turn's history.
+  const regenerate = (assistantId: number) => {
+    if (pending) return;
+    const index = messages.findIndex((message) => message.id === assistantId);
+    if (index < 1) return;
+    const question = messages[index - 1];
+    if (question.role !== "user") return;
+    const history = messages.slice(0, index);
+    setMessages(history);
+    atBottomRef.current = true;
+    void (async () => {
+      await deleteChatMessage(assistantId);
+      await complete(history, question);
+    })();
+  };
+
+  const copyMessage = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      toast.show(t("aiAnalysis.copied"));
+    } catch {
+      toast.error(t("errors.actionFailed"));
+    }
   };
 
   const selectChange = async (setId: number, itemId: number, selected: boolean) => {
@@ -249,14 +287,38 @@ export function AiAnalysis() {
 
   const starters = [t("aiAnalysis.starter1"), t("aiAnalysis.starter2"), t("aiAnalysis.starter3")];
 
+  // A change set belongs to the turn that produced it, not to the end of the
+  // transcript: anchor it to that turn's assistant reply (its own user message
+  // when the reply is still missing) so it scrolls away with its own history
+  // instead of hanging under every later answer.
+  const setsByAnchor = new Map<number, ChangeSetWithItems[]>();
+  const orphanSets: ChangeSetWithItems[] = [];
+  for (const set of changeSets) {
+    const sourceIndex = messages.findIndex((message) => message.id === set.sourceMessageId);
+    if (sourceIndex === -1) {
+      orphanSets.push(set);
+      continue;
+    }
+    const reply = messages.slice(sourceIndex + 1).find((message) => message.role === "assistant");
+    const anchorId = reply?.id ?? messages[sourceIndex].id;
+    setsByAnchor.set(anchorId, [...(setsByAnchor.get(anchorId) ?? []), set]);
+  }
+
+  const renderChangeSet = (set: ChangeSetWithItems) => (
+    <ChangeSetPanel
+      key={set.id}
+      changeSet={set}
+      saving={savingSetId === set.id}
+      onSelect={(itemId, selected) => void selectChange(set.id, itemId, selected)}
+      onSave={() => void saveChangeSet(set.id)}
+      onDiscard={() => void discardChangeSet(set.id)}
+    />
+  );
+
   return (
     <>
       <PageHeader title={t("aiAnalysis.title")} description={t("aiAnalysis.description")} />
-      <div
-        ref={chatRef}
-        className="mx-auto flex max-w-3xl flex-col"
-        style={{ height: chatHeight != null ? `${chatHeight}px` : "calc(100vh - 12rem)" }}
-      >
+      <div className="mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col">
         <div className="mb-2 flex items-center justify-between gap-2">
           <button
             type="button"
@@ -271,7 +333,7 @@ export function AiAnalysis() {
           {messages.length > 0 && (
             <button
               type="button"
-              onClick={() => void clear()}
+              onClick={() => setConfirmClear(true)}
               disabled={pending}
               className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
             >
@@ -290,7 +352,16 @@ export function AiAnalysis() {
             </pre>
           </div>
         )}
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pr-1">
+        <div
+          ref={scrollRef}
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+            atBottomRef.current = atBottom;
+            setShowJump((current) => (current === !atBottom ? current : !atBottom));
+          }}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+        >
           {messages.length === 0 && !pending && (
             <div className="flex flex-col items-center gap-4 py-10 text-center">
               <div className="flex size-11 items-center justify-center rounded-full bg-secondary">
@@ -312,39 +383,63 @@ export function AiAnalysis() {
             </div>
           )}
           {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}
-            >
+            <React.Fragment key={message.id}>
               <div
-                className={cn(
-                  "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed",
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "border bg-card text-foreground",
-                )}
+                className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}
               >
-                {message.role === "assistant" ? (
-                  <AssistantContent content={message.content} />
-                ) : (
-                  message.content
-                )}
-                {message.role === "assistant" && <AiDisclaimer />}
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed",
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "border bg-card text-foreground",
+                  )}
+                >
+                  {message.role === "assistant" ? (
+                    <AssistantContent content={message.content} />
+                  ) : (
+                    message.content
+                  )}
+                  {message.role === "assistant" && <AiDisclaimer />}
+                  <div
+                    className={cn(
+                      "mt-1.5 flex items-center gap-2 text-[10px]",
+                      message.role === "user"
+                        ? "justify-end text-primary-foreground/70"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+                    {message.role === "assistant" && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void copyMessage(message.content)}
+                          className="inline-flex items-center gap-1 hover:text-foreground"
+                        >
+                          <Copy className="size-3" />
+                          {t("common.copy")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => regenerate(message.id)}
+                          disabled={pending}
+                          className="inline-flex items-center gap-1 hover:text-foreground disabled:opacity-50"
+                        >
+                          <RefreshCw className="size-3" />
+                          {t("aiAnalysis.regenerate")}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+              {setsByAnchor.get(message.id)?.map(renderChangeSet)}
+            </React.Fragment>
           ))}
-          {changeSets.map((set) => (
-            <ChangeSetPanel
-              key={set.id}
-              changeSet={set}
-              saving={savingSetId === set.id}
-              onSelect={(itemId, selected) => void selectChange(set.id, itemId, selected)}
-              onSave={() => void saveChangeSet(set.id)}
-              onDiscard={() => void discardChangeSet(set.id)}
-            />
-          ))}
+          {orphanSets.map(renderChangeSet)}
           {pending && (
-            <div className="flex justify-start">
+            <div className="flex justify-start" role="status" aria-live="polite">
               <div className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-2.5 text-sm text-muted-foreground">
                 <span className="flex items-center gap-2">
                   <Loader2 className="size-4 animate-spin" /> {t("aiAnalysis.thinking")}
@@ -360,7 +455,10 @@ export function AiAnalysis() {
             </div>
           )}
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+            >
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p>{error}</p>
@@ -373,25 +471,51 @@ export function AiAnalysis() {
             </div>
           )}
         </div>
-        <div className="mt-3 border-t pt-3">
+        <div className="relative mt-3 border-t pt-3">
+          {showJump && (
+            <button
+              type="button"
+              onClick={() => {
+                const el = scrollRef.current;
+                if (!el) return;
+                el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+                atBottomRef.current = true;
+                setShowJump(false);
+              }}
+              className="absolute -top-11 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border bg-card px-3 py-1.5 text-xs shadow-sm transition-colors hover:bg-muted"
+            >
+              <ArrowDown className="size-3" />
+              {t("aiAnalysis.jumpToLatest")}
+            </button>
+          )}
           <div className="flex items-end gap-2">
-            <Link to="/labs/import" title={t("aiAnalysis.attachDocument")}>
-              <Button size="icon" variant="outline">
-                <Paperclip className="size-4" />
-              </Button>
-            </Link>
+            {/* Not a message attachment: it opens the document importer, so the
+                icon and label both say "import", not "paperclip". */}
+            <Tooltip content={t("aiAnalysis.attachDocument")}>
+              <Link
+                to="/labs/import"
+                aria-label={t("aiAnalysis.attachDocument")}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <FileUp className="size-4" />
+                <span className="hidden sm:inline">{t("aiAnalysis.importDocument")}</span>
+              </Link>
+            </Tooltip>
             <Textarea
+              ref={inputRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                // isComposing: an IME candidate window is open, so Enter is
+                // picking a character, not sending the message.
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   void send(input);
                 }
               }}
               placeholder={t("aiAnalysis.placeholder")}
               rows={2}
-              className="max-h-40 min-h-[2.5rem] flex-1 resize-none"
+              className="max-h-40 min-h-[2.5rem] flex-1 resize-none overflow-y-auto"
             />
             {pending ? (
               <Button onClick={stop} size="icon" variant="outline" title={t("aiAnalysis.stop")}>
@@ -406,6 +530,19 @@ export function AiAnalysis() {
           <p className="mt-1.5 text-[11px] text-muted-foreground">{t("aiAnalysis.inputHint")}</p>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmClear}
+        title={t("aiAnalysis.clearConfirmTitle")}
+        description={t("aiAnalysis.clearConfirmBody")}
+        confirmLabel={t("aiAnalysis.clear")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          setConfirmClear(false);
+          void clear();
+        }}
+        onClose={() => setConfirmClear(false)}
+      />
     </>
   );
 }

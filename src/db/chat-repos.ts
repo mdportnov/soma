@@ -62,6 +62,15 @@ export async function getChatMessage(id: number): Promise<ChatMessageRecord | nu
   return rows[0] ?? null;
 }
 
+/**
+ * Removes one message from the thread — used when an answer is regenerated, so
+ * the transcript keeps a single reply per question instead of stacking retries.
+ * Tool events cascade; change sets are anchored to the user message and stay.
+ */
+export async function deleteChatMessage(id: number): Promise<void> {
+  await db.delete(chatMessage).where(eq(chatMessage.id, id));
+}
+
 export async function archiveChatThread(threadId: number): Promise<void> {
   await db
     .update(chatThread)

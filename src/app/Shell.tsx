@@ -147,6 +147,9 @@ export function Shell() {
   const { data: aiConfigured } = useQuery(() => isAiConfigured(), [location.key, setupTick], {
     throwOnError: false,
   });
+  // Routes that own the whole main area instead of scrolling with the page:
+  // the chat transcript scrolls inside itself and the composer stays pinned.
+  const fillsViewport = location.pathname === "/assistant";
   const navType = useNavigationType();
   const mainRef = React.useRef<HTMLElement>(null);
   // Per-history-entry scroll offsets, keyed by location.key (unique per entry).
@@ -354,12 +357,25 @@ export function Shell() {
           </NavLink>
         </div>
       </aside>
-      <main ref={mainRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <main
+        ref={mainRef}
+        className={cn(
+          "min-w-0 flex-1 overflow-x-hidden",
+          fillsViewport ? "overflow-y-hidden" : "overflow-y-auto",
+        )}
+      >
         {/* key on location.key re-mounts the page so navigation fades in;
             scroll restoration is handled imperatively on <main> above. */}
         <div
           key={`${location.key}:${retryNonce}`}
-          className="animate-step-in mx-auto w-full min-w-0 max-w-6xl p-6 md:p-8"
+          className={cn(
+            "animate-step-in mx-auto flex w-full min-w-0 max-w-6xl flex-col p-6 md:p-8",
+            // The chat page owns the viewport: it fills the main area exactly so
+            // its composer sits at the bottom edge and only the transcript
+            // scrolls. Bottom padding is trimmed so the input is not left
+            // floating above a band of dead space.
+            fillsViewport && "h-full pb-3 md:pb-4",
+          )}
         >
           <RouteErrorBoundary
             resetKey={`${location.key}:${retryNonce}`}

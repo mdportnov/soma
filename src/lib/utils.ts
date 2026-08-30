@@ -30,6 +30,17 @@ export function formatDate(iso: string | null | undefined): string {
   });
 }
 
+/**
+ * Clock time for an ISO instant (chat messages, log lines). Same-day items only
+ * need the time; the date belongs to whatever groups them.
+ */
+export function formatTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(uiLocale(), { hour: "2-digit", minute: "2-digit" });
+}
+
 export function formatValue(v: number | null | undefined, digits = 2): string {
   if (v == null) return "—";
   return Number.isInteger(v) ? String(v) : v.toFixed(digits).replace(/\.?0+$/, "");

@@ -57,6 +57,30 @@
       ]
     },
     {
+      "identifier": "fs:allow-write-text-file",
+      "comment": "JSON/CSV/HTML exports go through writeTextFile, which invokes write_text_file — a separate command not covered by allow-write-file. Save-dialog picks outside these dirs are allowed dynamically by the dialog plugin.",
+      "allow": [
+        {
+          "path": "$APPDATA/**"
+        },
+        {
+          "path": "$DOWNLOAD/**"
+        },
+        {
+          "path": "$DOCUMENT/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-remove",
+      "comment": "Deleting a stored attachment file invokes the remove command; without it every attachment delete failed silently and leaked the file. Scoped to the app's own data dir only.",
+      "allow": [
+        {
+          "path": "$APPDATA/**"
+        }
+      ]
+    },
+    {
       "identifier": "fs:allow-mkdir",
       "allow": [
         {

@@ -1064,12 +1064,17 @@ function LogsCard() {
 function ExportCard() {
   const { t } = useI18n();
   const { profileId } = useApp();
+  const toast = useToast();
   const [busy, setBusy] = React.useState<string | null>(null);
 
   const run = async (kind: string, fn: () => Promise<boolean>) => {
     setBusy(kind);
     try {
       await fn();
+    } catch (e) {
+      console.error("Data export failed", e);
+      const message = e instanceof Error ? e.message : String(e);
+      toast.error(t("settings.export.error", { message }));
     } finally {
       setBusy(null);
     }

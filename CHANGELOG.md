@@ -9,6 +9,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.0] — 2026-08-30
 
+### Added
+
+- **A lab result's value can be corrected.** Until now only dictionary ranges
+  and unmapped findings were editable, so a value the AI importer misread was
+  frozen in the record. Each result row now has an edit action for the value and
+  its unit; a value whose unit is not recognized is saved raw and unflagged
+  rather than refused.
+- **Lp(a) in mass units.** The importer expected nmol/L while many labs report
+  mg/dL or g/L, and no universal conversion exists — apo(a) isoform size varies
+  between people. Mass results are now kept on their own scale with its own
+  reference range (30 mg/dL = 0.30 g/L) instead of being converted with an
+  invented factor; g/L → mg/dL still converts, mg/dL → nmol/L still refuses.
+- **Chat: copy, regenerate, and message times.** Every answer can be copied or
+  re-asked, and each message shows when it was sent.
+
+### Fixed
+
+- **eGFR import failed on its own unit.** The dictionary spells the unit with a
+  superscript (`mL/min/1.73m²`), so a lab writing `m2` produced "No known
+  conversion mL/min/1.73m2 → mL/min/1.73m2". Unit normalization now folds
+  superscript digits, caret exponents and decimal commas, which also lets
+  `10⁹/L` and `10³/µL` reach the aliases they always had.
+- **Data export did nothing on macOS.** `writeTextFile` calls a Tauri command
+  that the granted `fs:allow-write-file` permission does not cover, so JSON, CSV
+  and emergency-card HTML exports were rejected on every platform while the PDF
+  exports kept working. The export card also swallowed the failure and showed a
+  generic message; it now reports the real error. The same missing-permission
+  bug silently failed every attachment-file deletion.
+- **The chat composer floated above dead space.** The page measured its own
+  height in JavaScript and then subtracted the page padding. It now fills the
+  main area through the layout, so only the transcript scrolls and the input
+  sits on the bottom edge.
+- **A saved change card hung under every later answer.** Change sets were
+  rendered after the whole transcript instead of with the turn that produced
+  them, expanded, with no way to put them away. They now sit in their own turn
+  and collapse to a one-line receipt once saved or discarded, expandable on
+  demand.
+- **Auto-scroll no longer yanks the transcript down** while an earlier answer is
+  being read — a jump button offers the move instead — and Enter no longer sends
+  a message mid-IME-composition.
+- **Clearing the chat asks first.** It archives the thread, which was one
+  unconfirmed click away.
+- **Trends and prompts no longer mix scales.** A biomarker charted on two
+  incompatible scales drew both on one axis with the dictionary bands applied to
+  either; the chart now plots one unit at a time and the interpretation prompt
+  labels each reading with its own unit.
+
+### Changed
+
+- **Every dialog uses the same footer.** Twelve forms drew their own
+  cancel/confirm row: three never wired ⌘/Ctrl+Enter and two editable forms had
+  no unsaved-changes guard, so a stray backdrop click discarded a half-filled
+  form in silence.
+- **Change cards read like records, not payloads.** Empty fields and internal
+  identifiers are hidden and field names are translated instead of being
+  de-camel-cased on screen.
+- **Twenty-four form placeholders were hardcoded English** in an otherwise fully
+  localized interface, and the composer's paperclip — which opens the document
+  importer rather than attaching to a message — now says so.
+
 ## [0.7.1] — 2026-07-29
 
 ### Added

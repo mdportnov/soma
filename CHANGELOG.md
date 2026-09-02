@@ -7,6 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The assistant keeps separate chats.** There was one conversation and a
+  button that wiped it. Chats are now a list with rename, archive, restore and
+  delete, each carrying its own metadata: the models that answered, the records
+  it read, and the changes it saved to the record. A chat lives at its own URL,
+  so a conversation can be linked to, and it is searchable by title and by the
+  questions asked in it. Clearing is replaced by archiving, which is reversible.
+- **The assistant can be asked what to pay attention to.** Three tools replace
+  what previously took a dozen guesses: an overview that pairs each
+  out-of-range result with its previous value and classifies the move, marks
+  results inside the reference range but outside the optimal one for the
+  profile's sex and age, and surfaces markers that were abnormal and have not
+  been retaken in a year; a since-last-time diff; and a vaccination status that
+  keeps "not recorded" and "overdue" apart, because they are not the same
+  situation. The system prompt now forbids any number, date or name that did
+  not come from a tool in the same turn.
+- **⌘K searches the record instead of a fraction of it.** The index grew from
+  ten entity types to nineteen — most usefully individual lab results, so a
+  biomarker name finds the measured values and not only the dictionary entry,
+  in either language through its aliases. Also indexed: unmapped findings,
+  prescriptions, retest schedules, attachment file names and chat threads.
+  Weight, blood-pressure and lifestyle rows join only when they carry a note; a
+  bare number has nothing to match on. The palette opens on sections and recent
+  records rather than a blank list, offers section navigation and quick
+  actions, tolerates typos, and opens the record itself instead of the list it
+  sits on.
+- **Deleting says what it will take with it.** Eleven of sixteen delete points
+  removed data on a single click. Every one now names the record and counts its
+  cascade from the database: a medication states how many intake entries go
+  with it, a lab panel names its results, findings and source file, a visit
+  distinguishes what is unlinked from what is erased. The confirm button is
+  never the focused one.
+- **Duplicate imports are caught before they land.** Re-importing the same
+  report used to create a second panel and double every point in the trend.
+  Import now reports a likely or possible duplicate with the date, the lab and
+  how many biomarkers overlap, and lets you continue anyway — two draws on one
+  day are legitimate.
+
+### Fixed
+
+- **Search returned no records at all.** `db.all()` on raw SQL carries no
+  drizzle field map, so rows arrived as positional arrays and the reader took
+  `entity_type` off them, which was always undefined. Every record query failed
+  silently and looked like an empty library.
+- **Undo restored the row and quietly dropped the rest.** A restored visit came
+  back without the diagnoses, symptoms and imaging that deletion had unlinked,
+  and the attachment had already been erased from disk. Those are relinked now,
+  and where restoration is still incomplete the confirmation and the toast name
+  the missing part instead of offering the same button as a full undo. The undo
+  toast holds ten seconds and pauses while hovered, so reading the caveat does
+  not cost the button.
+- **Multi-step deletes could stop halfway.** They ran as separate statements on
+  a pooled connection, so an interruption could leave a panel without its
+  results. They now use the transaction path the chat code already used, in
+  child-first order. Panel creation writes its results and findings in the same
+  transaction, which removes the compensating rollback that relied on a cascade
+  rather than repairing it.
+- **Deleting left attachments behind.** Four of six delete paths never removed
+  the linked file or its row, and allergy and prescription imports never
+  attached the document to anything, orphaning a file on every run. Cleanup is
+  guarded: one imported certificate can be shared by several vaccine doses, and
+  the obvious version would erase a file still in use.
+- **Deleting a prescription failed or broke a reference.** A medication tracked
+  from it holds a foreign key with no cascade. The dialog now lists the
+  medications by name and period and asks to detach them explicitly.
+- **The "full" export was not full.** Findings, health notes, retest schedules
+  and lifestyle logs were missing entirely. They are included, along with record
+  provenance, and a test now compares the export list against the schema so a
+  new table has to be either exported or excluded with a reason. Attachment
+  files are still names only, and the description says so.
+- **Search results went stale after any edit made outside the palette.** A
+  deleted record kept appearing until the palette was reopened. Writes now mark
+  the index stale and it refreshes on the next read; a test parses the source
+  and fails if a new write path forgets to.
+- **The MCP sidecar had drifted into a second implementation.** It writes the
+  same database, deleted a medication without cleaning its attachment, and
+  carried its own copy of the panel-insert order. It now imports the shared
+  statement plans, and its read-modify-write updates run in one immediate
+  transaction — two of them could previously duplicate a retest schedule
+  silently.
+- **A tooltip near the right edge collapsed to one word per line.** A fixed
+  element positioned by `left` gets only the space remaining to the viewport
+  edge. Tooltips are now measured and shifted rather than squeezed, and the
+  vaccination tooltip is laid out as a record instead of a run-on string.
+
+### Changed
+
+- **Navigation stopped jerking.** The page wrapper animated while it was still
+  empty: the route remounted, the animation played on a container holding only a
+  spinner, and the content then appeared in one hard frame. A local database
+  read takes milliseconds, so the spinner was pure flicker with a height
+  collapse on either side. Loading is delayed past 180ms, the animation belongs
+  to the content that arrives, and everything reduces to a fade under
+  `prefers-reduced-motion`.
+- **Light theme stopped washing out.** Muted text and borders sat too close to
+  the background, and the success and warning colors are tuned as fills — below
+  4.5:1 as text, which is how they were used in forty-one places. Text now has
+  its own darker variants.
+- **The vaccination screen leads with what needs doing.** What required action
+  was a badge in the corner with unlabeled red dots while two reference tiers
+  sat open by default. It is now a block at the top with the action attached,
+  statuses read as a system with icons rather than color alone, and four
+  near-identical descriptions were cut.
+- **Copy and regenerate are icons.** The labels are gone; hovering explains
+  what each does.
+
 ## [0.8.0] — 2026-08-30
 
 ### Added

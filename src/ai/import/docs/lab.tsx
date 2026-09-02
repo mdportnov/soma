@@ -671,10 +671,10 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
                 <TableRow>
                   <TableHead className="w-10">{t("common.save")}</TableHead>
                   <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
-                  <TableHead>{t("fields.value")}</TableHead>
+                  <TableHead numeric>{t("fields.value")}</TableHead>
                   <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
                   <TableHead>{t("importWizard.matchColumn")}</TableHead>
-                  <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
+                  <TableHead numeric>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -740,7 +740,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
                           </p>
                         )}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">
+                      <TableCell numeric className="whitespace-nowrap">
                         {formatValue(row.raw.value)} {row.raw.unit}
                       </TableCell>
                       <TableCell className="min-w-52">
@@ -804,11 +804,11 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs">
+                      <TableCell numeric className="whitespace-nowrap text-xs">
                         {row.conversion == null ? (
                           <span className="text-muted-foreground">—</span>
                         ) : row.conversion.ok ? (
-                          <span className="tabular-nums text-muted-foreground">
+                          <span className="text-muted-foreground">
                             {formatValue(row.conversion.value)} {row.conversion.unit}
                           </span>
                         ) : (

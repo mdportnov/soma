@@ -1085,7 +1085,7 @@ function SymptomsTab({
                     <TableHead>{t("symptoms.table.date")}</TableHead>
                     <TableHead>{t("symptoms.table.time")}</TableHead>
                     <TableHead>{t("symptoms.table.symptom")}</TableHead>
-                    <TableHead>{t("symptoms.table.severity")}</TableHead>
+                    <TableHead numeric>{t("symptoms.table.severity")}</TableHead>
                     <TableHead>{t("symptoms.table.notes")}</TableHead>
                     <TableHead actions />
                   </TableRow>
@@ -1096,7 +1096,7 @@ function SymptomsTab({
                       <TableCell>{formatDate(r.date)}</TableCell>
                       <TableCell className="text-muted-foreground">{r.time ?? "—"}</TableCell>
                       <TableCell className="font-medium">{r.symptomName}</TableCell>
-                      <TableCell>
+                      <TableCell numeric>
                         <span className="inline-flex items-center gap-1.5 tabular-nums">
                           <span
                             className="size-2 rounded-full"

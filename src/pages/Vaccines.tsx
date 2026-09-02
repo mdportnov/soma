@@ -159,7 +159,7 @@ export function Vaccines() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>{t("vaccines.table.date")}</TableHead>
-                          <TableHead>{t("vaccines.table.dose")}</TableHead>
+                          <TableHead numeric>{t("vaccines.table.dose")}</TableHead>
                           <TableHead>{t("vaccines.table.manufacturerBatch")}</TableHead>
                           <TableHead>{t("vaccines.table.country")}</TableHead>
                           <TableHead>{t("vaccines.table.administeredBy")}</TableHead>
@@ -177,7 +177,7 @@ export function Vaccines() {
                               className={highlight.className(v.id)}
                             >
                               <TableCell>{formatDate(v.date)}</TableCell>
-                              <TableCell>{v.dose ?? "—"}</TableCell>
+                              <TableCell numeric>{v.dose ?? "—"}</TableCell>
                               <TableCell className="text-muted-foreground">
                                 {[v.manufacturer, v.batchNumber].filter(Boolean).join(" / ") || "—"}
                               </TableCell>

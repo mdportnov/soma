@@ -82,3 +82,14 @@ export function formatValue(v: number | null | undefined, digits = 2): string {
   if (v == null) return "—";
   return Number.isInteger(v) ? String(v) : v.toFixed(digits).replace(/\.?0+$/, "");
 }
+
+/**
+ * True when `target` is a text-editing surface — an `<input>`, `<textarea>`, or
+ * anything `contentEditable` (the chat composer). Global keyboard shortcuts
+ * must skip these so they don't hijack a key the user is typing with.
+ */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (target == null || typeof target !== "object") return false;
+  const el = target as Partial<HTMLElement>;
+  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable === true;
+}

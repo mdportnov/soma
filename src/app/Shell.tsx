@@ -8,7 +8,7 @@ import {
   useNavigationType,
 } from "react-router-dom";
 import { Bell, Search, Settings, SlidersHorizontal } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isEditableTarget } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { useApp } from "@/app/AppContext";
 import { NAV, type NavItem } from "@/app/nav-items";
@@ -148,6 +148,10 @@ export function Shell() {
       }
       // While the palette owns the keyboard, history keys belong to it.
       if (searchOpen) return;
+      // ⌘[ / ⌘] must not fire while the user is editing text (the chat
+      // composer, a form field): navigating away would silently discard
+      // whatever they were typing.
+      if (isEditableTarget(e.target)) return;
       if (key === "[" && canGoBack) {
         e.preventDefault();
         navigate(-1);

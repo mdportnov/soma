@@ -1023,6 +1023,7 @@ export const ru = {
       vaccine: "Прививки",
       allergy: "Аллергии",
       imaging: "Снимки",
+      health_note: "Заметка о здоровье",
     },
     ranges: {
       sixMonths: "6М",

@@ -183,8 +183,8 @@ export function Labs() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("labs.tableColumns.finding")}</TableHead>
-                  <TableHead>{t("labPanelDetail.tableColumns.value")}</TableHead>
-                  <TableHead>{t("labPanelDetail.tableColumns.reference")}</TableHead>
+                  <TableHead numeric>{t("labPanelDetail.tableColumns.value")}</TableHead>
+                  <TableHead numeric>{t("labPanelDetail.tableColumns.reference")}</TableHead>
                   <TableHead>{t("labs.tableColumns.date")}</TableHead>
                   <TableHead>{t("labs.tableColumns.lab")}</TableHead>
                 </TableRow>
@@ -211,7 +211,7 @@ export function Labs() {
                             {f.rawLabel.toLowerCase() !== g.name.toLowerCase() ? f.rawLabel : "—"}
                           </span>
                         </TableCell>
-                        <TableCell className="max-w-48 tabular-nums">
+                        <TableCell numeric className="max-w-48">
                           <span
                             className="block truncate"
                             title={`${f.valueText}${f.unit ? ` ${f.unit}` : ""}`}
@@ -220,7 +220,7 @@ export function Labs() {
                             {f.unit ? ` ${f.unit}` : ""}
                           </span>
                         </TableCell>
-                        <TableCell className="max-w-56 text-muted-foreground">
+                        <TableCell numeric className="max-w-56 text-muted-foreground">
                           <span className="block truncate" title={f.refRangeText ?? undefined}>
                             {f.refRangeText ?? "—"}
                           </span>

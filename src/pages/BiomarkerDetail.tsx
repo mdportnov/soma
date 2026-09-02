@@ -319,8 +319,8 @@ function BiomarkerReadings({
             <TableHeader>
               <TableRow>
                 <TableHead>{t("fields.date")}</TableHead>
-                <TableHead>{t("fields.value")}</TableHead>
-                <TableHead>{t("labPanelDetail.tableColumns.change")}</TableHead>
+                <TableHead numeric>{t("fields.value")}</TableHead>
+                <TableHead numeric>{t("labPanelDetail.tableColumns.change")}</TableHead>
                 <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
                 <TableHead>{t("labs.tableColumns.lab")}</TableHead>
               </TableRow>
@@ -335,10 +335,10 @@ function BiomarkerReadings({
                         {formatDate(p.date)}
                       </Link>
                     </TableCell>
-                    <TableCell className="font-medium tabular-nums">
+                    <TableCell numeric className="whitespace-nowrap font-medium">
                       {formatValue(p.value)} {p.unit}
                     </TableCell>
-                    <TableCell>
+                    <TableCell numeric>
                       {change ? (
                         <DeltaBadge change={change} unit={p.unit} />
                       ) : (

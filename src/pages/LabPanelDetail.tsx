@@ -371,10 +371,10 @@ export function LabPanelDetail() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
-                      <TableHead>{t("labPanelDetail.tableColumns.value")}</TableHead>
-                      <TableHead>{t("labPanelDetail.tableColumns.change")}</TableHead>
-                      <TableHead>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
-                      <TableHead>{t("labPanelDetail.tableColumns.reference")}</TableHead>
+                      <TableHead numeric>{t("labPanelDetail.tableColumns.value")}</TableHead>
+                      <TableHead numeric>{t("labPanelDetail.tableColumns.change")}</TableHead>
+                      <TableHead numeric>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
+                      <TableHead numeric>{t("labPanelDetail.tableColumns.reference")}</TableHead>
                       <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
                       <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
                     </TableRow>
@@ -412,10 +412,10 @@ export function LabPanelDetail() {
                             {r.biomarker.category}
                           </p>
                         </TableCell>
-                        <TableCell className="tabular-nums">
+                        <TableCell numeric className="whitespace-nowrap">
                           {formatValue(r.value)} {r.unit}
                         </TableCell>
-                        <TableCell>
+                        <TableCell numeric>
                           {(() => {
                             const pc = changeByResult.get(r.id);
                             if (pc?.change)
@@ -435,12 +435,12 @@ export function LabPanelDetail() {
                             return <span className="text-xs text-muted-foreground">—</span>;
                           })()}
                         </TableCell>
-                        <TableCell className="tabular-nums text-muted-foreground">
+                        <TableCell numeric className="whitespace-nowrap text-muted-foreground">
                           {r.valueNormalized != null && r.unitNormalized !== r.unit
                             ? `${formatValue(r.valueNormalized)} ${r.unitNormalized}`
                             : "—"}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell numeric className="whitespace-nowrap text-muted-foreground">
                           {(() => {
                             // A result normalized onto an alternate scale (Lp(a) in
                             // mg/dL) was flagged against that scale's range, so the
@@ -547,14 +547,14 @@ export function LabPanelDetail() {
                             </p>
                           )}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap tabular-nums">
+                        <TableCell numeric className="whitespace-nowrap">
                           {f.valueText}
                           {f.unit ? ` ${f.unit}` : ""}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell numeric className="text-muted-foreground">
                           {f.refRangeText ?? "—"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell actions>
                           <div className="flex items-center justify-end gap-1">
                             <SourcePageLink attachment={source} page={f.sourcePage} />
                             <Button

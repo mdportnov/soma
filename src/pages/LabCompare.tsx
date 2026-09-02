@@ -119,9 +119,9 @@ export function LabCompare() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("labCompare.columns.biomarker")}</TableHead>
-                  <TableHead>{a ? formatDate(a.date) : t("labCompare.panelA")}</TableHead>
-                  <TableHead>{b ? formatDate(b.date) : t("labCompare.panelB")}</TableHead>
-                  <TableHead>{t("labCompare.columns.change")}</TableHead>
+                  <TableHead numeric>{a ? formatDate(a.date) : t("labCompare.panelA")}</TableHead>
+                  <TableHead numeric>{b ? formatDate(b.date) : t("labCompare.panelB")}</TableHead>
+                  <TableHead numeric>{t("labCompare.columns.change")}</TableHead>
                   <TableHead>{t("labCompare.columns.status")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -143,21 +143,21 @@ export function LabCompare() {
                           {row.biomarker.category}
                         </p>
                       </TableCell>
-                      <TableCell className="tabular-nums">
+                      <TableCell numeric className="whitespace-nowrap">
                         {av ? (
                           `${formatValue(av.value)} ${av.unit}`
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="tabular-nums">
+                      <TableCell numeric className="whitespace-nowrap">
                         {bv ? (
                           `${formatValue(bv.value)} ${bv.unit}`
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell numeric>
                         {row.change ? (
                           <DeltaBadge change={row.change} unit={bv?.unit} />
                         ) : row.a && row.b ? (

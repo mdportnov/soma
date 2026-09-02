@@ -1,5 +1,12 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { formatDate, formatDateIn, formatDateObject, stripEraSuffix, uiLocale } from "@/lib/utils";
+import {
+  formatDate,
+  formatDateIn,
+  formatDateObject,
+  isEditableTarget,
+  stripEraSuffix,
+  uiLocale,
+} from "@/lib/utils";
 
 /**
  * `uiLocale()` reads `<html lang>`, which the Node test environment does not
@@ -106,5 +113,30 @@ describe("formatDate", () => {
   it("still renders the placeholder for missing input", () => {
     setLang("ru");
     expect(formatDate(null)).toBe("—");
+  });
+});
+
+describe("isEditableTarget", () => {
+  function fakeTarget(props: Record<string, unknown>): EventTarget {
+    return props as unknown as EventTarget;
+  }
+
+  it("flags inputs and textareas", () => {
+    expect(isEditableTarget(fakeTarget({ tagName: "INPUT" }))).toBe(true);
+    expect(isEditableTarget(fakeTarget({ tagName: "TEXTAREA" }))).toBe(true);
+  });
+
+  it("flags contentEditable elements regardless of tag", () => {
+    expect(isEditableTarget(fakeTarget({ tagName: "DIV", isContentEditable: true }))).toBe(true);
+  });
+
+  it("ignores non-editable elements", () => {
+    expect(isEditableTarget(fakeTarget({ tagName: "DIV" }))).toBe(false);
+    expect(isEditableTarget(fakeTarget({ tagName: "BUTTON" }))).toBe(false);
+    expect(isEditableTarget(fakeTarget({ tagName: "DIV", isContentEditable: false }))).toBe(false);
+  });
+
+  it("handles null and non-element targets safely", () => {
+    expect(isEditableTarget(null)).toBe(false);
   });
 });

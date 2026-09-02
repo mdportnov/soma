@@ -166,10 +166,10 @@ export function Lifestyle() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("lifestyle.table.date")}</TableHead>
-                    <TableHead>{t("lifestyle.table.sleep")}</TableHead>
-                    <TableHead>{t("lifestyle.table.training")}</TableHead>
-                    <TableHead>{t("lifestyle.table.stress")}</TableHead>
-                    <TableHead>{t("lifestyle.table.energy")}</TableHead>
+                    <TableHead numeric>{t("lifestyle.table.sleep")}</TableHead>
+                    <TableHead numeric>{t("lifestyle.table.training")}</TableHead>
+                    <TableHead numeric>{t("lifestyle.table.stress")}</TableHead>
+                    <TableHead numeric>{t("lifestyle.table.energy")}</TableHead>
                     <TableHead>{t("lifestyle.table.notes")}</TableHead>
                     <TableHead actions />
                   </TableRow>
@@ -182,31 +182,31 @@ export function Lifestyle() {
                       className={highlight.className(r.id)}
                     >
                       <TableCell>{formatDate(r.date)}</TableCell>
-                      <TableCell className="tabular-nums">
+                      <TableCell numeric>
                         {r.sleepHours == null
                           ? "—"
                           : t("lifestyle.metrics.hours", { n: formatValue(r.sleepHours, 1) })}
                       </TableCell>
-                      <TableCell className="tabular-nums">
+                      <TableCell numeric className="whitespace-nowrap">
                         {r.trainingMinutes == null ? (
                           "—"
                         ) : (
                           <span>
                             {t("lifestyle.metrics.minutes", { n: String(r.trainingMinutes) })}
                             {r.trainingIntensity && (
-                              <span className="ml-1 text-muted-foreground">
-                                · {t(`lifestyle.intensity.${r.trainingIntensity}`)}
+                              <span className="block text-[11px] text-muted-foreground">
+                                {t(`lifestyle.intensity.${r.trainingIntensity}`)}
                               </span>
                             )}
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="tabular-nums">
+                      <TableCell numeric>
                         {r.stressLevel == null
                           ? "—"
                           : t("lifestyle.metrics.scale5", { n: String(r.stressLevel) })}
                       </TableCell>
-                      <TableCell className="tabular-nums">
+                      <TableCell numeric>
                         {r.energyLevel == null
                           ? "—"
                           : t("lifestyle.metrics.scale5", { n: String(r.energyLevel) })}

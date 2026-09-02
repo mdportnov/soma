@@ -2660,6 +2660,49 @@ export const en = {
     forgot:
       "Forgot it? Encrypted data can't be recovered without the passphrase. You can restore from an unencrypted backup or start fresh.",
   },
+
+  // Biomarkers list controls + status badge (added together, one block)
+  biomarkerList: {
+    allCategories: "All categories",
+    count: "{{shown}} of {{total}}",
+    reset: "Reset filters",
+    emptyFiltered: "Nothing matches the current filters: {{filters}}.",
+    refRange: "Ref.",
+    noRefRange: "No reference range",
+    status: {
+      all: "Any status",
+      withData: "With data",
+      outOfRange: "Out of range",
+      notOptimal: "In range, not optimal",
+      optimal: "Optimal",
+      notEvaluated: "Not evaluated",
+      noData: "No data",
+    },
+    sort: {
+      attention: "Needs attention first",
+      name: "By name",
+      recent: "Recently measured first",
+      stale: "Longest unmeasured first",
+      change: "Biggest recent change first",
+    },
+    activeFilter: {
+      query: "search \u201c{{query}}\u201d",
+      status: "status: {{value}}",
+      category: "category: {{value}}",
+    },
+  },
+  flagBadge: {
+    inRange: "in range",
+    notEvaluated: "not evaluated",
+    notEvaluatedHint: "Unit not recognized \u2014 value not checked against its reference range",
+    low: "low",
+    high: "high",
+    critical: "critical",
+  },
+  recordCard: {
+    noDose: "Dose not set",
+    onset: "Onset {{date}}",
+  },
 } as const;
 
 export type TranslationKeys = typeof en;

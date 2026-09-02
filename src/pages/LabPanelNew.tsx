@@ -5,7 +5,6 @@ import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { createPanelWithResults, getProfile, listBiomarkers } from "@/db/repos";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
@@ -131,11 +130,7 @@ export function LabPanelNew() {
   return (
     <>
       <PageHeader
-        back="/labs"
-        breadcrumbs={crumbs(
-          { label: t("nav.labResults"), to: "/labs" },
-          { label: t("breadcrumb.labPanelNew") },
-        )}
+        nav={{ leaf: t("breadcrumb.labPanelNew") }}
         title={t("labPanelNew.title")}
         description={t("labPanelNew.description")}
       />

@@ -18,7 +18,6 @@ import {
 } from "@/components/app/ImportDuplicateNotice";
 import { SourceDocPane } from "@/components/app/SourceFile";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
@@ -110,12 +109,10 @@ export function VerifyImport() {
   return (
     <>
       <PageHeader
-        back={`/labs/${panelId}`}
-        breadcrumbs={crumbs(
-          { label: t("nav.labResults"), to: "/labs" },
-          { label: panelLabel, to: `/labs/${panelId}`, selectable: true },
-          { label: t("breadcrumb.verify") },
-        )}
+        nav={{
+          leaf: t("breadcrumb.verify"),
+          labels: { [`/labs/${panelId}`]: panelLabel },
+        }}
         title={t("verify.title")}
         description={`${formatDate(panel.date)}${panel.labName ? ` — ${panel.labName}` : ""} · ${t("verify.description")}`}
         actions={

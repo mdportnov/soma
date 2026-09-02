@@ -32,6 +32,10 @@
   --success-strong: oklch(0.52 0.12 155);
   --warning-strong: oklch(0.55 0.13 75);
   --radius: 0.625rem;
+  --motion-quick: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 280ms;
+  --motion-linger: 600ms;
 }
 
 .dark {
@@ -93,17 +97,33 @@
   --font-sans:
     "Inter", "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
-  --animate-overlay-in: overlay-in 0.18s ease both;
-  --animate-overlay-out: overlay-out 0.14s ease both;
-  --animate-dialog-in: dialog-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-dialog-out: dialog-out 0.16s cubic-bezier(0.4, 0, 1, 1) both;
-  --animate-step-in: step-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-rise-in: rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-combobox-in: combobox-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-fade-in: fade-in 0.15s ease both;
+  /*
+   * Motion system (see docs/motion.md). Three durations, two curves:
+   *   quick 120ms — feedback: hover, press, focus, toggles, chevrons, popovers
+   *   base  180ms — reveal: page and content entrances, toasts, dialogs
+   *   slow  280ms — spatial: accordion height, list reorder, row removal
+   *   linger 600ms — the one exception: attention that decays (⌘K highlight)
+   * Exits are always quick and ease-in; entrances ease-out. The `--default-*`
+   * keys retune every existing `transition-*` utility in the app to the
+   * feedback role without touching call sites.
+   */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-firm: cubic-bezier(0.4, 0, 1, 1);
+  --default-transition-duration: var(--motion-quick);
+  --default-transition-timing-function: var(--ease-out-soft);
+  --animate-overlay-in: fade-in var(--motion-base) var(--ease-out-soft) both;
+  --animate-overlay-out: fade-out var(--motion-quick) var(--ease-in-firm) both;
+  --animate-dialog-in: dialog-in var(--motion-base) var(--ease-out-soft) both;
+  --animate-dialog-out: dialog-out var(--motion-quick) var(--ease-in-firm) both;
+  --animate-popover-in: popover-in var(--motion-quick) var(--ease-out-soft) both;
+  --animate-reveal: reveal var(--motion-base) var(--ease-out-soft) both;
+  --animate-rise-in: rise-in var(--motion-slow) var(--ease-out-soft) both;
+  --animate-fade-in: fade-in var(--motion-base) var(--ease-out-soft) both;
+  --animate-toast-in: toast-in var(--motion-base) var(--ease-out-soft) both;
+  --animate-toast-out: toast-out var(--motion-quick) var(--ease-in-firm) both;
 }
 
-@keyframes overlay-in {
+@keyframes fade-in {
   from {
     opacity: 0;
   }
@@ -112,7 +132,7 @@
   }
 }
 
-@keyframes overlay-out {
+@keyframes fade-out {
   from {
     opacity: 1;
   }
@@ -121,10 +141,11 @@
   }
 }
 
+/* Layer above the page: settles down onto the page, leaves the same way. */
 @keyframes dialog-in {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.97);
+    transform: translateY(8px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -139,14 +160,16 @@
   }
   to {
     opacity: 0;
-    transform: translateY(8px) scale(0.98);
+    transform: translateY(6px) scale(0.98);
   }
 }
 
-@keyframes step-in {
+/* Small layer anchored to a control (menu, combobox, tooltip): grows from
+   its anchor edge — `transform-origin` is set inline by the positioner. */
+@keyframes popover-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: scale(0.97);
   }
   to {
     opacity: 1;
@@ -154,6 +177,20 @@
   }
 }
 
+/* Content appearing in place: a wizard step, a section that finished loading,
+   a filtered-in card. Rises a hair so it reads as arriving, not as a cut. */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Onboarding hero only: the one deliberately grand entrance in the app. */
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -165,15 +202,9 @@
   }
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
+/* Route entrances by direction. Lateral = a sidebar jump or a ⌘K result;
+   drill = deeper into a record (content comes from the right); back = up and
+   out (content comes from the left). See `.page-enter` below. */
 @keyframes page-in {
   from {
     opacity: 0;
@@ -185,14 +216,49 @@
   }
 }
 
-@keyframes combobox-in {
+@keyframes page-in-drill {
   from {
     opacity: 0;
-    transform: scale(0.97);
+    transform: translateX(12px);
   }
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes page-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Toasts live in the bottom-right corner: they slide up out of the edge and
+   sink back into it. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
 
@@ -234,33 +300,104 @@
  * resolving its query) and would burn its animation on nothing, leaving the real
  * content to appear with a hard cut. A child inserted later starts its animation
  * at insertion, so the content itself is what fades in — whenever it arrives.
+ *
+ * `data-motion` is set by the shell from the navigation journal: drilling into
+ * a record and coming back out are mirrored, so the direction of travel is felt
+ * without a full push/pop choreography. A REPLACE (consuming `?highlight=`,
+ * switching a chat thread) is not a new screen and gets no entrance at all.
+ *
+ * The first few root elements are staggered by a frame or two: the header
+ * lands first, the content settles in under it. Capped at five children — a
+ * page with a long tail of root elements must not draw itself over half a
+ * second. There is deliberately no exit animation for pages: the old page
+ * would have to stay mounted, which breaks the shell's scroll restoration and
+ * doubles the DOM on every navigation for a 120ms fade nobody waits for.
  */
 .page-enter > * {
-  animation: page-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: page-in var(--motion-base) var(--ease-out-soft) both;
+}
+.page-enter[data-motion="drill"] > * {
+  animation-name: page-in-drill;
+}
+.page-enter[data-motion="back"] > * {
+  animation-name: page-in-back;
+}
+.page-enter[data-motion="none"] > * {
+  animation: none;
+}
+.page-enter > :nth-child(2) {
+  animation-delay: 25ms;
+}
+.page-enter > :nth-child(3) {
+  animation-delay: 50ms;
+}
+.page-enter > :nth-child(4) {
+  animation-delay: 75ms;
+}
+.page-enter > :nth-child(n + 5) {
+  animation-delay: 100ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
   /* Motion off, but not content-appears-out-of-nowhere: every entrance in the
      app degrades to a short opacity fade, and every exit to its mirror. The
-     wildcard clamp covers third-party and utility transitions we don't name. */
+     wildcard clamp covers third-party and utility transitions we don't name.
+     Direction, stagger and FLIP are dropped entirely; what they conveyed is
+     also carried by the back button, the breadcrumbs and the row count, so no
+     meaning is lost. */
   *,
   ::before,
   ::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
   .page-enter > *,
   .animate-fade-in,
-  .animate-step-in,
+  .animate-reveal,
   .animate-rise-in,
-  .animate-combobox-in,
+  .animate-popover-in,
   .animate-dialog-in,
-  .animate-overlay-in {
+  .animate-overlay-in,
+  .animate-toast-in {
     animation: fade-in 0.12s linear both !important;
   }
+  .page-enter[data-motion="none"] > * {
+    animation: none !important;
+  }
   .animate-dialog-out,
-  .animate-overlay-out {
-    animation: overlay-out 0.1s linear both !important;
+  .animate-overlay-out,
+  .animate-toast-out {
+    animation: fade-out 0.1s linear both !important;
+  }
+  /* The spinner is status, not decoration — it must keep turning. The
+     wildcard clamp above would otherwise freeze it (or, for the skeleton
+     pulse, turn an infinite 2s loop into a flicker). */
+  .animate-spin {
+    animation-duration: 1s !important;
+  }
+  .animate-pulse {
+    animation: none !important;
+    opacity: 0.7;
+  }
+  .press:active {
+    transform: none;
+  }
+}
+
+/*
+ * Press feedback for anything clickable that is not a text link: the element
+ * gives a little under the pointer so the click is felt before its result
+ * arrives. Transform only — no layout. Paired with the quick duration so the
+ * release is felt too, not just the press.
+ */
+@utility press {
+  transition-property: color, background-color, border-color, opacity, transform, box-shadow;
+  transition-duration: var(--motion-quick);
+  transition-timing-function: var(--ease-out-soft);
+  &:active:not(:disabled) {
+    transform: scale(0.97);
   }
 }
 

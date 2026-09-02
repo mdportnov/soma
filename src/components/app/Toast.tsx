@@ -2,6 +2,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { UNDO_TOAST_DURATION } from "@/lib/undo-scope";
 
 type Toast = {
@@ -13,6 +14,8 @@ type Toast = {
   onAction?: () => void;
   duration: number;
   variant?: "default" | "error" | "warning";
+  /** Playing its exit; removed from the list when the animation ends. */
+  closing?: boolean;
 };
 
 type ToastContextValue = {
@@ -55,15 +58,30 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const timers = React.useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const durations = React.useRef(new Map<number, number>());
 
-  const dismiss = React.useCallback((id: number) => {
-    const timer = timers.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      timers.current.delete(id);
-    }
-    durations.current.delete(id);
+  const remove = React.useCallback((id: number) => {
     setToasts((ts) => ts.filter((t) => t.id !== id));
   }, []);
+
+  // Dismissal is two-step: the toast plays its exit first and is dropped from
+  // the list when that ends, so a notice sinks back into the corner instead
+  // of blinking out. The timer is a backstop for the case where no
+  // animationend ever arrives (the element was hidden, the tab throttled).
+  const dismiss = React.useCallback(
+    (id: number) => {
+      const timer = timers.current.get(id);
+      if (timer) {
+        clearTimeout(timer);
+        timers.current.delete(id);
+      }
+      durations.current.delete(id);
+      setToasts((ts) => ts.map((t) => (t.id === id ? { ...t, closing: true } : t)));
+      timers.current.set(
+        id,
+        setTimeout(() => remove(id), 400),
+      );
+    },
+    [remove],
+  );
 
   const arm = React.useCallback(
     (id: number) => {
@@ -83,6 +101,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   // caveat must not lose the button mid-sentence. Leaving restarts the full
   // countdown rather than resuming a remainder — simpler, and errs long.
   const hold = React.useCallback((id: number) => {
+    // A toast already on its way out keeps its removal backstop.
+    if (!durations.current.has(id)) return;
     const timer = timers.current.get(id);
     if (timer) {
       clearTimeout(timer);
@@ -161,17 +181,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               aria-live={t.variant === "error" ? "assertive" : "polite"}
               onMouseEnter={() => hold(t.id)}
               onMouseLeave={() => arm(t.id)}
+              onAnimationEnd={() => {
+                if (t.closing) remove(t.id);
+              }}
               onFocus={() => hold(t.id)}
               onBlur={(e) => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node | null)) arm(t.id);
               }}
-              className={
+              className={cn(
+                "pointer-events-auto flex items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-xl",
                 t.variant === "error"
-                  ? "pointer-events-auto flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-foreground shadow-xl animate-combobox-in"
+                  ? "border-destructive/40 bg-destructive/10 text-foreground"
                   : t.variant === "warning"
-                    ? "pointer-events-auto flex items-center gap-3 rounded-lg border border-warning/40 bg-popover px-4 py-3 text-sm text-popover-foreground shadow-xl animate-combobox-in"
-                    : "pointer-events-auto flex items-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-xl animate-combobox-in"
-              }
+                    ? "border-warning/40 bg-popover text-popover-foreground"
+                    : "border-border bg-popover text-popover-foreground",
+                t.closing ? "animate-toast-out" : "animate-toast-in",
+              )}
             >
               {t.variant === "warning" && (
                 <AlertTriangle className="size-4 shrink-0 text-warning-strong" aria-hidden />

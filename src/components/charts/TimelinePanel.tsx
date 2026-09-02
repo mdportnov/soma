@@ -62,22 +62,20 @@ export function TimelinePanel({
             aria-label={collapsed ? t("common.expand") : t("common.collapse")}
             className="-mr-1 inline-flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <ChevronDown
-              className={cn("size-4 transition-transform duration-200", collapsed && "-rotate-90")}
-            />
+            <ChevronDown className={cn("size-4 transition-transform", collapsed && "-rotate-90")} />
           </button>
         </div>
       </div>
 
       <div
         id={contentId}
-        className="grid transition-[grid-template-rows] duration-200 ease-out"
+        className="grid transition-[grid-template-rows] duration-[var(--motion-slow)]"
         style={{ gridTemplateRows: collapsed ? "0fr" : "1fr" }}
         aria-hidden={collapsed}
       >
         <div
           className={cn(
-            "overflow-hidden transition-opacity duration-200",
+            "overflow-hidden transition-opacity duration-[var(--motion-base)]",
             collapsed ? "opacity-0" : "opacity-100",
           )}
         >

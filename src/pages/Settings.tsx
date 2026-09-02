@@ -225,7 +225,7 @@ function SettingsTarget({
     <div
       id={`settings-${section}`}
       className={cn(
-        "scroll-mt-6 rounded-xl transition-shadow duration-300",
+        "scroll-mt-6 rounded-xl transition-shadow duration-[var(--motion-slow)]",
         highlighted === section && "ring-2 ring-primary/50 ring-offset-2 ring-offset-background",
       )}
     >

@@ -22,7 +22,6 @@ import { DOC_TYPE_MODULES, getDocTypeModule } from "@/ai/import/modules";
 import type { AnyDocTypeModule, DocType, ImportContext } from "@/ai/import/registry";
 import { mimeFromPath, toBase64 } from "@/lib/attachments";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { ImportDuplicateNotice, type DuplicateRow } from "@/components/app/ImportDuplicateNotice";
 import { useToast } from "@/components/app/Toast";
@@ -160,8 +159,7 @@ export function ImportWizard() {
     return (
       <>
         <PageHeader
-          back={section.to}
-          breadcrumbs={crumbs(sectionCrumb, { label: t("breadcrumb.importWizard") })}
+          nav={{ leaf: t("breadcrumb.importWizard"), fallback: sectionCrumb }}
           title={t("importWizard.title")}
         />
         <Card className="mx-auto max-w-lg">
@@ -316,8 +314,7 @@ export function ImportWizard() {
   return (
     <>
       <PageHeader
-        back={section.to}
-        breadcrumbs={crumbs(sectionCrumb, { label: t("breadcrumb.importWizard") })}
+        nav={{ leaf: t("breadcrumb.importWizard"), fallback: sectionCrumb }}
         title={t("importWizard.title")}
         description={t("importWizard.description")}
       />
@@ -364,7 +361,7 @@ export function ImportWizard() {
       )}
 
       {/* key={step.name} re-mounts the stage so transitions slide in */}
-      <div key={step.name} className="animate-step-in">
+      <div key={step.name} className="animate-reveal">
         {step.name === "selectType" && (
           <SelectTypeStep
             value={docType}

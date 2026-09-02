@@ -55,7 +55,7 @@ export function Collapsible({
         </div>
         <ChevronDown
           className={cn(
-            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            "mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform",
             open && "rotate-180",
           )}
         />
@@ -63,12 +63,15 @@ export function Collapsible({
 
       <div
         id={contentId}
-        className="grid transition-[grid-template-rows] duration-200"
+        className="grid transition-[grid-template-rows] duration-[var(--motion-slow)]"
         style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">
           <div
-            className={cn("transition-opacity duration-200", open ? "opacity-100" : "opacity-0")}
+            className={cn(
+              "transition-opacity duration-[var(--motion-base)]",
+              open ? "opacity-100" : "opacity-0",
+            )}
           >
             {children}
           </div>

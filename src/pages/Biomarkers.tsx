@@ -1,9 +1,16 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, Pencil, Plus, Search } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpDown, Pencil, Plus, Search, X } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createBiomarker, getBiomarkerSeries, getLatestResults, listBiomarkers } from "@/db/repos";
+import { useListMotion } from "@/hooks/useListMotion";
+import { seedState, type BiomarkerSeed } from "@/app/seed";
+import {
+  createBiomarker,
+  getBiomarkerSeries,
+  getLatestResults,
+  listBiomarkers,
+  type SeriesPoint,
+} from "@/db/repos";
 import type { Biomarker } from "@/db/schema";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
@@ -11,6 +18,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { FlagBadge } from "@/components/app/FlagBadge";
 import { IconAction } from "@/components/app/IconAction";
+import { StatusCard } from "@/components/app/StatusCard";
 import { EditBiomarkerDialog } from "@/components/app/EditBiomarkerDialog";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { Button } from "@/components/ui/button";
@@ -19,45 +27,70 @@ import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import { cn, formatDate, formatValue } from "@/lib/utils";
-import { normalizeLabel } from "@/lib/fuzzy";
+import { formatDate, formatValue } from "@/lib/utils";
+import {
+  SORTS,
+  STATUS_FILTERS,
+  activeFilterKeys,
+  filterItems,
+  groupByCategory,
+  isGroupedSort,
+  listStatus,
+  sortItems,
+  type ListFilters,
+  type ListItem,
+  type Sort,
+  type StatusFilter,
+} from "@/lib/biomarker-list";
+import {
+  loadBiomarkerListPrefs,
+  saveBiomarkerListPrefs,
+  type BiomarkerListPrefs,
+} from "@/lib/biomarker-list-prefs";
 import { useToast } from "@/components/app/Toast";
 import { allKnownUnits } from "@/lib/units";
 import { useI18n } from "@/lib/i18n";
 
-/** Where the latest reading sits relative to the biomarker's two bands. */
-type RangeStatus = "optimal" | "in_range" | "out_of_range" | "not_evaluated";
-
-function rangeStatus(
-  bio: Pick<Biomarker, "optimalLow" | "optimalHigh">,
-  latest: { value: number; outOfRange: boolean; evaluated: boolean },
-): RangeStatus {
-  if (!latest.evaluated) return "not_evaluated";
-  if (latest.outOfRange) return "out_of_range";
-  const { optimalLow, optimalHigh } = bio;
-  const aboveLow = optimalLow == null || latest.value >= optimalLow;
-  const belowHigh = optimalHigh == null || latest.value <= optimalHigh;
-  if ((optimalLow != null || optimalHigh != null) && aboveLow && belowHigh) return "optimal";
-  return "in_range";
-}
-
-// Out-of-range first, then optimal/in-range, then not-evaluated, then no-data —
-// so the markers needing attention rise to the top of each category group.
-const STATUS_RANK: Record<RangeStatus | "no_data", number> = {
-  out_of_range: 0,
-  not_evaluated: 1,
-  optimal: 2,
-  in_range: 2,
-  no_data: 3,
+const STATUS_FILTER_KEYS: Record<StatusFilter, string> = {
+  all: "biomarkerList.status.all",
+  with_data: "biomarkerList.status.withData",
+  out_of_range: "biomarkerList.status.outOfRange",
+  not_optimal: "biomarkerList.status.notOptimal",
+  optimal: "biomarkerList.status.optimal",
+  not_evaluated: "biomarkerList.status.notEvaluated",
+  no_data: "biomarkerList.status.noData",
 };
+
+const SORT_KEYS: Record<Sort, string> = {
+  attention: "biomarkerList.sort.attention",
+  name: "biomarkerList.sort.name",
+  recent: "biomarkerList.sort.recent",
+  stale: "biomarkerList.sort.stale",
+  change: "biomarkerList.sort.change",
+};
+
+/** Sentinel for "every category" in the SelectMenu (its value can't be null). */
+const ALL_CATEGORIES = "__all__";
 
 export function Biomarkers() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const [query, setQuery] = React.useState("");
-  const [onlyTracked, setOnlyTracked] = React.useState(false);
+  const [prefs, setPrefs] = React.useState<BiomarkerListPrefs>(() => loadBiomarkerListPrefs());
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Biomarker | null>(null);
+
+  const updatePrefs = (patch: Partial<BiomarkerListPrefs>) => {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      saveBiomarkerListPrefs(next);
+      return next;
+    });
+  };
+  const resetFilters = () => {
+    setQuery("");
+    updatePrefs({ status: "all", category: null });
+  };
 
   const { data, loading, reload } = useQuery(async () => {
     const [biomarkers, latest] = await Promise.all([listBiomarkers(), getLatestResults(profileId)]);
@@ -69,39 +102,138 @@ export function Biomarkers() {
     return { biomarkers, latest, series };
   }, [profileId]);
 
+  // Derived before the loading guard so the list-motion hook below can run on
+  // every render (rules of hooks); with no data yet the list is simply empty.
+  const biomarkers = data?.biomarkers ?? [];
+  const items: ListItem<Biomarker, SeriesPoint>[] = biomarkers.map((b) => ({
+    biomarker: b,
+    latest: data?.latest.get(b.id),
+    series: data?.series.get(b.id),
+  }));
+  const categories = [...new Set(biomarkers.map((b) => b.category))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  // A stored category that no longer exists (renamed, dictionary changed) must
+  // not silently empty the page.
+  const category =
+    prefs.category != null && categories.includes(prefs.category) ? prefs.category : null;
+  const filters: ListFilters = { query, status: prefs.status, category };
+  const visible = sortItems(filterItems(items, filters), prefs.sort);
+  const grouped = isGroupedSort(prefs.sort) && category == null;
+  const sections: [string | null, ListItem<Biomarker, SeriesPoint>[]][] = grouped
+    ? [...groupByCategory(visible).entries()]
+    : [[null, visible]];
+  const active = activeFilterKeys(filters);
+  // Sorting slides the cards to their new places, filtering fades the
+  // newcomers in — the change the user just asked for is seen, not inferred.
+  const listRef = useListMotion(visible.map((item) => String(item.biomarker.id)));
+
   if (loading || !data) return <Loading />;
 
-  const q = normalizeLabel(query);
-  const filtered = data.biomarkers.filter((b) => {
-    if (onlyTracked && !data.latest.has(b.id)) return false;
-    if (!q) return true;
-    return [b.canonicalName, ...(b.aliases ?? [])].some((n) => normalizeLabel(n).includes(q));
+  const activeFilterLabels = active.map((k) => {
+    if (k === "query") return t("biomarkerList.activeFilter.query", { query: query.trim() });
+    if (k === "status")
+      return t("biomarkerList.activeFilter.status", { value: t(STATUS_FILTER_KEYS[prefs.status]) });
+    return t("biomarkerList.activeFilter.category", { value: category ?? "" });
   });
 
-  const statusOf = (b: Biomarker): RangeStatus | "no_data" => {
-    const latest = data.latest.get(b.id);
-    if (!latest) return "no_data";
-    return rangeStatus(b, {
-      value: latest.value,
-      outOfRange: latest.outOfRange,
-      evaluated: !!latest.evaluated,
-    });
+  const statusBadge = (item: ListItem<Biomarker, SeriesPoint>) => {
+    const status = listStatus(item);
+    switch (status) {
+      case "out_of_range":
+      case "not_evaluated":
+        return (
+          <FlagBadge
+            flag={item.latest?.outOfRange ? (item.latest.flag ?? null) : null}
+            evaluated={status !== "not_evaluated"}
+          />
+        );
+      case "optimal":
+        return <Badge variant="success">{t("biomarkers.optimal")}</Badge>;
+      case "in_range":
+        return <Badge variant="secondary">{t("biomarkers.inRange")}</Badge>;
+      case "no_data":
+        return (
+          <Badge variant="outline" className="text-muted-foreground">
+            {t("biomarkers.noData")}
+          </Badge>
+        );
+    }
   };
 
-  const byCategory = new Map<string, typeof filtered>();
-  for (const b of filtered) {
-    const list = byCategory.get(b.category) ?? [];
-    list.push(b);
-    byCategory.set(b.category, list);
-  }
-  // Within each category: attention first, then by name — stable and predictable.
-  for (const list of byCategory.values()) {
-    list.sort(
-      (a, b) =>
-        STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)] ||
-        a.canonicalName.localeCompare(b.canonicalName),
+  const renderCard = (item: ListItem<Biomarker, SeriesPoint>) => {
+    const b = item.biomarker;
+    const latest = item.latest;
+    const status = listStatus(item);
+    const series = item.series ?? [];
+    const refRange =
+      b.refLow != null || b.refHigh != null
+        ? `${b.refLow ?? "—"}–${b.refHigh ?? "—"} ${b.defaultUnit}`
+        : null;
+    return (
+      <StatusCard
+        key={b.id}
+        motionKey={String(b.id)}
+        to={`/biomarkers/${b.id}`}
+        // What the card already shows travels with the click, so the detail
+        // page paints its header in the same frame instead of after its query.
+        state={seedState<BiomarkerSeed>({
+          kind: "biomarker",
+          biomarker: b,
+          latest: latest
+            ? { value: latest.value, unit: latest.unit, date: latest.date }
+            : undefined,
+        })}
+        title={b.canonicalName}
+        status={statusBadge(item)}
+        muted={status === "no_data"}
+        value={
+          latest ? (
+            <p className="text-base font-semibold leading-none tabular-nums selectable">
+              {formatValue(latest.value)}{" "}
+              <span className="text-xs font-normal text-muted-foreground">{latest.unit}</span>
+            </p>
+          ) : (
+            <p className="text-base font-semibold leading-none text-muted-foreground">—</p>
+          )
+        }
+        aside={
+          series.length > 0 ? (
+            <Sparkline
+              points={series.map((p) => ({
+                date: p.date,
+                value: p.value,
+                unit: p.unit,
+                flag: p.flag,
+                outOfRange: p.outOfRange,
+                evaluated: p.evaluated,
+              }))}
+              optimalLow={b.optimalLow}
+              optimalHigh={b.optimalHigh}
+              lastOutOfRange={status === "out_of_range"}
+              label={b.canonicalName}
+            />
+          ) : undefined
+        }
+        meta={
+          latest
+            ? formatDate(latest.date)
+            : refRange
+              ? `${t("biomarkerList.refRange")} ${refRange}`
+              : t("biomarkerList.noRefRange")
+        }
+        tag={b.isCustom ? <Badge variant="secondary">{t("biomarkers.custom")}</Badge> : undefined}
+        action={
+          <IconAction
+            label={t("biomarkers.editDialog.action")}
+            icon={<Pencil className="size-3.5" />}
+            onClick={() => setEditing(b)}
+            className="size-7 bg-card"
+          />
+        }
+      />
     );
-  }
+  };
 
   return (
     <>
@@ -116,110 +248,78 @@ export function Biomarkers() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-xs">
+        <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t("biomarkers.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-8"
+            aria-label={t("biomarkers.searchPlaceholder")}
           />
         </div>
-        <Button
-          variant={onlyTracked ? "secondary" : "outline"}
-          size="sm"
-          onClick={() => setOnlyTracked(!onlyTracked)}
-        >
-          {t("biomarkers.withDataOnly")}
-        </Button>
+        <SelectMenu
+          value={prefs.status}
+          onChange={(v) => updatePrefs({ status: v as StatusFilter })}
+          options={STATUS_FILTERS.map((s) => ({ value: s, label: t(STATUS_FILTER_KEYS[s]) }))}
+          className="w-full sm:w-44"
+        />
+        <SelectMenu
+          value={category ?? ALL_CATEGORIES}
+          onChange={(v) => updatePrefs({ category: v === ALL_CATEGORIES ? null : v })}
+          options={[
+            { value: ALL_CATEGORIES, label: t("biomarkerList.allCategories") },
+            ...categories.map((c) => ({ value: c, label: c })),
+          ]}
+          className="w-full sm:w-44"
+        />
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <ArrowUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <SelectMenu
+            value={prefs.sort}
+            onChange={(v) => updatePrefs({ sort: v as Sort })}
+            options={SORTS.map((s) => ({ value: s, label: t(SORT_KEYS[s]) }))}
+            className="w-full sm:w-52"
+          />
+        </div>
+        <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+          {t("biomarkerList.count", { shown: String(visible.length), total: String(items.length) })}
+        </span>
+        {active.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={resetFilters}>
+            <X /> {t("biomarkerList.reset")}
+          </Button>
+        )}
       </div>
 
-      {filtered.length === 0 ? (
+      {visible.length === 0 ? (
         <EmptyState
           icon={Activity}
           title={t("biomarkers.emptySearchTitle")}
-          description={t("biomarkers.emptySearchDescription")}
+          description={
+            active.length > 0
+              ? t("biomarkerList.emptyFiltered", { filters: activeFilterLabels.join(" · ") })
+              : t("biomarkers.emptySearchDescription")
+          }
+          action={
+            active.length > 0 ? (
+              <Button variant="outline" size="sm" onClick={resetFilters}>
+                <X /> {t("biomarkerList.reset")}
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
-        <div className="space-y-6">
-          {[...byCategory.entries()].map(([category, items]) => (
-            <section key={category}>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {category}
-              </h2>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {items.map((b) => {
-                  const latest = data.latest.get(b.id);
-                  const status = statusOf(b);
-                  const trend = data.series.get(b.id);
-                  return (
-                    <div key={b.id} className="group relative">
-                      <Link
-                        to={`/biomarkers/${b.id}`}
-                        className={cn(
-                          "block rounded-lg border bg-card p-3 transition-colors hover:bg-muted/40",
-                          // Cards without data recede so markers with readings lead.
-                          status === "no_data" && "border-dashed bg-transparent opacity-60",
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-sm font-medium selectable">
-                            {b.canonicalName}
-                          </p>
-                          {b.isCustom && (
-                            <Badge variant="secondary">{t("biomarkers.custom")}</Badge>
-                          )}
-                        </div>
-                        {latest ? (
-                          <>
-                            <div className="mt-1.5 flex items-center justify-between gap-2">
-                              <p className="text-sm tabular-nums selectable">
-                                <span className="font-semibold">{formatValue(latest.value)}</span>{" "}
-                                <span className="text-xs text-muted-foreground">{latest.unit}</span>
-                              </p>
-                              <div className="flex items-center gap-1.5">
-                                {status === "out_of_range" || status === "not_evaluated" ? (
-                                  <FlagBadge
-                                    flag={latest.outOfRange ? latest.flag : null}
-                                    evaluated={!!latest.evaluated}
-                                  />
-                                ) : status === "optimal" ? (
-                                  <Badge variant="success">{t("biomarkers.optimal")}</Badge>
-                                ) : (
-                                  <Badge variant="secondary">{t("biomarkers.inRange")}</Badge>
-                                )}
-                              </div>
-                            </div>
-                            <div className="mt-1.5 flex items-end justify-between gap-2">
-                              <span className="text-[10px] text-muted-foreground">
-                                {formatDate(latest.date)}
-                              </span>
-                              {trend && trend.length >= 2 && (
-                                <Sparkline
-                                  values={trend.map((p) => p.value)}
-                                  optimalLow={b.optimalLow}
-                                  optimalHigh={b.optimalHigh}
-                                  lastOutOfRange={status === "out_of_range"}
-                                />
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <p className="mt-1.5 text-xs text-muted-foreground">
-                            {t("biomarkers.noData")} · {b.refLow ?? "—"}–{b.refHigh ?? "—"}{" "}
-                            {b.defaultUnit}
-                          </p>
-                        )}
-                      </Link>
-                      <IconAction
-                        label={t("biomarkers.editDialog.action")}
-                        icon={<Pencil className="size-3.5" />}
-                        onClick={() => setEditing(b)}
-                        className="absolute right-1.5 top-1.5 size-7 bg-card opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                      />
-                    </div>
-                  );
-                })}
+        <div ref={listRef} className="space-y-6">
+          {sections.map(([heading, list]) => (
+            <section key={heading ?? "__flat__"}>
+              {heading && (
+                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {heading}
+                </h2>
+              )}
+              <div className="grid auto-rows-fr gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {list.map(renderCard)}
               </div>
             </section>
           ))}
@@ -233,7 +333,7 @@ export function Biomarkers() {
           setCreateOpen(false);
           void reload();
         }}
-        existingCategories={[...new Set(data.biomarkers.map((b) => b.category))]}
+        existingCategories={categories}
         unitCatalog={allKnownUnits(data.biomarkers.map((b) => b.defaultUnit))}
       />
 

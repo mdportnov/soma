@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { MOTION_MS } from "@/lib/motion";
 
 /**
  * Animates its own height to match its content, so swapping children (a wizard
@@ -10,7 +11,7 @@ import { cn } from "@/lib/utils";
 export function AutoHeight({
   children,
   className,
-  duration = 300,
+  duration = MOTION_MS.slow,
 }: {
   children: React.ReactNode;
   className?: string;
@@ -31,7 +32,7 @@ export function AutoHeight({
 
   return (
     <div
-      className={cn("overflow-hidden transition-[height] ease-out", className)}
+      className={cn("overflow-hidden transition-[height] ease-out-soft", className)}
       style={{ height: height ?? undefined, transitionDuration: `${duration}ms` }}
     >
       <div ref={inner}>{children}</div>

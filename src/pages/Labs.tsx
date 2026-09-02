@@ -4,6 +4,7 @@ import { ArrowLeftRight, Paperclip, Plus, Sparkles, TestTubes } from "lucide-rea
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getAllFindings, listPanels } from "@/db/repos";
+import { seedState, type LabPanelSeed } from "@/app/seed";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -98,7 +99,7 @@ export function Labs() {
                 <TableHead>{t("labs.tableColumns.lab")}</TableHead>
                 <TableHead>{t("labs.tableColumns.location")}</TableHead>
                 <TableHead>{t("labs.tableColumns.type")}</TableHead>
-                <TableHead>{t("labs.tableColumns.results")}</TableHead>
+                <TableHead numeric>{t("labs.tableColumns.results")}</TableHead>
                 <TableHead>{t("labs.tableColumns.outOfRange")}</TableHead>
                 <TableHead>{t("labs.tableColumns.source")}</TableHead>
               </TableRow>
@@ -108,7 +109,18 @@ export function Labs() {
                 <TableRow
                   key={p.id}
                   className="cursor-pointer"
-                  onClick={() => navigate(`/labs/${p.id}`)}
+                  // The row's panel and counts ride along so the detail header
+                  // is on screen before the panel's results are queried.
+                  onClick={() =>
+                    navigate(`/labs/${p.id}`, {
+                      state: seedState<LabPanelSeed>({
+                        kind: "labPanel",
+                        panel: p,
+                        resultCount: p.resultCount,
+                        outOfRangeCount: p.outOfRangeCount,
+                      }),
+                    })
+                  }
                 >
                   <TableCell className="font-medium">{formatDate(p.date)}</TableCell>
                   <TableCell>{p.labName ?? "—"}</TableCell>
@@ -124,7 +136,7 @@ export function Labs() {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="tabular-nums">{p.resultCount}</TableCell>
+                  <TableCell numeric>{p.resultCount}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1">
                       {p.resultCount === 0 ? (

@@ -171,7 +171,7 @@ export function Lifestyle() {
                     <TableHead>{t("lifestyle.table.stress")}</TableHead>
                     <TableHead>{t("lifestyle.table.energy")}</TableHead>
                     <TableHead>{t("lifestyle.table.notes")}</TableHead>
-                    <TableHead className="w-20" />
+                    <TableHead actions />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -212,7 +212,7 @@ export function Lifestyle() {
                           : t("lifestyle.metrics.scale5", { n: String(r.energyLevel) })}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{r.notes ?? "—"}</TableCell>
-                      <TableCell>
+                      <TableCell actions>
                         <RowActions
                           onEdit={() => {
                             setEditing(r);

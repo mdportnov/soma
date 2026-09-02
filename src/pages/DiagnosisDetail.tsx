@@ -4,7 +4,6 @@ import { useQuery } from "@/hooks/useQuery";
 import { getDiagnosis, getDiagnosisRelations } from "@/db/repos";
 import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Badge } from "@/components/ui/badge";
@@ -53,11 +52,7 @@ export function DiagnosisDetail() {
   return (
     <>
       <PageHeader
-        back="/diagnoses"
-        breadcrumbs={crumbs(
-          { label: t("nav.diagnoses"), to: "/diagnoses" },
-          { label: diagnosis.name, selectable: true },
-        )}
+        nav={{ leaf: diagnosis.name, selectable: true }}
         title={diagnosis.name}
         description={diagnosis.icdCode ? `ICD ${diagnosis.icdCode}` : undefined}
         actions={

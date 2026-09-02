@@ -1,5 +1,4 @@
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   CircleStop,
@@ -34,6 +33,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { IconAction } from "@/components/app/IconAction";
+import { StatusCard } from "@/components/app/StatusCard";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,6 @@ import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
 import { DurationTimeline, type DurationItem } from "@/components/charts/DurationTimeline";
 import { formatDate, formatValue, todayISO } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -58,7 +57,6 @@ export function Medications() {
   const { t } = useI18n();
   const toast = useToast();
   const { confirmDelete } = useConfirm();
-  const navigate = useNavigate();
   const { data: meds, loading, reload } = useQuery(() => listMedications(profileId), [profileId]);
   const { data: allergies } = useQuery(() => listAllergies(profileId), [profileId]);
   const { data: relations } = useQuery(async () => {
@@ -157,121 +155,130 @@ export function Medications() {
                 <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {section.label}
                 </h2>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {section.items.map((m) => (
-                    <Card key={m.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <button
-                            type="button"
-                            className="min-w-0 text-left"
-                            onClick={() => navigate(`/medications/${m.id}`)}
-                          >
-                            <p className="truncate text-sm font-semibold selectable">{m.name}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground selectable">
-                              {[
-                                m.doseAmount != null
-                                  ? `${formatValue(m.doseAmount)} ${m.doseUnit ?? ""}`.trim()
-                                  : null,
-                                m.schedule?.frequency?.replaceAll("_", " "),
-                                m.schedule?.notes,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ") || "no dose set"}
-                            </p>
-                          </button>
+                <div className="grid auto-rows-fr gap-2 sm:grid-cols-2">
+                  {section.items.map((m) => {
+                    const dose = [
+                      m.doseAmount != null
+                        ? `${formatValue(m.doseAmount)} ${m.doseUnit ?? ""}`.trim()
+                        : null,
+                      m.schedule?.frequency?.replaceAll("_", " "),
+                      m.schedule?.notes,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return (
+                      <StatusCard
+                        key={m.id}
+                        to={`/medications/${m.id}`}
+                        title={m.name}
+                        status={
                           <Badge variant={m.type === "drug" ? "default" : "success"}>
                             {t(`types.${m.type}`)}
                           </Badge>
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          {formatDate(m.startDate)} →{" "}
-                          {m.endDate ? formatDate(m.endDate) : t("timeline.now")}
-                          {m.purpose && <span> · {m.purpose}</span>}
-                        </p>
-                        <MedicationRelated relations={relations?.get(m.id)} />
-                        <div className="mt-3 flex items-center gap-1.5 border-t pt-3">
-                          <IconAction
-                            label={t("common.edit")}
-                            icon={<Pencil />}
-                            onClick={() => {
-                              setEditing(m);
-                              setFormOpen(true);
-                            }}
-                          />
-                          {!m.endDate ? (
+                        }
+                        value={
+                          dose ? (
+                            <p className="truncate text-sm font-medium selectable">{dose}</p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              {t("recordCard.noDose")}
+                            </p>
+                          )
+                        }
+                        meta={
+                          <>
+                            {formatDate(m.startDate)} →{" "}
+                            {m.endDate ? formatDate(m.endDate) : t("timeline.now")}
+                            {m.purpose && <span> · {m.purpose}</span>}
+                          </>
+                        }
+                        muted={!!m.endDate}
+                        actions={
+                          <>
                             <IconAction
-                              label={t("medications.actions.stopToday")}
-                              icon={<CircleStop />}
+                              label={t("common.edit")}
+                              icon={<Pencil />}
+                              onClick={() => {
+                                setEditing(m);
+                                setFormOpen(true);
+                              }}
+                            />
+                            {!m.endDate ? (
+                              <IconAction
+                                label={t("medications.actions.stopToday")}
+                                icon={<CircleStop />}
+                                onClick={async () => {
+                                  // Stop is reversible: an Undo (and the permanent
+                                  // Resume below) restores the open-ended period —
+                                  // resuming the same day leaves no gap recorded.
+                                  await updateMedication(m.id, { endDate: todayISO() });
+                                  void reload();
+                                  toast.showAction(
+                                    t("toasts.medStopped", { name: m.name }),
+                                    t("common.resume"),
+                                    async () => {
+                                      await updateMedication(m.id, { endDate: null });
+                                      void reload();
+                                    },
+                                  );
+                                }}
+                              />
+                            ) : (
+                              <IconAction
+                                label={t("medications.actions.resume")}
+                                icon={<RotateCcw />}
+                                onClick={async () => {
+                                  await updateMedication(m.id, { endDate: null });
+                                  void reload();
+                                  toast.show(t("toasts.medResumed", { name: m.name }));
+                                }}
+                              />
+                            )}
+                            <IconAction
+                              label={t("common.delete")}
+                              icon={<Trash2 />}
+                              destructive
                               onClick={async () => {
-                                // Stop is reversible: an Undo (and the permanent
-                                // Resume below) restores the open-ended period —
-                                // resuming the same day leaves no gap recorded.
-                                await updateMedication(m.id, { endDate: todayISO() });
+                                const { id: _id, ...data } = m;
+                                // The medication_log FK cascades, so the prompt
+                                // has to say how much history goes with the drug.
+                                // Undo re-creates the medication only: the log
+                                // and an imported prescription file stay gone.
+                                const [logCount, attached] = await Promise.all([
+                                  countMedicationLogEntries(m.id),
+                                  getLinkedAttachment("medication", m.id),
+                                ]);
+                                const caveats: UndoCaveat[] = [
+                                  ...(logCount > 0 ? (["log"] as const) : []),
+                                  ...(attached ? (["file"] as const) : []),
+                                ];
+                                const ok = await confirmDelete({
+                                  entity: "medication",
+                                  name: m.name,
+                                  cascade: [{ key: "medicationLog", count: logCount }],
+                                  undoable: true,
+                                  undoCaveats: caveats,
+                                });
+                                if (!ok) return;
+                                await deleteMedication(m.id);
                                 void reload();
-                                toast.showAction(
-                                  t("toasts.medStopped", { name: m.name }),
-                                  t("common.resume"),
+                                toast.showUndo(
+                                  t("toasts.deleted", { name: m.name }),
                                   async () => {
-                                    await updateMedication(m.id, { endDate: null });
+                                    await createMedication(data);
                                     void reload();
                                   },
+                                  { caveat: undoToastCaveat(t, caveats) },
                                 );
                               }}
                             />
-                          ) : (
-                            <IconAction
-                              label={t("medications.actions.resume")}
-                              icon={<RotateCcw />}
-                              onClick={async () => {
-                                await updateMedication(m.id, { endDate: null });
-                                void reload();
-                                toast.show(t("toasts.medResumed", { name: m.name }));
-                              }}
-                            />
-                          )}
-                          <IconAction
-                            label={t("common.delete")}
-                            icon={<Trash2 />}
-                            destructive
-                            onClick={async () => {
-                              const { id: _id, ...data } = m;
-                              // The medication_log FK cascades, so the prompt
-                              // has to say how much history goes with the drug.
-                              // Undo re-creates the medication only: the log
-                              // and an imported prescription file stay gone.
-                              const [logCount, attached] = await Promise.all([
-                                countMedicationLogEntries(m.id),
-                                getLinkedAttachment("medication", m.id),
-                              ]);
-                              const caveats: UndoCaveat[] = [
-                                ...(logCount > 0 ? (["log"] as const) : []),
-                                ...(attached ? (["file"] as const) : []),
-                              ];
-                              const ok = await confirmDelete({
-                                entity: "medication",
-                                name: m.name,
-                                cascade: [{ key: "medicationLog", count: logCount }],
-                                undoable: true,
-                                undoCaveats: caveats,
-                              });
-                              if (!ok) return;
-                              await deleteMedication(m.id);
-                              void reload();
-                              toast.showUndo(
-                                t("toasts.deleted", { name: m.name }),
-                                async () => {
-                                  await createMedication(data);
-                                  void reload();
-                                },
-                                { caveat: undoToastCaveat(t, caveats) },
-                              );
-                            }}
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                          </>
+                        }
+                      >
+                        <MedicationRelated relations={relations?.get(m.id)} />
+                      </StatusCard>
+                    );
+                  })}
                 </div>
               </section>
             ))}
@@ -317,7 +324,7 @@ function MedicationRelated({ relations }: { relations?: MedicationRelations }) {
       to: `/diagnoses/${d.id}`,
     });
   }
-  return <RelatedLinks title={t("related.title")} items={items} />;
+  return <RelatedLinks title={t("related.title")} items={items} className="mt-0 border-t-0 pt-0" />;
 }
 
 function MedicationForm({

@@ -92,7 +92,11 @@ export function Notifications() {
 
   return (
     <>
-      <PageHeader title={t("notifications.title")} description={t("notifications.description")} />
+      <PageHeader
+        nav={{ leaf: t("notifications.title") }}
+        title={t("notifications.title")}
+        description={t("notifications.description")}
+      />
       <PrefsSection />
       <FeedSection feedData={data.feedData} />
       <SchedulesSection
@@ -403,11 +407,11 @@ function SchedulesSection({
             <TableHeader>
               <TableRow>
                 <TableHead>{t("notifications.schedules.table.label")}</TableHead>
-                <TableHead>{t("notifications.schedules.table.every")}</TableHead>
+                <TableHead numeric>{t("notifications.schedules.table.every")}</TableHead>
                 <TableHead>{t("notifications.schedules.table.lastTested")}</TableHead>
                 <TableHead>{t("notifications.schedules.table.nextDue")}</TableHead>
                 <TableHead>{t("notifications.schedules.table.status")}</TableHead>
-                <TableHead className="w-28" />
+                <TableHead actions />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -429,7 +433,7 @@ function SchedulesSection({
                         </Link>
                       )}
                     </TableCell>
-                    <TableCell className="tabular-nums text-muted-foreground">
+                    <TableCell numeric className="text-muted-foreground">
                       {t("notifications.schedules.every", { n: String(s.intervalMonths) })}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
@@ -445,7 +449,7 @@ function SchedulesSection({
                           : t("notifications.schedules.paused")}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell actions>
                       <div className="flex justify-end gap-0.5">
                         <Button
                           variant="ghost"

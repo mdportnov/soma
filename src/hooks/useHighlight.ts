@@ -65,11 +65,12 @@ export function useHighlight(): Highlight {
 
   // A background tint rather than a ring: the flagged element is as often a
   // <tr> as a card, and box-shadow rings render inconsistently on table rows.
-  // The tint is unmistakable on arrival and dissolves over ~0.7s.
+  // The tint is unmistakable on arrival and dissolves on the linger clock —
+  // the one place in the motion system where a slow fade is the point.
   const className = React.useCallback(
     (rowId: number) =>
       id === rowId
-        ? `transition-colors duration-700 ${active ? "bg-primary/10" : "bg-transparent"}`
+        ? `transition-colors duration-[var(--motion-linger)] ${active ? "bg-primary/10" : "bg-transparent"}`
         : "",
     [id, active],
   );

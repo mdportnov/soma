@@ -26,6 +26,7 @@ import { useToast } from "@/components/app/Toast";
 import { useConfirm } from "@/components/app/Confirm";
 import { PageHeader } from "@/components/app/PageHeader";
 import { IconAction } from "@/components/app/IconAction";
+import { StatusCard } from "@/components/app/StatusCard";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
@@ -36,7 +37,6 @@ import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
 import { DurationTimeline, type DurationItem } from "@/components/charts/DurationTimeline";
 import {
   Table,
@@ -61,7 +61,6 @@ export function Diagnoses() {
   const { t } = useI18n();
   const toast = useToast();
   const { confirmDelete } = useConfirm();
-  const navigate = useNavigate();
   const {
     data: diagnoses,
     loading,
@@ -176,37 +175,23 @@ export function Diagnoses() {
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("diagnoses.sections.active")}
               </h2>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid auto-rows-fr gap-2 sm:grid-cols-2">
                 {active.map((d) => (
-                  <Card key={d.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          className="min-w-0 text-left"
-                          onClick={() => navigate(`/diagnoses/${d.id}`)}
-                        >
-                          <p className="truncate text-sm font-semibold selectable">{d.name}</p>
-                          {d.icdCode && (
-                            <p className="mt-0.5 text-xs text-muted-foreground selectable">
-                              {d.icdCode}
-                            </p>
-                          )}
-                        </button>
-                        <Badge variant="warning" className="shrink-0">
-                          {t("status.active")}
-                        </Badge>
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {t("diagnoses.fields.diagnosis")}: {formatDate(d.date)}
-                      </p>
-                      {d.notes && (
-                        <p className="mt-1 truncate text-xs text-muted-foreground" title={d.notes}>
-                          {d.notes}
-                        </p>
-                      )}
-                      <DiagnosisRelated relations={relations?.get(d.id)} />
-                      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t pt-3">
+                  <StatusCard
+                    key={d.id}
+                    to={`/diagnoses/${d.id}`}
+                    title={d.name}
+                    status={<Badge variant="warning">{t("status.active")}</Badge>}
+                    value={
+                      d.icdCode ? (
+                        <p className="text-sm font-medium tabular-nums selectable">{d.icdCode}</p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">—</p>
+                      )
+                    }
+                    meta={`${t("diagnoses.fields.diagnosis")}: ${formatDate(d.date)}`}
+                    actions={
+                      <>
                         <IconAction
                           label={t("common.edit")}
                           icon={<Pencil />}
@@ -232,7 +217,7 @@ export function Diagnoses() {
                           }}
                         />
                         {resolvingId === d.id ? (
-                          <div className="flex w-full items-center gap-1.5 pt-1">
+                          <div className="flex w-full flex-wrap items-center gap-1.5">
                             <DateInput value={resolveDate} onChange={setResolveDate} />
                             <Button
                               size="sm"
@@ -278,9 +263,16 @@ export function Diagnoses() {
                           destructive
                           onClick={() => void removeDiagnosis(d)}
                         />
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </>
+                    }
+                  >
+                    {d.notes && (
+                      <p className="truncate text-xs text-muted-foreground" title={d.notes}>
+                        {d.notes}
+                      </p>
+                    )}
+                    <DiagnosisRelated relations={relations?.get(d.id)} />
+                  </StatusCard>
                 ))}
               </div>
             </section>
@@ -357,7 +349,7 @@ function DiagnosisRelated({ relations }: { relations?: DiagnosisRelations }) {
       to: `/medications/${m.id}`,
     });
   }
-  return <RelatedLinks title={t("related.title")} items={items} />;
+  return <RelatedLinks title={t("related.title")} items={items} className="mt-0 border-t-0 pt-0" />;
 }
 
 function DiagnosisTable({
@@ -381,7 +373,7 @@ function DiagnosisTable({
             <TableHead>{t("diagnoses.fields.icd")}</TableHead>
             <TableHead>{t("fields.date")}</TableHead>
             <TableHead>{t("diagnoses.fields.status")}</TableHead>
-            <TableHead className="w-20" />
+            <TableHead actions />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -399,7 +391,7 @@ function DiagnosisTable({
                   {t(`status.${d.status}`)}
                 </Badge>
               </TableCell>
-              <TableCell>
+              <TableCell actions>
                 <div className="flex justify-end gap-0.5">
                   <Button
                     variant="ghost"

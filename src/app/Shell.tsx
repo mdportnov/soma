@@ -1,5 +1,12 @@
 import * as React from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigationType } from "react-router-dom";
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+} from "react-router-dom";
 import { Bell, Search, Settings, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -22,6 +29,7 @@ import { CommandPalette } from "@/components/app/CommandPalette";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import logo from "@/assets/logo.svg";
 import { settingsPath } from "@/lib/settings-navigation";
+import { useHistoryControls, usePageMotion } from "@/app/navigation";
 
 /** Cap on retained per-history-entry scroll offsets (prevents unbounded growth). */
 const MAX_SCROLL_ENTRIES = 50;
@@ -64,7 +72,7 @@ function NotificationBell() {
       aria-label={t("nav.notifications")}
       className={({ isActive }) =>
         cn(
-          "relative inline-flex size-8 items-center justify-center rounded-md transition-colors",
+          "press relative inline-flex size-8 items-center justify-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           isActive
             ? "bg-secondary text-secondary-foreground"
             : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -107,6 +115,12 @@ export function Shell() {
   // the chat transcript scrolls inside itself and the composer stays pinned.
   const fillsViewport = location.pathname === "/assistant";
   const navType = useNavigationType();
+  const navigate = useNavigate();
+  const { canGoBack, canGoForward } = useHistoryControls();
+  // Drill / back / lateral: the page's entrance keyframes are picked by this
+  // attribute (index.css), so going into a record and coming out of it move in
+  // opposite directions.
+  const pageMotion = usePageMotion();
   const mainRef = React.useRef<HTMLElement>(null);
   const pageRef = React.useRef<HTMLDivElement>(null);
   // Per-history-entry scroll offsets, keyed by location.key (unique per entry).
@@ -117,16 +131,36 @@ export function Shell() {
   // scroll at restore time. Held until the content is tall enough to honour it.
   const pendingScroll = React.useRef<number | null>(null);
 
+  // ⌘K opens search; ⌘[ / ⌘] walk history the way every macOS document app
+  // does. Deliberately not ⌘← / ⌘→: those move the caret to the start/end of a
+  // line inside the chat composer and every text field, and stealing them would
+  // break typing. ⌘[ / ⌘] collide with nothing here (⌘⇧O and ⌘⇧H are chat-local
+  // and carry Shift), and the guards keep the app from stepping out of its own
+  // stack into whatever the webview had loaded before.
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === "k" && !e.shiftKey) {
         e.preventDefault();
         setSearchOpen((o) => !o);
+        return;
+      }
+      // While the palette owns the keyboard, history keys belong to it.
+      if (searchOpen) return;
+      if (key === "[" && canGoBack) {
+        e.preventDefault();
+        navigate(-1);
+        return;
+      }
+      if (key === "]" && canGoForward) {
+        e.preventDefault();
+        navigate(1);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [navigate, canGoBack, canGoForward, searchOpen]);
 
   // Continuously record the current entry's scroll offset so it's available
   // the moment we navigate away (the page DOM is gone by the next render).
@@ -276,7 +310,7 @@ export function Shell() {
                 title={needsSetup ? `${label} — ${t("nav.aiNeedsSetup")}` : label}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                    "press flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                     isActive
                       ? "bg-secondary text-secondary-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -304,7 +338,7 @@ export function Shell() {
                 type="button"
                 onClick={() => setShowAll((v) => !v)}
                 title={showAll ? t("nav.showFewer") : t("nav.showAll")}
-                className="mt-1 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="press mt-1 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
               >
                 <SlidersHorizontal className="size-4 shrink-0" />
                 <span className="hidden truncate md:block">
@@ -336,7 +370,7 @@ export function Shell() {
             title={t("nav.settings")}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                "press flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                 isActive
                   ? "bg-secondary text-secondary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -363,6 +397,7 @@ export function Shell() {
         <div
           key={`${location.key}:${retryNonce}`}
           ref={pageRef}
+          data-motion={pageMotion}
           className={cn(
             "page-enter mx-auto flex w-full min-w-0 max-w-6xl flex-col p-6 md:p-8",
             // The chat page owns the viewport: it fills the main area exactly so

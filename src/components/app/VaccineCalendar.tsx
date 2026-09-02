@@ -366,7 +366,7 @@ function TierSection({
         </span>
         <ChevronDown
           className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            "size-4 shrink-0 text-muted-foreground transition-transform",
             open && "rotate-180",
           )}
         />

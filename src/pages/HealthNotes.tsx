@@ -3,6 +3,7 @@ import { ChevronDown, NotebookText, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { useHighlight } from "@/hooks/useHighlight";
+import { useLeaving } from "@/hooks/useLeaving";
 import { createHealthNote, deleteHealthNote, listHealthNotes, updateHealthNote } from "@/db/repos";
 import type { HealthNote } from "@/db/schema";
 import { useToast } from "@/components/app/Toast";
@@ -74,6 +75,7 @@ export function HealthNotes() {
   const { confirmDelete } = useConfirm();
   // ⌘K lands here as /notes?highlight=<id> — flash that note.
   const highlight = useHighlight();
+  const { leave } = useLeaving();
   const { data: notes, loading, reload } = useQuery(() => listHealthNotes(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<HealthNote | null>(null);
@@ -110,8 +112,16 @@ export function HealthNotes() {
       undoable: true,
     });
     if (!ok) return;
-    await deleteHealthNote(note.id);
-    void reload();
+    // Single-column list: the card fades and its height closes before the
+    // write, so the notes below slide up instead of jumping.
+    await leave(
+      note.id,
+      async () => {
+        await deleteHealthNote(note.id);
+        void reload();
+      },
+      { collapse: true },
+    );
     toast.showUndo(t("toasts.deleted", { name: noteHeadline(note).slice(0, 40) }), async () => {
       await createHealthNote(data);
       void reload();
@@ -173,6 +183,7 @@ export function HealthNotes() {
                 // wrapper rather than threading ref/className through its API.
                 <div
                   key={note.id}
+                  data-motion-key={note.id}
                   ref={highlight.id === note.id ? highlight.ref : undefined}
                   className={highlight.className(note.id)}
                 >

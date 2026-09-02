@@ -7,7 +7,6 @@ import { useToast } from "@/components/app/Toast";
 import { getDoctorReportData, type DoctorReportSection } from "@/db/repos";
 import { exportDoctorReportPdf } from "@/lib/doctor-report-pdf";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -82,11 +81,7 @@ export function DoctorReport() {
   return (
     <>
       <PageHeader
-        back="/"
-        breadcrumbs={crumbs(
-          { label: t("nav.dashboard"), to: "/" },
-          { label: t("doctorReport.title") },
-        )}
+        nav={{ leaf: t("doctorReport.title") }}
         title={t("doctorReport.title")}
         description={t("doctorReport.description")}
       />

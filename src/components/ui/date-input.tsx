@@ -109,6 +109,10 @@ function DatePopover({
   const openUp = pos.transformOrigin.startsWith("bottom");
 
   return createPortal(
+    // Position on an outer wrapper, animation on the inner panel: the entrance
+    // keyframes animate `transform` and, with `fill: both`, would override an
+    // inline `translateY(-100%)` for good — a calendar opened upwards would
+    // land on top of its field instead of above it.
     <div
       ref={panelRef}
       style={{
@@ -116,33 +120,36 @@ function DatePopover({
         top: pos.top,
         left: pos.left,
         transform: openUp ? "translateY(-100%)" : undefined,
-        transformOrigin: pos.transformOrigin,
         zIndex: 9999,
       }}
-      onAnimationEnd={() => {
-        if (closing) {
-          setRendered(false);
-          setClosing(false);
-        }
-      }}
-      className={cn(
-        "rounded-xl border bg-popover p-3 text-popover-foreground shadow-xl",
-        closing ? "animate-dialog-out" : "animate-dialog-in",
-      )}
     >
-      <DayPicker
-        mode="single"
-        selected={selected}
-        defaultMonth={selected ?? defaultMonth}
-        captionLayout="dropdown"
-        startMonth={new Date(1900, 0)}
-        endMonth={new Date(new Date().getFullYear() + 1, 11)}
-        disabled={disableFuture ? { after: new Date() } : undefined}
-        onSelect={(date) => {
-          if (date) onSelect(date);
-          else onClose();
+      <div
+        style={{ transformOrigin: pos.transformOrigin }}
+        onAnimationEnd={() => {
+          if (closing) {
+            setRendered(false);
+            setClosing(false);
+          }
         }}
-      />
+        className={cn(
+          "rounded-xl border bg-popover p-3 text-popover-foreground shadow-xl",
+          closing ? "animate-dialog-out" : "animate-dialog-in",
+        )}
+      >
+        <DayPicker
+          mode="single"
+          selected={selected}
+          defaultMonth={selected ?? defaultMonth}
+          captionLayout="dropdown"
+          startMonth={new Date(1900, 0)}
+          endMonth={new Date(new Date().getFullYear() + 1, 11)}
+          disabled={disableFuture ? { after: new Date() } : undefined}
+          onSelect={(date) => {
+            if (date) onSelect(date);
+            else onClose();
+          }}
+        />
+      </div>
     </div>,
     document.body,
   );

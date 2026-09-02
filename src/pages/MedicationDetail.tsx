@@ -18,7 +18,6 @@ import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
 import { useConfirm } from "@/components/app/Confirm";
 import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Badge } from "@/components/ui/badge";
@@ -79,11 +78,7 @@ export function MedicationDetail() {
   return (
     <>
       <PageHeader
-        back="/medications"
-        breadcrumbs={crumbs(
-          { label: t("nav.medications"), to: "/medications" },
-          { label: medication.name, selectable: true },
-        )}
+        nav={{ leaf: medication.name, selectable: true }}
         title={medication.name}
         description={medication.purpose ?? undefined}
         actions={

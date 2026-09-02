@@ -3,6 +3,8 @@ import { CircleCheck, Lock, Pencil, Plus, ShieldAlert, Trash2 } from "lucide-rea
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { useHighlight } from "@/hooks/useHighlight";
+import { useLeaving } from "@/hooks/useLeaving";
+import { useListMotion } from "@/hooks/useListMotion";
 import {
   createAllergy,
   deleteAllergy,
@@ -17,6 +19,7 @@ import { undoToastCaveat, type UndoCaveat } from "@/lib/undo-scope";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { IconAction } from "@/components/app/IconAction";
+import { StatusCard } from "@/components/app/StatusCard";
 import { Tooltip } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
@@ -26,7 +29,6 @@ import { DateInput } from "@/components/ui/date-input";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -54,10 +56,15 @@ export function Allergies() {
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Allergy | null>(null);
 
-  if (loading || !allergies) return <Loading />;
+  const { leave } = useLeaving();
+  // Resolving moves a card from one section to the other; the FLIP pass shows
+  // it travel rather than vanish and reappear. Keys are derived before the
+  // loading guard so the hook runs on every render.
+  const active = (allergies ?? []).filter((a) => a.status === "active");
+  const resolved = (allergies ?? []).filter((a) => a.status === "resolved");
+  const listRef = useListMotion([...active, ...resolved].map((a) => String(a.id)));
 
-  const active = allergies.filter((a) => a.status === "active");
-  const resolved = allergies.filter((a) => a.status === "resolved");
+  if (loading || !allergies) return <Loading />;
 
   const openNew = () => {
     setEditing(null);
@@ -88,7 +95,7 @@ export function Allergies() {
           }
         />
       ) : (
-        <div className="space-y-6">
+        <div ref={listRef} className="space-y-6">
           {[
             { label: t("allergies.sections.active"), items: active, isActive: true },
             { label: t("allergies.sections.resolved"), items: resolved, isActive: false },
@@ -99,12 +106,13 @@ export function Allergies() {
                 <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {section.label}
                 </h2>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid auto-rows-fr gap-2 sm:grid-cols-2">
                   {section.items.map((a) => (
                     // The card is a shared component, so the ⌘K flash rides on a
                     // wrapper rather than threading ref/className through its API.
                     <div
                       key={a.id}
+                      data-motion-key={a.id}
                       ref={highlight.id === a.id ? highlight.ref : undefined}
                       className={highlight.className(a.id)}
                     >
@@ -139,8 +147,13 @@ export function Allergies() {
                             undoCaveats: caveats,
                           });
                           if (!ok) return;
-                          await deleteAllergy(a.id);
-                          void reload();
+                          // The card fades before the write, so the removal
+                          // itself confirms the click; the grid then closes
+                          // the gap (useListMotion).
+                          await leave(a.id, async () => {
+                            await deleteAllergy(a.id);
+                            void reload();
+                          });
                           toast.showUndo(
                             t("toasts.deleted", { name: a.allergen }),
                             async () => {
@@ -190,37 +203,32 @@ function AllergyCard({
   const isAnaphylactic = a.severity === "anaphylactic";
 
   return (
-    <Card className={isActive ? undefined : "opacity-60"}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold selectable">{a.allergen}</p>
-            <Badge variant="secondary" className="mt-0.5 text-xs">
-              {t(`allergyCategory.${a.category}`)}
-            </Badge>
-          </div>
-          {isActive ? (
-            <Badge variant={severityVariant(a.severity)} className="shrink-0">
-              {isAnaphylactic && <Lock className="mr-1 size-3" />}
-              {t(`allergySeverity.${a.severity}`)}
-            </Badge>
-          ) : (
-            <Badge variant="success" className="shrink-0">
-              {t("status.resolved")}
-            </Badge>
-          )}
-        </div>
-        {(a.reaction || a.onsetDate) && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            {a.reaction && (
-              <p className="truncate selectable" title={a.reaction}>
-                {a.reaction}
-              </p>
-            )}
-            {a.onsetDate && <p>Onset: {formatDate(a.onsetDate)}</p>}
-          </div>
-        )}
-        <div className="mt-3 flex items-center gap-1.5 border-t pt-3">
+    <StatusCard
+      title={a.allergen}
+      status={
+        isActive ? (
+          <Badge variant={severityVariant(a.severity)}>
+            {isAnaphylactic && <Lock className="mr-1 size-3" />}
+            {t(`allergySeverity.${a.severity}`)}
+          </Badge>
+        ) : (
+          <Badge variant="success">{t("status.resolved")}</Badge>
+        )
+      }
+      value={
+        a.reaction ? (
+          <p className="truncate text-sm font-medium selectable" title={a.reaction}>
+            {a.reaction}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">—</p>
+        )
+      }
+      meta={a.onsetDate ? t("recordCard.onset", { date: formatDate(a.onsetDate) }) : undefined}
+      tag={<Badge variant="secondary">{t(`allergyCategory.${a.category}`)}</Badge>}
+      muted={!isActive}
+      actions={
+        <>
           <IconAction label={t("common.edit")} icon={<Pencil />} onClick={onEdit} />
           {isActive && (
             <IconAction
@@ -254,9 +262,9 @@ function AllergyCard({
               onClick={onDelete}
             />
           )}
-        </div>
-      </CardContent>
-    </Card>
+        </>
+      }
+    />
   );
 }
 

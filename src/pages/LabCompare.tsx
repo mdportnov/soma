@@ -6,7 +6,6 @@ import { useQuery } from "@/hooks/useQuery";
 import { getPanelResults, listPanels } from "@/db/repos";
 import { buildComparison, displayValue } from "@/lib/lab-compare";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
@@ -52,11 +51,7 @@ export function LabCompare() {
 
   const header = (
     <PageHeader
-      back="/labs"
-      breadcrumbs={crumbs(
-        { label: t("nav.labResults"), to: "/labs" },
-        { label: t("labCompare.title") },
-      )}
+      nav={{ leaf: t("labCompare.title") }}
       title={t("labCompare.title")}
       description={t("labCompare.description")}
     />

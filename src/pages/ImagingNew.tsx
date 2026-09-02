@@ -13,7 +13,6 @@ import {
 } from "@/db/repos";
 import type { ImagingRecord, Visit } from "@/db/schema";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
@@ -174,11 +173,7 @@ function ImagingForm({
   return (
     <>
       <PageHeader
-        back="/imaging"
-        breadcrumbs={crumbs(
-          { label: t("nav.imaging"), to: "/imaging" },
-          { label: leafLabel, selectable: editing },
-        )}
+        nav={{ leaf: leafLabel, selectable: editing }}
         title={editing ? t("imaging.editTitle") : t("imaging.newTitle")}
         description={t("imaging.newDescription")}
       />

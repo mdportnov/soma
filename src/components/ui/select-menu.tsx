@@ -193,7 +193,7 @@ export function SelectMenu({
         <span className="truncate">{selectedLabel ?? placeholder ?? t("common.select")}</span>
         <ChevronDown
           className={cn(
-            "ml-1.5 size-4 shrink-0 text-muted-foreground transition-transform duration-150",
+            "ml-1.5 size-4 shrink-0 text-muted-foreground transition-transform",
             open && "rotate-180",
           )}
         />
@@ -215,7 +215,7 @@ export function SelectMenu({
               transformOrigin: panelStyle.transformOrigin,
               zIndex: 9999,
             }}
-            className="overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-xl animate-combobox-in"
+            className="overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-xl animate-popover-in"
             onKeyDown={onKeyDown}
           >
             {options.map((opt, i) => (

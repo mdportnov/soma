@@ -285,7 +285,7 @@ function SetupWizard({ onClose, onDone }: WizardProps) {
       submitDisabled={stepDisabled}
     >
       {/* key={step} re-mounts the body so each step slides in */}
-      <div key={step} className="animate-step-in">
+      <div key={step} className="animate-reveal">
         {step === 1 && (
           <div className="grid gap-2">
             {(detection?.providers ?? []).map((p) => {
@@ -512,7 +512,7 @@ export function RestoreDialog({ onClose }: { onClose: () => void }) {
       submitDisabled={!filePath || !pass || busy}
     >
       {/* re-mounts on phase change so the review screen slides in */}
-      <div key={meta ? "review" : "pick"} className="animate-step-in">
+      <div key={meta ? "review" : "pick"} className="animate-reveal">
         {!meta ? (
           <div className="grid gap-3">
             <button

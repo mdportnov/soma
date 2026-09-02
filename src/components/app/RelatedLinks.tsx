@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { drillState } from "@/app/nav-journal";
 
 export type RelatedItem = {
   /** Stable key within the block (entity id is fine). */
@@ -66,6 +67,11 @@ function RelatedRow({ item }: { item: RelatedItem }) {
   return (
     <Link
       to={item.to}
+      // A "related" edge is a drill-down into the record you are reading, so the
+      // page it opens keeps this one in its breadcrumbs ("Visits → Visit of
+      // Dec 4 → Type 2 diabetes") instead of pretending it was reached from the
+      // diagnoses list.
+      state={drillState}
       className="group flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs hover:bg-muted"
     >
       {body}

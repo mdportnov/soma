@@ -164,7 +164,7 @@ export function Vaccines() {
                           <TableHead>{t("vaccines.table.country")}</TableHead>
                           <TableHead>{t("vaccines.table.administeredBy")}</TableHead>
                           <TableHead>{t("vaccines.table.expires")}</TableHead>
-                          <TableHead className="w-10" />
+                          <TableHead actions />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -199,7 +199,7 @@ export function Vaccines() {
                                   "—"
                                 )}
                               </TableCell>
-                              <TableCell>
+                              <TableCell actions>
                                 <div className="flex items-center gap-1">
                                   {v.attachmentId != null && attachmentMap?.has(v.attachmentId) && (
                                     <SourceFileButton

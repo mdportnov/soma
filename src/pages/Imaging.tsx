@@ -71,7 +71,7 @@ export function Imaging() {
                   <TableHead>{t("imaging.table.bodyArea")}</TableHead>
                   <TableHead>{t("imaging.table.facility")}</TableHead>
                   <TableHead>{t("imaging.table.visit")}</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead actions />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -102,7 +102,7 @@ export function Imaging() {
                           "—"
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell actions>
                         <Button
                           variant="ghost"
                           size="iconSm"

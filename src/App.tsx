@@ -6,6 +6,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/components/app/Toast";
 import { ConfirmProvider } from "@/components/app/Confirm";
 import { Shell } from "@/app/Shell";
+import { NavigationProvider } from "@/app/navigation";
 import { Dashboard } from "@/pages/Dashboard";
 import { Timeline } from "@/pages/Timeline";
 import { Biomarkers } from "@/pages/Biomarkers";
@@ -46,39 +47,43 @@ export default function App() {
         <ToastProvider>
           <ConfirmProvider>
             <HashRouter>
-              <Routes>
-                <Route element={<Shell />}>
-                  <Route index element={<Dashboard />} />
-                  <Route path="timeline" element={<Timeline />} />
-                  <Route path="biomarkers" element={<Biomarkers />} />
-                  <Route path="biomarkers/:id" element={<BiomarkerDetail />} />
-                  <Route path="labs" element={<Labs />} />
-                  <Route path="labs/new" element={<LabPanelNew />} />
-                  <Route path="labs/import" element={<ImportWizard />} />
-                  <Route path="labs/compare" element={<LabCompare />} />
-                  <Route path="labs/:id" element={<LabPanelDetail />} />
-                  <Route path="labs/:id/verify" element={<VerifyImport />} />
-                  <Route path="medications" element={<Medications />} />
-                  <Route path="medications/:id" element={<MedicationDetail />} />
-                  <Route path="visits" element={<Visits />} />
-                  <Route path="visits/:id" element={<VisitDetail />} />
-                  <Route path="diagnoses" element={<Diagnoses />} />
-                  <Route path="diagnoses/:id" element={<DiagnosisDetail />} />
-                  <Route path="allergies" element={<Allergies />} />
-                  <Route path="vaccines" element={<Vaccines />} />
-                  <Route path="emergency" element={<EmergencyCard />} />
-                  <Route path="journal" element={<Journal />} />
-                  <Route path="notes" element={<HealthNotes />} />
-                  <Route path="lifestyle" element={<Lifestyle />} />
-                  <Route path="imaging" element={<Imaging />} />
-                  <Route path="imaging/new" element={<ImagingNew />} />
-                  <Route path="imaging/:id" element={<ImagingNew />} />
-                  <Route path="assistant" element={<AiAnalysis />} />
-                  <Route path="notifications" element={<Notifications />} />
-                  <Route path="report" element={<DoctorReport />} />
-                  <Route path="settings" element={<Settings />} />
-                </Route>
-              </Routes>
+              {/* Inside the router (it reads location) and above the shell, so the
+                  chrome shortcuts and every page header share one journal. */}
+              <NavigationProvider>
+                <Routes>
+                  <Route element={<Shell />}>
+                    <Route index element={<Dashboard />} />
+                    <Route path="timeline" element={<Timeline />} />
+                    <Route path="biomarkers" element={<Biomarkers />} />
+                    <Route path="biomarkers/:id" element={<BiomarkerDetail />} />
+                    <Route path="labs" element={<Labs />} />
+                    <Route path="labs/new" element={<LabPanelNew />} />
+                    <Route path="labs/import" element={<ImportWizard />} />
+                    <Route path="labs/compare" element={<LabCompare />} />
+                    <Route path="labs/:id" element={<LabPanelDetail />} />
+                    <Route path="labs/:id/verify" element={<VerifyImport />} />
+                    <Route path="medications" element={<Medications />} />
+                    <Route path="medications/:id" element={<MedicationDetail />} />
+                    <Route path="visits" element={<Visits />} />
+                    <Route path="visits/:id" element={<VisitDetail />} />
+                    <Route path="diagnoses" element={<Diagnoses />} />
+                    <Route path="diagnoses/:id" element={<DiagnosisDetail />} />
+                    <Route path="allergies" element={<Allergies />} />
+                    <Route path="vaccines" element={<Vaccines />} />
+                    <Route path="emergency" element={<EmergencyCard />} />
+                    <Route path="journal" element={<Journal />} />
+                    <Route path="notes" element={<HealthNotes />} />
+                    <Route path="lifestyle" element={<Lifestyle />} />
+                    <Route path="imaging" element={<Imaging />} />
+                    <Route path="imaging/new" element={<ImagingNew />} />
+                    <Route path="imaging/:id" element={<ImagingNew />} />
+                    <Route path="assistant" element={<AiAnalysis />} />
+                    <Route path="notifications" element={<Notifications />} />
+                    <Route path="report" element={<DoctorReport />} />
+                    <Route path="settings" element={<Settings />} />
+                  </Route>
+                </Routes>
+              </NavigationProvider>
             </HashRouter>
           </ConfirmProvider>
         </ToastProvider>

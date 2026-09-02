@@ -29,7 +29,6 @@ import { pluralForm } from "@/lib/plural";
 import { SourceFileButton } from "@/components/app/SourceFile";
 import { IconAction } from "@/components/app/IconAction";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
@@ -197,11 +196,7 @@ export function VisitDetail() {
   return (
     <>
       <PageHeader
-        back="/visits"
-        breadcrumbs={crumbs(
-          { label: t("nav.visits"), to: "/visits" },
-          { label: visitLabel, selectable: true },
-        )}
+        nav={{ leaf: visitLabel, selectable: true }}
         title={visitLabel}
         description={[
           visit.specialty,

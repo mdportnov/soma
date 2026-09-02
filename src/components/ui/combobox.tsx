@@ -240,7 +240,7 @@ export function Combobox({
         <span className="truncate">{selectedLabel ?? placeholder ?? t("common.select")}</span>
         <ChevronDown
           className={cn(
-            "ml-1.5 size-4 shrink-0 text-muted-foreground transition-transform duration-150",
+            "ml-1.5 size-4 shrink-0 text-muted-foreground transition-transform",
             open && "rotate-180",
           )}
         />
@@ -262,7 +262,7 @@ export function Combobox({
               transformOrigin: panelStyle.transformOrigin,
               zIndex: 9999,
             }}
-            className="flex flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl animate-combobox-in"
+            className="flex flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl animate-popover-in"
             onKeyDown={onKeyDown}
           >
             <div className="flex items-center gap-2 border-b border-border px-2.5 py-1.5">

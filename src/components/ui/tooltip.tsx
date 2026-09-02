@@ -74,7 +74,7 @@ export function Tooltip({
             ref={boxRef}
             role="tooltip"
             aria-hidden
-            className="pointer-events-none fixed left-0 top-0 z-50 w-max min-w-[8rem] max-w-[22rem] rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs leading-snug text-popover-foreground shadow-lg break-words whitespace-normal"
+            className="animate-fade-in pointer-events-none fixed left-0 top-0 z-50 w-max min-w-[8rem] max-w-[22rem] rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs leading-snug text-popover-foreground shadow-lg break-words whitespace-normal"
             style={{
               transform: placement ? `translate(${placement.x}px, ${placement.y}px)` : undefined,
               visibility: placement ? "visible" : "hidden",

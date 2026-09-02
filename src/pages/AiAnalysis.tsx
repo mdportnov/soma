@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
+import { staggerDelay } from "@/lib/motion";
 import { effectiveModelId, getConfiguredProvider, loadAiSettings } from "@/ai";
 import { buildHealthContext } from "@/ai/context";
 import { runHealthAgentTurn } from "@/ai/agent/engine";
@@ -235,13 +236,16 @@ export function AiAnalysis() {
     (id: number) => {
       if (pendingRef.current) return;
       setSwitcherOpen(false);
+      // `replace`, not push: the thread id is which conversation is on screen,
+      // not a place you travelled to. Pushing would fill history with thread
+      // switches, so leaving the page would take one "back" per chat opened.
       setParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           next.set(THREAD_PARAM, String(id));
           return next;
         },
-        { replace: false },
+        { replace: true },
       );
       window.setTimeout(() => inputRef.current?.focus(), 0);
     },
@@ -658,11 +662,17 @@ export function AiAnalysis() {
                 </div>
               </div>
             )}
-            {messages.map((message) => (
+            {messages.map((message, index) => (
               <React.Fragment key={message.id}>
+                {/* Each bubble reveals itself on mount — a fresh reply, a page
+                    of older history, the initial load — with the standard
+                    capped stagger so a long thread does not draw itself over
+                    seconds. An already-mounted bubble keeps its DOM node and
+                    never replays. */}
                 <div
+                  style={{ animationDelay: `${staggerDelay(index)}ms` }}
                   className={cn(
-                    "group flex",
+                    "group flex animate-reveal",
                     message.role === "user" ? "justify-end" : "justify-start",
                   )}
                 >
@@ -742,7 +752,7 @@ export function AiAnalysis() {
             ))}
             {orphanSets.map(renderChangeSet)}
             {pending && (
-              <div className="flex justify-start" role="status" aria-live="polite">
+              <div className="flex animate-reveal justify-start" role="status" aria-live="polite">
                 <div className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-2.5 text-sm text-muted-foreground">
                   <span className="flex items-center gap-2">
                     <Loader2 className="size-4 animate-spin" /> {t("aiAnalysis.thinking")}

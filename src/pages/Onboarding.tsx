@@ -121,7 +121,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
             <span
               key={id}
               className={
-                "h-1.5 rounded-full transition-all duration-300 " +
+                "h-1.5 rounded-full transition-all duration-[var(--motion-slow)] " +
                 (i === index ? "w-6 bg-primary" : i < index ? "w-3 bg-primary/50" : "w-3 bg-muted")
               }
             />
@@ -129,7 +129,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
         </div>
 
         {error && (
-          <div className="animate-step-in mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          <div className="animate-reveal mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             {error}
           </div>
         )}
@@ -137,7 +137,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
         {/* AutoHeight eases the card between sizes; key={step} re-mounts so each
             step slides in, and a language change reflows the copy smoothly too. */}
         <AutoHeight>
-          <form key={step} onSubmit={onSubmit} className="animate-step-in">
+          <form key={step} onSubmit={onSubmit} className="animate-reveal">
             {step === "welcome" && (
               <Card>
                 <CardHeader>

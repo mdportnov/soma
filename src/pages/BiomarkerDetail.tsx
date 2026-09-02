@@ -3,10 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, Info, Lightbulb, LineChart, Pencil } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
+import { useSeed, type BiomarkerSeed } from "@/app/seed";
 import { getBiomarker, getBiomarkerSeries, listMedications, listSymptomLog } from "@/db/repos";
 import { getBiomarkerInfo } from "@/content/biomarker-info";
 import { PageHeader } from "@/components/app/PageHeader";
-import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { HintCard } from "@/components/app/HintCard";
@@ -43,6 +43,10 @@ export function BiomarkerDetail() {
   const [activeOverlays, setActiveOverlays] = React.useState<Set<number>>(new Set());
   const [showSymptoms, setShowSymptoms] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
+  // Opened from the list or a panel: the dictionary row came along with the
+  // click, so the header, the reference badges and the explainer are on
+  // screen at once and only the readings wait for the query.
+  const seed = useSeed<BiomarkerSeed>("biomarker");
 
   const { data, loading, reload } = useQuery(async () => {
     const [bio, series, meds, symptoms] = await Promise.all([
@@ -54,54 +58,19 @@ export function BiomarkerDetail() {
     return { bio, series, meds, symptoms };
   }, [profileId, biomarkerId]);
 
-  if (loading || !data) return <Loading />;
-  if (!data.bio)
+  const bio = data ? data.bio : (seed?.biomarker ?? null);
+  if (!bio) {
+    if (loading || !data) return <Loading />;
     return <EmptyState icon={LineChart} title={t("biomarkerDetail.biomarkerNotFound")} />;
+  }
 
-  const { bio, series, meds, symptoms } = data;
   const info = getBiomarkerInfo(bio.canonicalName, lang);
-
-  const toPoint = (p: (typeof series)[number]): ValuePoint => ({
-    value: p.value,
-    unit: p.unit,
-    date: p.date,
-    outOfRange: p.outOfRange,
-    flag: p.flag as ValuePoint["flag"],
-  });
-  // change[i] = move from the prior reading into series[i] (null for the first).
-  const seriesChanges = series.map((p, i) =>
-    i === 0 ? null : changeBetween(toPoint(series[i - 1]), toPoint(p), bio),
-  );
-
-  const overlays: MedOverlay[] = meds
-    .filter((m) => activeOverlays.has(m.id))
-    .map((m, i) => ({
-      id: m.id,
-      name: m.name,
-      start: m.startDate,
-      end: m.endDate,
-      color: OVERLAY_COLORS[i % OVERLAY_COLORS.length],
-    }));
-
-  const symptomOverlays: SymptomOverlay[] = showSymptoms
-    ? symptoms
-        .filter((s) => s.severity >= 3)
-        .map((s) => ({
-          date: s.date,
-          name: s.symptomName,
-          severity: s.severity,
-          notes: s.notes,
-        }))
-    : [];
+  const settled = data && data.bio ? data : null;
 
   return (
     <>
       <PageHeader
-        back="/biomarkers"
-        breadcrumbs={crumbs(
-          { label: t("nav.biomarkers"), to: "/biomarkers" },
-          { label: bio.canonicalName, selectable: true },
-        )}
+        nav={{ leaf: bio.canonicalName, selectable: true }}
         title={bio.canonicalName}
         description={`${bio.category} · ${bio.defaultUnit}${bio.code ? ` · LOINC ${bio.code}` : ""}`}
         actions={
@@ -159,148 +128,25 @@ export function BiomarkerDetail() {
         </Card>
       )}
 
-      {series.length === 0 ? (
+      {!settled ? (
+        <Loading />
+      ) : settled.series.length === 0 ? (
         <EmptyState
           icon={LineChart}
           title={t("biomarkerDetail.emptyTitle")}
           description={t("biomarkerDetail.emptyDescription")}
         />
       ) : (
-        <>
-          {meds.length > 0 && (
-            <HintCard
-              id="biomarker-overlay"
-              icon={Lightbulb}
-              title={t("hints.overlayTitle")}
-              className="mb-4"
-            >
-              {t("hints.overlayBody")}
-            </HintCard>
-          )}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("biomarkerDetail.trendTitle")}</CardTitle>
-              <CardDescription>{t("biomarkerDetail.trendDescription")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TrendChart
-                series={series}
-                biomarker={bio}
-                overlays={overlays}
-                symptomOverlays={symptomOverlays}
-              />
-              {(meds.length > 0 || symptoms.length > 0) && (
-                <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
-                  {symptoms.length > 0 && (
-                    <button
-                      onClick={() => setShowSymptoms((v) => !v)}
-                      className={cn(
-                        "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                        showSymptoms
-                          ? "border-transparent bg-destructive text-white"
-                          : "text-muted-foreground hover:bg-muted",
-                      )}
-                    >
-                      {t("biomarkerSymptoms.toggle")}
-                    </button>
-                  )}
-                  {meds.map((m) => {
-                    const active = activeOverlays.has(m.id);
-                    const idx = overlays.findIndex((o) => o.id === m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() =>
-                          setActiveOverlays((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(m.id)) next.delete(m.id);
-                            else next.add(m.id);
-                            return next;
-                          })
-                        }
-                        className={cn(
-                          "inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                          active
-                            ? "border-transparent text-white"
-                            : "text-muted-foreground hover:bg-muted",
-                        )}
-                        style={
-                          active
-                            ? { backgroundColor: OVERLAY_COLORS[idx % OVERLAY_COLORS.length] }
-                            : undefined
-                        }
-                      >
-                        {m.name}
-                        {!m.endDate && <span className="opacity-70">· active</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <AiInterpretation
-            bio={bio}
-            points={series.map((p) => ({
-              date: p.date,
-              value: p.value,
-              flag: p.outOfRange ? (p.flag ?? null) : null,
-              // Readings kept on another scale (or in an unrecognized unit)
-              // carry their own unit, so the prompt never labels them with the
-              // biomarker's default one.
-              unit: p.unit,
-            }))}
-            medications={meds.filter((m) => !m.endDate).map((m) => m.name)}
-          />
-
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle>{t("biomarkerDetail.allResultsTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("fields.date")}</TableHead>
-                    <TableHead>{t("fields.value")}</TableHead>
-                    <TableHead>{t("labPanelDetail.tableColumns.change")}</TableHead>
-                    <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
-                    <TableHead>{t("labs.tableColumns.lab")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[...series].reverse().map((p, i) => {
-                    const change = seriesChanges[series.length - 1 - i];
-                    return (
-                      <TableRow key={i}>
-                        <TableCell>
-                          <Link to={`/labs/${p.panelId}`} className="text-primary hover:underline">
-                            {formatDate(p.date)}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="font-medium tabular-nums">
-                          {formatValue(p.value)} {p.unit}
-                        </TableCell>
-                        <TableCell>
-                          {change ? (
-                            <DeltaBadge change={change} unit={p.unit} />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <FlagBadge flag={p.outOfRange ? p.flag : null} evaluated={p.evaluated} />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{p.labName ?? "—"}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </>
+        <BiomarkerReadings
+          bio={bio}
+          series={settled.series}
+          meds={settled.meds}
+          symptoms={settled.symptoms}
+          activeOverlays={activeOverlays}
+          setActiveOverlays={setActiveOverlays}
+          showSymptoms={showSymptoms}
+          setShowSymptoms={setShowSymptoms}
+        />
       )}
 
       <EditBiomarkerDialog
@@ -312,6 +158,204 @@ export function BiomarkerDetail() {
           void reload();
         }}
       />
+    </>
+  );
+}
+
+/**
+ * Everything below the header that needs the readings: chart with overlays,
+ * the AI reading, the results table. Split out so the page above it can render
+ * from the seed while this part is still loading.
+ */
+function BiomarkerReadings({
+  bio,
+  series,
+  meds,
+  symptoms,
+  activeOverlays,
+  setActiveOverlays,
+  showSymptoms,
+  setShowSymptoms,
+}: {
+  bio: NonNullable<Awaited<ReturnType<typeof getBiomarker>>>;
+  series: Awaited<ReturnType<typeof getBiomarkerSeries>>;
+  meds: Awaited<ReturnType<typeof listMedications>>;
+  symptoms: Awaited<ReturnType<typeof listSymptomLog>>;
+  activeOverlays: Set<number>;
+  setActiveOverlays: React.Dispatch<React.SetStateAction<Set<number>>>;
+  showSymptoms: boolean;
+  setShowSymptoms: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  const { t } = useI18n();
+
+  const toPoint = (p: (typeof series)[number]): ValuePoint => ({
+    value: p.value,
+    unit: p.unit,
+    date: p.date,
+    outOfRange: p.outOfRange,
+    flag: p.flag as ValuePoint["flag"],
+  });
+  // change[i] = move from the prior reading into series[i] (null for the first).
+  const seriesChanges = series.map((p, i) =>
+    i === 0 ? null : changeBetween(toPoint(series[i - 1]), toPoint(p), bio),
+  );
+
+  const overlays: MedOverlay[] = meds
+    .filter((m) => activeOverlays.has(m.id))
+    .map((m, i) => ({
+      id: m.id,
+      name: m.name,
+      start: m.startDate,
+      end: m.endDate,
+      color: OVERLAY_COLORS[i % OVERLAY_COLORS.length],
+    }));
+
+  const symptomOverlays: SymptomOverlay[] = showSymptoms
+    ? symptoms
+        .filter((s) => s.severity >= 3)
+        .map((s) => ({
+          date: s.date,
+          name: s.symptomName,
+          severity: s.severity,
+          notes: s.notes,
+        }))
+    : [];
+
+  return (
+    <>
+      {meds.length > 0 && (
+        <HintCard
+          id="biomarker-overlay"
+          icon={Lightbulb}
+          title={t("hints.overlayTitle")}
+          className="mb-4"
+        >
+          {t("hints.overlayBody")}
+        </HintCard>
+      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("biomarkerDetail.trendTitle")}</CardTitle>
+          <CardDescription>{t("biomarkerDetail.trendDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TrendChart
+            series={series}
+            biomarker={bio}
+            overlays={overlays}
+            symptomOverlays={symptomOverlays}
+          />
+          {(meds.length > 0 || symptoms.length > 0) && (
+            <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
+              {symptoms.length > 0 && (
+                <button
+                  onClick={() => setShowSymptoms((v) => !v)}
+                  className={cn(
+                    "press inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    showSymptoms
+                      ? "border-transparent bg-destructive text-white"
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {t("biomarkerSymptoms.toggle")}
+                </button>
+              )}
+              {meds.map((m) => {
+                const active = activeOverlays.has(m.id);
+                const idx = overlays.findIndex((o) => o.id === m.id);
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() =>
+                      setActiveOverlays((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(m.id)) next.delete(m.id);
+                        else next.add(m.id);
+                        return next;
+                      })
+                    }
+                    className={cn(
+                      "press inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      active
+                        ? "border-transparent text-white"
+                        : "text-muted-foreground hover:bg-muted",
+                    )}
+                    style={
+                      active
+                        ? { backgroundColor: OVERLAY_COLORS[idx % OVERLAY_COLORS.length] }
+                        : undefined
+                    }
+                  >
+                    {m.name}
+                    {!m.endDate && <span className="opacity-70">· active</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AiInterpretation
+        bio={bio}
+        points={series.map((p) => ({
+          date: p.date,
+          value: p.value,
+          flag: p.outOfRange ? (p.flag ?? null) : null,
+          // Readings kept on another scale (or in an unrecognized unit)
+          // carry their own unit, so the prompt never labels them with the
+          // biomarker's default one.
+          unit: p.unit,
+        }))}
+        medications={meds.filter((m) => !m.endDate).map((m) => m.name)}
+      />
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>{t("biomarkerDetail.allResultsTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("fields.date")}</TableHead>
+                <TableHead>{t("fields.value")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.change")}</TableHead>
+                <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
+                <TableHead>{t("labs.tableColumns.lab")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[...series].reverse().map((p, i) => {
+                const change = seriesChanges[series.length - 1 - i];
+                return (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <Link to={`/labs/${p.panelId}`} className="text-primary hover:underline">
+                        {formatDate(p.date)}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-medium tabular-nums">
+                      {formatValue(p.value)} {p.unit}
+                    </TableCell>
+                    <TableCell>
+                      {change ? (
+                        <DeltaBadge change={change} unit={p.unit} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <FlagBadge flag={p.outOfRange ? p.flag : null} evaluated={p.evaluated} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.labName ?? "—"}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </>
   );
 }

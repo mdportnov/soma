@@ -418,9 +418,9 @@ function WeightTab({
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("weight.table.date")}</TableHead>
-                    <TableHead>{t("weight.table.weight")}</TableHead>
+                    <TableHead numeric>{t("weight.table.weight")}</TableHead>
                     <TableHead>{t("weight.table.notes")}</TableHead>
-                    <TableHead className="w-20" />
+                    <TableHead actions />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -431,11 +431,11 @@ function WeightTab({
                       className={highlight.className(r.id)}
                     >
                       <TableCell>{formatDate(r.date)}</TableCell>
-                      <TableCell className="font-medium tabular-nums">
+                      <TableCell numeric className="font-medium">
                         {formatValue(toDisplay(r.weightKg))} {unitLabel}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{r.notes ?? "—"}</TableCell>
-                      <TableCell>
+                      <TableCell actions>
                         <RowActions
                           onEdit={() => {
                             setEditing(r);
@@ -740,11 +740,11 @@ function BpTab({
                   <TableRow>
                     <TableHead>{t("bp.table.date")}</TableHead>
                     <TableHead>{t("bp.table.time")}</TableHead>
-                    <TableHead>{t("bp.table.reading")}</TableHead>
-                    <TableHead>{t("bp.table.pulse")}</TableHead>
+                    <TableHead numeric>{t("bp.table.reading")}</TableHead>
+                    <TableHead numeric>{t("bp.table.pulse")}</TableHead>
                     <TableHead>{t("bp.table.status")}</TableHead>
                     <TableHead>{t("bp.table.notes")}</TableHead>
-                    <TableHead className="w-20" />
+                    <TableHead actions />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -756,10 +756,10 @@ function BpTab({
                     >
                       <TableCell>{formatDate(r.date)}</TableCell>
                       <TableCell className="text-muted-foreground">{r.time ?? "—"}</TableCell>
-                      <TableCell className="font-medium tabular-nums">
+                      <TableCell numeric className="font-medium">
                         {r.systolic}/{r.diastolic}
                       </TableCell>
-                      <TableCell className="tabular-nums text-muted-foreground">
+                      <TableCell numeric className="text-muted-foreground">
                         {r.heartRateBpm ?? "—"}
                       </TableCell>
                       <TableCell>
@@ -772,7 +772,7 @@ function BpTab({
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">{r.notes ?? "—"}</TableCell>
-                      <TableCell>
+                      <TableCell actions>
                         <RowActions
                           onEdit={() => {
                             setEditing(r);
@@ -1087,7 +1087,7 @@ function SymptomsTab({
                     <TableHead>{t("symptoms.table.symptom")}</TableHead>
                     <TableHead>{t("symptoms.table.severity")}</TableHead>
                     <TableHead>{t("symptoms.table.notes")}</TableHead>
-                    <TableHead className="w-20" />
+                    <TableHead actions />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1106,7 +1106,7 @@ function SymptomsTab({
                         </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{r.notes ?? "—"}</TableCell>
-                      <TableCell>
+                      <TableCell actions>
                         <RowActions
                           onEdit={() => {
                             setEditing(r);

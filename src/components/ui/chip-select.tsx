@@ -33,7 +33,7 @@ export function ChipSelect<T extends string>({
             aria-pressed={active}
             onClick={() => toggle(opt.value)}
             className={cn(
-              "inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+              "press inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               active
                 ? "border-transparent bg-primary/15 text-primary"
                 : "border-input text-muted-foreground hover:bg-muted hover:text-foreground",

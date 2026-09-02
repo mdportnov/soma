@@ -58,6 +58,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Soma could show onboarding while your records sat encrypted on disk.** The
+  database can be encrypted at rest with the key held in the system keychain, and
+  the key is bound to the application's code signature. Soma is ad-hoc signed on
+  purpose — it has no Apple certificate — so every build signs differently and an
+  update can make macOS refuse the key. That alone is survivable; what followed
+  was not. Five paths through the startup gate treated a vault it could not open
+  as no vault at all, created an empty database and offered to set the app up
+  again, which looks exactly like a deleted medical record. A vault on disk now
+  means the user has data: if Soma cannot open it, it stops and says so, names
+  the signing cause, and offers a retry, a recovery key, or the command that
+  reads the key out of the keychain. Turning keychain encryption on shows that
+  recovery key up front and keeps it available in settings.
+- **`soma-recover`, a recovery tool that does not depend on the app.** The vault
+  format, key derivation, archive and keychain lookup now live in their own crate
+  with a command-line binary, so extracting a database and its documents needs
+  rustc and nothing else — no webkit, no Tauri codegen, no frontend bundle. It
+  refuses to write into Soma's own data directory and never modifies a source
+  file. See `docs/recovery.md`.
+- **Locking could delete the documents it was meant to protect.** Sealing packed
+  whatever was in the attachments directory over the existing vault, and removed
+  the vault entirely when that directory was empty — so an unlock that failed
+  halfway erased every sealed document on the next clean exit. A surviving vault
+  is now folded back in before packing.
+- **The assistant could write records into a file nobody would ever read.** The
+  MCP sidecar refuses to open a locked database, but it held its handle across a
+  lock: the plaintext file is unlinked while SQLite keeps writing to an inode
+  that no future launch will open. Writes now verify the file's identity before
+  committing and refuse with an explicit message rather than reporting success.
+- **Disabling encryption could orphan the documents.** It removed the key while
+  an attachments vault could still exist, leaving those files permanently
+  unreadable. It now restores them first and refuses if it cannot.
+- **The whole encryption path logged nothing,** so a failure left no trace to
+  read afterwards. Every state read, unlock, lock, seal and restore is recorded.
 - **Back went to the wrong place.** The hierarchy registry was never consulted:
   `resolveParent()` had no callers and every page hardcoded its back target as a
   literal string, so a biomarker opened from a lab panel always returned to the

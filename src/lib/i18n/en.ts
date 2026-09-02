@@ -2646,6 +2646,48 @@ export const en = {
     error: "Could not change encryption settings",
     requiresKeychainNote:
       "Encryption stores its key in the OS keychain, so a working keychain is required.",
+    keychainUpdateWarning:
+      "The key is tied to Soma's code signature. Soma is signed ad-hoc rather than with a paid Apple certificate, so after an update your system may see a different application and refuse to release the key. Save the recovery key below — it takes seconds now and is the difference between getting straight back in and being locked out of your records.",
+    showRecoveryKey: "Show recovery key",
+    recoveryKeyTitle: "Save your recovery key",
+    recoveryKeyIntro:
+      "This is the key that decrypts your database. Write it down or put it in a password manager. Anyone with it can read your health data, and without it an update that breaks keychain access leaves your records unreachable.",
+    recoveryKeySaved: "I've saved this key somewhere safe",
+    recoveryKeyDone: "Done",
+  },
+
+  // Startup recovery gate: encrypted data Soma could not open. Shown INSTEAD of
+  // onboarding — a vault on disk means the user has data, never a first run.
+  vaultBlocked: {
+    title: "Your health data is encrypted and Soma can't open it",
+    safe: "Everything is still on your disk. Soma has not deleted, changed or reset anything, and it will not start a new database while your encrypted data is there.",
+    likelyCause: "What's going on",
+    cause: {
+      probeFailed:
+        "Soma couldn't check whether your database is encrypted, so it stopped rather than risk starting a blank one over your records.",
+      vaultUnreadable:
+        "The encrypted file is there but Soma can't read its header. It may have been written by a newer version of Soma, or damaged in a copy.",
+      keyMissing:
+        "Your database is encrypted with a key kept in the system keychain, and that key is no longer there.",
+      keyUnavailable:
+        "Your database is encrypted with a key kept in the system keychain. The key is still there — the system just refused to hand it to this copy of Soma.",
+      plaintextSuspicious:
+        "There's an unencrypted database next to your vault, but it's far too small to be yours — most likely an empty one created by mistake. Soma won't open it in place of your real data.",
+      unlockFailed:
+        "Soma found the key but decrypting failed. The key may belong to a different vault, or the file may be damaged.",
+    },
+    adHocSigning:
+      "This almost always means Soma was updated. Soma is signed ad-hoc rather than with a paid Apple certificate, so macOS treats each new build as a different application — and won't give a different application the keychain entry the old one created. Your key and your data are untouched. Paste the key below to get straight back in, and keep a copy of it: this will happen again on the next update.",
+    retry: "Try again",
+    quarantine: "Set that file aside and unlock the vault",
+    keyLabel: "Recovery key",
+    keyPlaceholder: "64 hexadecimal characters",
+    keyHint:
+      "If you saved a recovery key, paste it here. You can also read it out of the keychain yourself — run this in Terminal and approve the prompt:",
+    unlockWithKey: "Unlock with this key",
+    openFolder: "Show my data folder",
+    recoverTool:
+      "Whatever happens here, your files can also be recovered outside the app with the soma-recover tool shipped in the Soma source repository. It reads the same format and never writes into this folder.",
   },
 
   // Unlock gate (passphrase mode, shown before the app loads)

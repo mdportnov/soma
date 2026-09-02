@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "../../src/db/schema";
 import journal from "../../src/db/migrations/meta/_journal.json";
-import { missingDbMessage, vaultLockedMessage } from "./guard";
+import { databaseNoLongerLiveMessage, missingDbMessage, vaultLockedMessage } from "./guard";
 
 const APP_IDENTIFIER = "com.soma.health";
 const DB_FILE = "soma.db";
@@ -54,7 +54,37 @@ export type SomaDb = {
   /** False when the DB schema doesn't match this checkout's migrations — writes are refused. */
   writable: boolean;
   schemaNote: string | null;
+  /** The path we opened, and the file identity behind it at that moment. */
+  dbPath: string;
+  identity: string | null;
 };
+
+/**
+ * `dev:ino` of the file at `p`, or null if it isn't there.
+ *
+ * Identity, not existence: Soma's lock removes `soma.db` and a later unlock
+ * writes a *new* file at the same path, so "the path exists" says nothing about
+ * whether it is still the file this process holds open.
+ */
+export function fileIdentity(p: string): string | null {
+  try {
+    const s = fs.statSync(p);
+    return `${s.dev}:${s.ino}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns an error message if the open handle no longer refers to the database
+ * at `dbPath`, or null when it is still live. Called before every write: a
+ * write through an unlinked handle succeeds, reports success, and is lost.
+ */
+export function liveDatabaseError(db: SomaDb): string | null {
+  const now = fileIdentity(db.dbPath);
+  if (now !== null && now === db.identity) return null;
+  return databaseNoLongerLiveMessage(db.dbPath);
+}
 
 /**
  * Compares migrations applied by the app (`__migrations` table, written by
@@ -113,5 +143,12 @@ export function openDb(dbPath: string): SomaDb {
   sqlite.exec("PRAGMA foreign_keys = ON;");
 
   const { writable, note } = checkSchema(sqlite);
-  return { orm: drizzle(sqlite, { schema }), sqlite, writable, schemaNote: note };
+  return {
+    orm: drizzle(sqlite, { schema }),
+    sqlite,
+    writable,
+    schemaNote: note,
+    dbPath,
+    identity: fileIdentity(dbPath),
+  };
 }

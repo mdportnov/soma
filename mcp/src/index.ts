@@ -27,7 +27,7 @@ import {
   medicationDeletePlan,
   panelInsertPlan,
 } from "../../src/db/tx-plans";
-import { openDb, resolveDbPath } from "./db";
+import { liveDatabaseError, openDb, resolveDbPath } from "./db";
 import { describeCandidates, matchBiomarker } from "./mapping";
 import { WRITES_DISABLED_MESSAGE, writesAllowed } from "./guard";
 import { collectLinkedAttachments, removeDeletedAttachmentFiles } from "./attachments";
@@ -548,6 +548,8 @@ server.registerTool(
     if (!db.writable) {
       return fail(`Database is read-only for this server: ${db.schemaNote}`);
     }
+    const notLive = liveDatabaseError(db);
+    if (notLive) return fail(notLive);
     const pid = resolveProfileId(profileId);
     if ("error" in pid) return fail(pid.error);
 
@@ -683,6 +685,10 @@ function beginWrite(
   if (!db.writable) {
     return { ok: false, result: fail(`Database is read-only for this server: ${db.schemaNote}`) };
   }
+  // Soma's at-rest encryption unlinks soma.db on a clean exit. Writing through
+  // the handle we still hold would report success and land nowhere.
+  const notLive = liveDatabaseError(db);
+  if (notLive) return { ok: false, result: fail(notLive) };
   const pid = resolveProfileId(profileId);
   if ("error" in pid) return { ok: false, result: fail(pid.error) };
   return { ok: true, pid: pid.id };
@@ -750,6 +756,8 @@ server.registerTool(
   async ({ profileId, allergen, category, severity, reaction, onsetDate, notes, dryRun }) => {
     if (!WRITES_ENABLED) return fail(WRITES_DISABLED_MESSAGE);
     if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
+    const notLive = liveDatabaseError(db);
+    if (notLive) return fail(notLive);
     const pid = resolveProfileId(profileId);
     if ("error" in pid) return fail(pid.error);
     if (onsetDate && onsetDate > todayIso())
@@ -807,6 +815,8 @@ server.registerTool(
   }) => {
     if (!WRITES_ENABLED) return fail(WRITES_DISABLED_MESSAGE);
     if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
+    const notLive = liveDatabaseError(db);
+    if (notLive) return fail(notLive);
     const pid = resolveProfileId(profileId);
     if ("error" in pid) return fail(pid.error);
     if (date > todayIso()) return fail(`date ${date} is in the future.`);
@@ -863,6 +873,8 @@ server.registerTool(
   async ({ profileId, symptomName, severity, date, time, notes, visitId, dryRun }) => {
     if (!WRITES_ENABLED) return fail(WRITES_DISABLED_MESSAGE);
     if (!db.writable) return fail(`Database is read-only for this server: ${db.schemaNote}`);
+    const notLive = liveDatabaseError(db);
+    if (notLive) return fail(notLive);
     const pid = resolveProfileId(profileId);
     if ("error" in pid) return fail(pid.error);
 

@@ -4305,6 +4305,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "soma-vault",
  "sqlx",
  "tauri",
  "tauri-build",
@@ -4315,6 +4316,15 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-sql",
  "toml_edit 0.22.27",
+]
+
+[[package]]
+name = "soma-vault"
+version = "0.9.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "keyring",
 ]
 
 [[package]]

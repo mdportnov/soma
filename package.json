@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "mcp:sidecar": "node scripts/build-sidecar.mjs",
+    "recover": "cargo run --release --manifest-path src-tauri/Cargo.toml -p soma-vault --bin soma-recover --",
     "mcp:typecheck": "pnpm --filter soma-mcp typecheck",
     "db:generate": "drizzle-kit generate",
     "db:reset": "tsx scripts/reset-db.ts",

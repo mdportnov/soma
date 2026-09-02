@@ -132,6 +132,10 @@
       "identifier": "opener:allow-open-path",
       "allow": [
         {
+          "comment": "The recovery screen shows the user where their vault files are when Soma cannot open them.",
+          "path": "$APPDATA"
+        },
+        {
           "path": "$APPLOG"
         },
         {
@@ -148,6 +152,10 @@
     {
       "identifier": "opener:allow-reveal-item-in-dir",
       "allow": [
+        {
+          "comment": "The recovery screen shows the user where their vault files are when Soma cannot open them.",
+          "path": "$APPDATA"
+        },
         {
           "path": "$APPDATA/attachments"
         },

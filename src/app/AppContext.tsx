@@ -4,12 +4,21 @@ import { ensureActiveProfile, isOnboarded } from "@/db/repos";
 import { initBackupScheduler } from "@/lib/backup";
 import {
   initVaultCloseHook,
+  quarantinePlaintext,
+  restoreAttachments,
   unlockKeychain,
   unlockPassphrase,
+  unlockWithKey,
   vaultState,
   verifyPassphrase,
-  type VaultState,
 } from "@/lib/db-encryption";
+import {
+  planAfterFailedUnlock,
+  planStartup,
+  PROBE_FAILED_PLAN,
+  type StartupPlan,
+  type VaultState,
+} from "@/lib/startup-gate";
 import { useI18n } from "@/lib/i18n";
 import { INTERESTS_EVENT } from "@/lib/interests";
 import { DASHBOARD_PREFS_EVENT } from "@/lib/dashboard-prefs";
@@ -17,6 +26,7 @@ import { NOTIFICATION_PREFS_EVENT } from "@/lib/notifications";
 import { hydratePersonalizationFromDb, syncPersonalizationToDb } from "@/lib/personalization";
 import { Loading } from "@/components/app/Loading";
 import { UnlockScreen } from "@/components/app/UnlockScreen";
+import { VaultBlockedScreen } from "@/components/app/VaultBlockedScreen";
 import { Onboarding } from "@/pages/Onboarding";
 
 type AppState = { profileId: number };
@@ -29,73 +39,118 @@ export function useApp(): AppState {
   return ctx;
 }
 
-/** Boots the local database (migrations + seed) and resolves the active profile. */
+/**
+ * Boots the local database (migrations + seed) and resolves the active profile.
+ *
+ * Before any of that, it consults the startup gate. The one rule that governs
+ * this component: **while an encrypted vault exists on disk, Soma never opens a
+ * new database.** `initDatabase()` creates `soma.db` if it is missing, so
+ * reaching it on a machine that has a vault means silently replacing the user's
+ * health record with an empty one and offering them onboarding. Every path that
+ * cannot confidently unlock therefore ends at <VaultBlockedScreen>, not at a
+ * boot. The decision itself lives in `@/lib/startup-gate`, where it is a pure
+ * function with tests.
+ */
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const [state, setState] = React.useState<AppState | null>(null);
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  // When the DB is encrypted in passphrase mode it must be unlocked before the
-  // SQLite connection opens — render <UnlockScreen> until the user provides it.
-  const [unlockNeeded, setUnlockNeeded] = React.useState(false);
-  // True when a crash left a newer plaintext DB next to the vault: verify the
-  // passphrase (to re-arm the session) instead of decrypting the stale vault.
+  /** The current startup plan; null while it is still being worked out. */
+  const [plan, setPlan] = React.useState<StartupPlan | null>(null);
+  /** Last known on-disk state, so the recovery screen can point at the folder. */
+  const [vault, setVault] = React.useState<VaultState | null>(null);
+  /** True when a crashed session left a newer plaintext DB next to the vault. */
   const hadPlaintext = React.useRef(false);
-  const finishBoot = React.useRef<(() => Promise<void>) | null>(null);
+  const cancelled = React.useRef(false);
+  const stopScheduler = React.useRef<(() => void) | null>(null);
+
+  const boot = React.useCallback(async () => {
+    await initDatabase();
+    const profileId = await ensureActiveProfile();
+    // Pull layout/notification prefs from a restored profile before the shell
+    // renders, so the sidebar and dashboard come up already personalized.
+    await hydratePersonalizationFromDb(profileId);
+    const onboardedNow = await isOnboarded(profileId);
+    if (cancelled.current) return;
+    setOnboarded(onboardedNow);
+    setState({ profileId });
+    stopScheduler.current = initBackupScheduler();
+    // Re-lock the database on the next clean exit (no-op while encryption off).
+    void initVaultCloseHook();
+  }, []);
+
+  /** Carries out a plan, or parks on one that needs the user. */
+  const execute = React.useCallback(
+    async (next: StartupPlan) => {
+      setPlan(next);
+      switch (next.action) {
+        case "boot":
+          if (next.restoreAttachments) {
+            // Best effort: the ciphertext survives a failure here, and a
+            // missing PDF must never stop someone reaching their records.
+            await restoreAttachments().catch((e) =>
+              console.error("Sealed attachments could not be restored:", e),
+            );
+          }
+          await boot();
+          return;
+        case "unlockKeychain":
+          try {
+            await unlockKeychain();
+          } catch (e) {
+            console.error("Keychain unlock failed:", e);
+            setPlan(planAfterFailedUnlock(e));
+            return;
+          }
+          await boot();
+          return;
+        // Both of these render a screen and wait for the user.
+        case "promptPassphrase":
+          hadPlaintext.current = next.verifyOnly;
+          return;
+        case "blocked":
+          return;
+      }
+    },
+    [boot],
+  );
+
+  /** Re-reads the disk and starts over. Also the "Try again" button. */
+  const resolve = React.useCallback(async () => {
+    setPlan(null);
+    let next: StartupPlan;
+    try {
+      const vs = await vaultState();
+      if (cancelled.current) return;
+      setVault(vs);
+      next = planStartup(vs);
+    } catch (e) {
+      // A probe failure is not permission to assume there is no encryption.
+      // That assumption is what turned a locked vault into an onboarding
+      // screen; the app stops here instead and says it does not know.
+      console.error("Could not read the vault state:", e);
+      next = PROBE_FAILED_PLAN;
+    }
+    if (cancelled.current) return;
+    try {
+      await execute(next);
+    } catch (e) {
+      if (cancelled.current) return;
+      console.error("Startup failed:", e);
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [execute]);
 
   React.useEffect(() => {
-    let cancelled = false;
-    let stopScheduler: (() => void) | null = null;
-
-    const boot = async () => {
-      await initDatabase();
-      const profileId = await ensureActiveProfile();
-      // Pull layout/notification prefs from a restored profile before the shell
-      // renders, so the sidebar and dashboard come up already personalized.
-      await hydratePersonalizationFromDb(profileId);
-      const onboardedNow = await isOnboarded(profileId);
-      if (cancelled) return;
-      setOnboarded(onboardedNow);
-      setState({ profileId });
-      stopScheduler = initBackupScheduler();
-      // Re-lock the database on the next clean exit (no-op while encryption off).
-      void initVaultCloseHook();
-    };
-    finishBoot.current = boot;
-
-    (async () => {
-      try {
-        let vs: VaultState;
-        try {
-          vs = await vaultState();
-        } catch {
-          // A vault-state probe failure must never brick startup — fall back to
-          // "no encryption" so the app still opens.
-          vs = { vaultExists: false, plaintextExists: true, mode: null, keychainKeyPresent: false };
-        }
-        if (vs.vaultExists && vs.mode === "passphrase") {
-          // Passphrase mode always prompts at launch (decrypt, or verify+re-arm
-          // when a crash left a plaintext DB behind).
-          if (cancelled) return;
-          hadPlaintext.current = vs.plaintextExists;
-          setUnlockNeeded(true);
-          return;
-        }
-        if (vs.vaultExists && vs.mode === "keychain" && !vs.plaintextExists) {
-          await unlockKeychain();
-        }
-        if (cancelled) return;
-        await boot();
-      } catch (e) {
-        if (cancelled) return;
-        console.error(e);
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
+    cancelled.current = false;
+    void resolve();
     return () => {
-      cancelled = true;
-      stopScheduler?.();
+      cancelled.current = true;
+      stopScheduler.current?.();
     };
+    // Runs once: `resolve` is stable and re-running it would re-boot the app.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Mirror any personalization change up to the profile so it survives a backup
@@ -116,19 +171,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Called by the unlock screen. A rejection propagates so it can show "wrong
   // passphrase"; once unlocked, boot errors are surfaced as app errors instead.
-  const handleUnlock = React.useCallback(async (passphrase: string) => {
-    if (hadPlaintext.current) {
-      await verifyPassphrase(passphrase);
-    } else {
-      await unlockPassphrase(passphrase);
-    }
-    setUnlockNeeded(false);
-    try {
-      await finishBoot.current?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
+  const handleUnlock = React.useCallback(
+    async (passphrase: string) => {
+      if (hadPlaintext.current) {
+        await verifyPassphrase(passphrase);
+        // The live database survived, but the attachments are still sealed and
+        // would be missing from every record until the next lock/unlock cycle.
+        await restoreAttachments(passphrase).catch((e) =>
+          console.error("Sealed attachments could not be restored:", e),
+        );
+      } else {
+        await unlockPassphrase(passphrase);
+      }
+      setPlan({ action: "boot", restoreAttachments: false });
+      try {
+        await boot();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [boot],
+  );
+
+  /** Recovery screen: unlock with a hex key the user pasted. */
+  const handleUnlockWithKey = React.useCallback(
+    async (keyHex: string) => {
+      await unlockWithKey(keyHex);
+      setPlan({ action: "boot", restoreAttachments: false });
+      await boot();
+    },
+    [boot],
+  );
+
+  /** Recovery screen: move an unexpected plaintext DB aside, then start over. */
+  const handleQuarantine = React.useCallback(async () => {
+    await quarantinePlaintext();
+    await resolve();
+  }, [resolve]);
 
   if (error) {
     return (
@@ -141,7 +220,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (unlockNeeded) return <UnlockScreen onUnlock={handleUnlock} />;
+  if (plan?.action === "blocked") {
+    return (
+      <VaultBlockedScreen
+        plan={plan}
+        dataDir={vault?.dataDir ?? null}
+        onRetry={resolve}
+        onUnlockWithKey={handleUnlockWithKey}
+        onQuarantineAndUnlock={handleQuarantine}
+      />
+    );
+  }
+
+  if (plan?.action === "promptPassphrase") return <UnlockScreen onUnlock={handleUnlock} />;
 
   if (!state || onboarded === null) return <Loading label={t("loading.openingDatabase")} />;
 

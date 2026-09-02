@@ -1,0 +1,22 @@
+[package]
+name = "soma-vault"
+version = "0.9.0"
+description = "Soma vault format: the single implementation of Soma's at-rest encryption, plus the offline recovery CLI"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "soma_vault"
+
+# The recovery CLI is deliberately a target of THIS crate and not of the Tauri
+# app: an escape hatch that only builds when the whole GUI toolchain (webkit,
+# tauri codegen, the frontend bundle) is healthy is not an escape hatch. This
+# crate compiles with nothing but a Rust toolchain.
+[[bin]]
+name = "soma-recover"
+path = "src/bin/soma-recover.rs"
+
+[dependencies]
+aes-gcm = "0.11"
+argon2 = "0.5"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }

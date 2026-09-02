@@ -172,7 +172,8 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 - 🔐 **Encrypted backups** — AES-256-GCM snapshots (Argon2id key) into your own cloud-synced folder
   (iCloud / Drive / Dropbox / OneDrive); the live database never leaves the device
 - 🔒 **Optional at-rest encryption** — keep the live database encrypted on disk while the app is
-  closed (Argon2id + AES-256-GCM), unlocked automatically via the OS keychain or with a passphrase
+  closed (Argon2id + AES-256-GCM), unlocked automatically via the OS keychain or with a passphrase,
+  with an offline [`soma-recover`](docs/recovery.md) escape hatch that never depends on the app
 - 🧰 **Local MCP server** — typed stdio tools over your `soma.db` for AI assistants, one-click setup
 - 🌍 **Cross-country units** — Cyrillic-aware unit normalization + per-analyte molar conversions
   (mg/dL ↔ mmol/L, nmol/L ↔ ng/mL, …); unknown conversions are flagged, never guessed
@@ -181,16 +182,17 @@ a photo of a lab report in any language into structured, reviewed, unit-normaliz
 
 ## Privacy model
 
-| Principle          | Implementation                                                                                                                                  |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local-first        | All data in a local SQLite file; fully functional offline                                                                                       |
-| AI is opt-in       | Disabled by default; every AI surface shows a stub until you add a key                                                                          |
-| Keys in keychain   | API keys live in the OS keychain (macOS Keychain / Windows Credential Manager / Secret Service) — never in the DB or config files               |
-| Explicit egress    | Documents are sent to your chosen AI provider only when you click import; network access is scoped to provider APIs only                        |
-| Encrypted backups  | Snapshots are AES-256-GCM encrypted with an Argon2id key from your passphrase before reaching a cloud-synced folder — unreadable without it     |
-| At-rest encryption | Optional: the live database is kept encrypted on disk (Argon2id + AES-256-GCM) whenever the app is closed; in the clear only while the app runs |
-| Auditability       | Every imported value keeps its original `raw_label` from the source document                                                                    |
-| Not medical advice | Every AI output carries a disclaimer                                                                                                            |
+| Principle          | Implementation                                                                                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local-first        | All data in a local SQLite file; fully functional offline                                                                                                                 |
+| AI is opt-in       | Disabled by default; every AI surface shows a stub until you add a key                                                                                                    |
+| Keys in keychain   | API keys live in the OS keychain (macOS Keychain / Windows Credential Manager / Secret Service) — never in the DB or config files                                         |
+| Explicit egress    | Documents are sent to your chosen AI provider only when you click import; network access is scoped to provider APIs only                                                  |
+| Encrypted backups  | Snapshots are AES-256-GCM encrypted with an Argon2id key from your passphrase before reaching a cloud-synced folder — unreadable without it                               |
+| At-rest encryption | Optional: the live database is kept encrypted on disk (Argon2id + AES-256-GCM) whenever the app is closed; in the clear only while the app runs                           |
+| No dead ends       | Soma never starts a fresh database while an encrypted vault exists — it stops and explains; `soma-recover` reads the vault without the app ([recovery](docs/recovery.md)) |
+| Auditability       | Every imported value keeps its original `raw_label` from the source document                                                                                              |
+| Not medical advice | Every AI output carries a disclaimer                                                                                                                                      |
 
 ## Development
 
@@ -253,7 +255,9 @@ src/
 src-tauri/                    # Rust shell: SQL/dialog/fs/http plugins + keyring commands
     ├── backup.rs             # encrypted .somabk snapshots (Argon2id + AES-256-GCM)
     ├── vault.rs              # optional at-rest DB encryption (encrypt-when-closed vault)
-    └── mcp.rs                # one-click local MCP server setup
+    ├── mcp.rs                # one-click local MCP server setup
+    └── crates/soma-vault/    # vault format + KDF + archive, Tauri-free
+        └── bin/soma-recover  #   offline recovery CLI (builds without the GUI stack)
 ```
 
 ### AI import pipeline

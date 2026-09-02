@@ -1,10 +1,14 @@
-mod archive;
 mod backup;
-mod fsutil;
-mod kdf;
 mod mcp;
 mod transaction;
 mod vault;
+
+// The vault container format, the Argon2 parameters, the attachment archive and
+// the crash-safe write live in the `soma-vault` crate so that `soma-recover`
+// can be built and run without Tauri — a rescue tool that needs a working GUI
+// toolchain is no rescue at all. Re-exported here so `crate::archive` and
+// friends keep meaning what they always did.
+pub(crate) use soma_vault::{archive, fsutil, kdf};
 
 use keyring::Entry;
 
@@ -162,7 +166,11 @@ pub fn run() {
             vault::vault_enable_passphrase,
             vault::vault_unlock_keychain,
             vault::vault_unlock_passphrase,
+            vault::vault_unlock_with_key,
+            vault::vault_recovery_key,
             vault::vault_verify_passphrase,
+            vault::vault_restore_attachments,
+            vault::vault_quarantine_plaintext,
             vault::vault_lock_keychain,
             vault::vault_lock_passphrase,
             vault::vault_disable

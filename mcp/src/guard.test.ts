@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileIdentity, liveDatabaseError, type SomaDb } from "./db";
 import {
   ALLOW_WRITES_ENV,
+  databaseNoLongerLiveMessage,
   dbErrorMessage,
   missingDbMessage,
   vaultLockedMessage,
@@ -43,4 +48,34 @@ test("db errors map to safe messages by code without leaking internals", () => {
   const unknown = dbErrorMessage(new Error("kaboom stack trace here"));
   expect(unknown).not.toContain("kaboom");
   expect(unknown).toContain("Unexpected database error");
+});
+
+test("a database that was unlinked or swapped is refused, in its own words", () => {
+  const gone = databaseNoLongerLiveMessage("/data/soma.db");
+  expect(gone).toContain("/data/soma.db");
+  // The user has to know nothing was saved — a write through an unlinked
+  // handle otherwise looks like a success and disappears.
+  expect(gone).toContain("Nothing was written");
+  expect(gone).not.toBe(vaultLockedMessage("/data/soma.db"));
+  expect(gone).not.toBe(missingDbMessage("/data/soma.db"));
+});
+
+test("liveDatabaseError notices removal and replacement of the open file", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "soma-live-"));
+  const dbPath = path.join(dir, "soma.db");
+  fs.writeFileSync(dbPath, "one");
+
+  const db = { dbPath, identity: fileIdentity(dbPath) } as SomaDb;
+  expect(liveDatabaseError(db)).toBeNull();
+
+  // What Soma's lock does: the file is unlinked and only the vault remains.
+  fs.rmSync(dbPath);
+  expect(liveDatabaseError(db)).toContain("no longer");
+
+  // What Soma's unlock does: a NEW file appears at the same path. Existing
+  // again is not the same as being the file we hold open.
+  fs.writeFileSync(dbPath, "two");
+  expect(liveDatabaseError(db)).toContain("no longer");
+
+  fs.rmSync(dir, { recursive: true, force: true });
 });

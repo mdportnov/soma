@@ -13,64 +13,54 @@
 //! - **passphrase**: the key is derived from a passphrase (Argon2id) the user
 //!   types at launch; nothing is persisted. Resists a compromised keychain.
 //!
-//! Vault file layout (`.vault`, format v2):
-//! `MAGIC(8) | format_version(1) | mode(1) | argon2 m_cost/t_cost/p_cost (3 × u32 LE) | salt(16) | nonce(12) | AES-256-GCM ciphertext`
-//! For keychain mode the salt is random but unused (the key is the keychain
-//! bytes directly); for passphrase mode the salt feeds Argon2id. v1 files lack
-//! the Argon2 parameter fields and are still read, using the pinned legacy
-//! parameters in [`crate::kdf`].
-//!
-//! The frontend always hands Rust a clean `VACUUM INTO` snapshot to encrypt, so
-//! the vault is a consistent database image with no separate WAL to replay.
+//! The container format itself lives in the `soma-vault` crate, which the
+//! `soma-recover` CLI also builds against — see [`soma_vault::format`]. This
+//! module is only the app's side: where the files are, when they are written,
+//! and what must never happen to them.
 //!
 //! Imported attachment files (PDFs/photos) are sealed alongside the database in
-//! a sibling `attachments.vault` (an encrypted [`crate::archive`] of the
+//! a sibling `attachments.vault` (an encrypted [`soma_vault::archive`] of the
 //! attachments folder), so at-rest encryption covers them too instead of
 //! leaving the most sensitive documents in cleartext. They are restored to
 //! cleartext on unlock and re-sealed on the next lock.
+//!
+//! # Invariants
+//!
+//! These are the rules that stop an encryption feature from becoming a deletion
+//! feature. Each is enforced here, not merely documented:
+//!
+//! 1. **Never seal over an attachments vault this session did not open.** A
+//!    surviving `attachments.vault` means its contents are *not* represented in
+//!    the attachments directory, so packing that directory would replace real
+//!    files with whatever happens to be lying around — including nothing.
+//!    [`seal_attachments`] folds the old vault back in first.
+//! 2. **Never decrypt over a plaintext database.** A `soma.db` next to the
+//!    vault is newer than the vault (it is what an unclean exit left behind);
+//!    overwriting it with the vault silently discards a session's work.
+//! 3. **Never discard the key while ciphertext still needs it.**
+//!    [`vault_disable`] restores the attachments before removing the key.
+//! 4. **Say so, loudly.** Every step logs. The failure that motivated all of
+//!    this left not one line in the log to explain itself.
 
 use std::fs;
 use std::path::PathBuf;
 
-use aes_gcm::aead::{Aead, Generate, KeyInit};
-use aes_gcm::Aes256Gcm;
-use keyring::Entry;
+use aes_gcm::aead::Generate;
 use serde::Serialize;
+use soma_vault::format::{self, KeySource, MODE_KEYCHAIN, MODE_PASSPHRASE};
+use soma_vault::{archive, keychain, paths};
 use tauri::Manager;
 
-use crate::archive;
 use crate::fsutil::atomic_write;
-use crate::kdf;
 
-const KEYCHAIN_SERVICE: &str = "com.soma.health";
-/// Keychain entry holding the hex-encoded 32-byte data key (keychain mode only).
-const KEY_USER: &str = "db-encryption-key";
-
-const MAGIC: &[u8; 8] = b"SOMAVLT1";
-/// Current on-disk format. v1 had no Argon2 parameter fields (it relied on the
-/// crate default); v2 stores m/t/p so a future argon2 default change can't
-/// orphan a file. v1 files are still read, keyed with the pinned legacy params.
-const FORMAT_VERSION: u8 = 2;
-const MODE_KEYCHAIN: u8 = 0;
-const MODE_PASSPHRASE: u8 = 1;
-/// v1: MAGIC(8) | version(1) | mode(1) | salt(16) | nonce(12).
-const HEADER_LEN_V1: usize = 8 + 1 + 1 + 16 + 12;
-/// v2: adds m_cost/t_cost/p_cost (3 × u32 LE) between mode and salt.
-const HEADER_LEN_V2: usize = 8 + 1 + 1 + 12 + 16 + 12;
-const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
-
-const VAULT_FILE: &str = "soma.db.vault";
-const DB_FILE: &str = "soma.db";
+const VAULT_FILE: &str = paths::VAULT_FILE;
+const DB_FILE: &str = paths::DB_FILE;
 const SNAPSHOT_STAGING: &str = "vault-snapshot-staging.db";
 /// Imported PDFs/photos live here in cleartext while the app runs; on lock they
 /// are packed and encrypted into `ATTACHMENTS_VAULT` so at-rest encryption
 /// covers the most sensitive documents too, not just the database.
-const ATTACHMENTS_DIR: &str = "attachments";
-const ATTACHMENTS_VAULT: &str = "attachments.vault";
-
-fn key_entry() -> Result<Entry, String> {
-    Entry::new(KEYCHAIN_SERVICE, KEY_USER).map_err(|e| e.to_string())
-}
+const ATTACHMENTS_DIR: &str = paths::ATTACHMENTS_DIR;
+const ATTACHMENTS_VAULT: &str = paths::ATTACHMENTS_VAULT;
 
 fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path().app_config_dir().map_err(|e| e.to_string())
@@ -84,219 +74,19 @@ fn db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(config_dir(app)?.join(DB_FILE))
 }
 
-// ── hex (avoid pulling a base64 dependency for the keychain-stored key) ──────
-
-fn to_hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        s.push_str(&format!("{b:02x}"));
-    }
-    s
-}
-
-fn from_hex(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
-        return Err("invalid key encoding".into());
-    }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| e.to_string()))
-        .collect()
-}
-
-// ── crypto ───────────────────────────────────────────────────────────────────
-
-/// Argon2id cost parameters carried in a v2 header (pinned legacy values for v1).
-#[derive(Clone, Copy)]
-struct KdfParams {
-    m_cost: u32,
-    t_cost: u32,
-    p_cost: u32,
-}
-
-impl KdfParams {
-    /// The parameters v1 files were (implicitly) written with; also what new
-    /// files are written with today.
-    const PINNED: KdfParams = KdfParams {
-        m_cost: kdf::M_COST_KIB,
-        t_cost: kdf::T_COST,
-        p_cost: kdf::P_COST,
-    };
-}
-
-/// How the AES key is obtained when writing a vault.
-enum KeySource<'a> {
-    /// Keychain mode: the 32-byte key is used directly (the salt is unused).
-    Raw(&'a [u8; 32]),
-    /// Passphrase mode: the key is derived from the passphrase and the header
-    /// salt via Argon2id with the pinned parameters.
-    Passphrase(&'a str),
-}
-
-/// Reads the keychain data key, or creates and stores a fresh random one.
-fn ensure_keychain_key() -> Result<[u8; 32], String> {
-    let entry = key_entry()?;
-    match entry.get_password() {
-        Ok(hex) => {
-            let bytes = from_hex(&hex)?;
-            let arr: [u8; 32] = bytes
-                .try_into()
-                .map_err(|_| "stored key has the wrong length".to_string())?;
-            Ok(arr)
-        }
-        Err(keyring::Error::NoEntry) => {
-            let key = <[u8; 32]>::generate();
-            entry
-                .set_password(&to_hex(&key))
-                .map_err(|e| e.to_string())?;
-            Ok(key)
-        }
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-fn read_keychain_key() -> Result<[u8; 32], String> {
-    let hex = match key_entry()?.get_password() {
-        Ok(h) => h,
-        Err(keyring::Error::NoEntry) => return Err("No database key in the keychain".into()),
-        Err(e) => return Err(e.to_string()),
-    };
-    from_hex(&hex)?
-        .try_into()
-        .map_err(|_| "stored key has the wrong length".to_string())
-}
-
-/// Encrypts arbitrary bytes into the current (v2) `.vault` byte layout. Pure
-/// over its inputs apart from the random salt/nonce, so it is unit-tested
-/// without any filesystem or keychain access. Used for both the database
-/// snapshot and the attachments archive (which share the key/format).
-fn seal(plain: &[u8], source: KeySource, mode: u8) -> Result<Vec<u8>, String> {
-    let salt = <[u8; 16]>::generate();
-    let nonce = <[u8; 12]>::generate();
-
-    let params = KdfParams::PINNED;
-    let key: [u8; 32] = match source {
-        KeySource::Raw(k) => *k,
-        KeySource::Passphrase(p) => kdf::derive_key_pinned(p, &salt)?,
-    };
-
-    let cipher = Aes256Gcm::new((&key).into());
-    let ciphertext = cipher
-        .encrypt((&nonce).into(), plain)
-        .map_err(|e| format!("encrypt: {e}"))?;
-
-    let mut out = Vec::with_capacity(HEADER_LEN_V2 + ciphertext.len());
-    out.extend_from_slice(MAGIC);
-    out.push(FORMAT_VERSION);
-    out.push(mode);
-    out.extend_from_slice(&params.m_cost.to_le_bytes());
-    out.extend_from_slice(&params.t_cost.to_le_bytes());
-    out.extend_from_slice(&params.p_cost.to_le_bytes());
-    out.extend_from_slice(&salt);
-    out.extend_from_slice(&nonce);
-    out.extend_from_slice(&ciphertext);
-    Ok(out)
-}
-
-/// Seals a database snapshot, asserting it really is a SQLite image first.
-fn encrypt_snapshot(plain: &[u8], source: KeySource, mode: u8) -> Result<Vec<u8>, String> {
-    if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
-        return Err("Snapshot is not a valid SQLite database".into());
-    }
-    seal(plain, source, mode)
-}
-
-/// Parsed vault header fields needed to derive the key and decrypt.
-#[derive(Debug)]
-struct Header {
-    mode: u8,
-    m_cost: u32,
-    t_cost: u32,
-    p_cost: u32,
-    salt: [u8; 16],
-    nonce: [u8; 12],
-    /// Byte offset where the ciphertext starts (differs between v1 and v2).
-    body_offset: usize,
-}
-
-fn parse_header(raw: &[u8]) -> Result<Header, String> {
-    if raw.len() < 10 || &raw[..8] != MAGIC {
-        return Err("Not a Soma vault file".into());
-    }
-    let mode = raw[9];
-    match raw[8] {
-        1 => {
-            if raw.len() <= HEADER_LEN_V1 {
-                return Err("Not a Soma vault file".into());
-            }
-            let salt: [u8; 16] = raw[10..26].try_into().unwrap();
-            let nonce: [u8; 12] = raw[26..38].try_into().unwrap();
-            Ok(Header {
-                mode,
-                m_cost: KdfParams::PINNED.m_cost,
-                t_cost: KdfParams::PINNED.t_cost,
-                p_cost: KdfParams::PINNED.p_cost,
-                salt,
-                nonce,
-                body_offset: HEADER_LEN_V1,
-            })
-        }
-        2 => {
-            if raw.len() <= HEADER_LEN_V2 {
-                return Err("Not a Soma vault file".into());
-            }
-            let m_cost = u32::from_le_bytes(raw[10..14].try_into().unwrap());
-            let t_cost = u32::from_le_bytes(raw[14..18].try_into().unwrap());
-            let p_cost = u32::from_le_bytes(raw[18..22].try_into().unwrap());
-            kdf::validate_params(m_cost, t_cost, p_cost)?;
-            let salt: [u8; 16] = raw[22..38].try_into().unwrap();
-            let nonce: [u8; 12] = raw[38..50].try_into().unwrap();
-            Ok(Header {
-                mode,
-                m_cost,
-                t_cost,
-                p_cost,
-                salt,
-                nonce,
-                body_offset: HEADER_LEN_V2,
-            })
-        }
-        _ => Err("This vault was created by a newer version of Soma".into()),
-    }
-}
-
-/// Resolves the passphrase-mode key against a parsed header, honoring its
-/// Argon2 parameters (pinned legacy values for a v1 file, header values for v2).
-fn derive_key_for_header(passphrase: &str, header: &Header) -> Result<[u8; 32], String> {
-    kdf::derive_key(
-        passphrase,
-        &header.salt,
-        header.m_cost,
-        header.t_cost,
-        header.p_cost,
-    )
-}
-
-/// Decrypts a sealed `.vault` blob with an already-resolved key. A wrong
-/// key/passphrase fails the AES-GCM auth tag. Returns the raw plaintext without
-/// asserting its shape (the caller knows whether it's a DB or an archive).
-fn open(raw: &[u8], header: &Header, key: &[u8; 32]) -> Result<Vec<u8>, String> {
-    let cipher = Aes256Gcm::new(key.into());
-    cipher
-        .decrypt((&header.nonce).into(), &raw[header.body_offset..])
-        .map_err(|_| "Wrong passphrase, or the vault is corrupted".to_string())
-}
-
-/// Decrypts a `.vault` blob, asserting the result is a SQLite database.
-fn decrypt_snapshot(raw: &[u8], header: &Header, key: &[u8; 32]) -> Result<Vec<u8>, String> {
-    let plain = open(raw, header, key)?;
-    if plain.len() < SQLITE_MAGIC.len() || &plain[..SQLITE_MAGIC.len()] != SQLITE_MAGIC {
-        return Err("Decrypted data is not a SQLite database".into());
-    }
-    Ok(plain)
-}
-
 // ── state ─────────────────────────────────────────────────────────────────────
+
+/// Why the keychain key could not be used. Kept distinct from "there is no key"
+/// because the two call for opposite reactions: a missing key means encryption
+/// was never on, while a refused one means the data is there and the OS is in
+/// the way — on macOS, almost always because the app was re-signed.
+#[derive(Serialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum KeychainKeyStatus {
+    Present,
+    Missing,
+    Unavailable,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -305,43 +95,96 @@ pub struct VaultState {
     vault_exists: bool,
     /// A plaintext `soma.db` exists (live data, or a crash left it behind).
     plaintext_exists: bool,
+    /// Size of that plaintext database, and of the vault. The gate compares
+    /// them: the vault is a whole copy of the database as of the last clean
+    /// exit, and AES-GCM does not compress, so a genuine live database is
+    /// about the same size or larger. One that is dramatically smaller was not
+    /// written by a Soma session with this data in it, and booting on it would
+    /// show the user an empty app while their records sit in the vault.
+    plaintext_size: u64,
+    vault_size: u64,
+    /// An `attachments.vault` exists — i.e. attachments are still sealed.
+    attachments_vault_exists: bool,
     /// Unlock mode read from the vault header: "keychain" | "passphrase" | null.
     mode: Option<&'static str>,
-    /// The keychain data key is present (keychain mode readiness).
-    keychain_key_present: bool,
+    /// Whether the vault header could be read at all. False with
+    /// `vault_exists` true means the file is there and unreadable — which is a
+    /// reason to stop, never a reason to assume there is no encryption.
+    header_readable: bool,
+    /// Set when the vault exists but its header would not parse.
+    header_error: Option<String>,
+    /// Whether the keychain data key is present, absent, or refused.
+    keychain_key_status: KeychainKeyStatus,
+    /// Detail when the keychain refused (for the diagnostics panel).
+    keychain_error: Option<String>,
+    /// Absolute path of the directory holding all of the above, so a recovery
+    /// screen can point the user at their own files instead of describing them.
+    data_dir: String,
 }
 
 /// Snapshot of on-disk vault state, read by the frontend startup gate to decide
 /// whether (and how) to unlock before the SQLite plugin opens the database.
+///
+/// Every field is reported honestly, including the ways of failing. The gate's
+/// job is to refuse to boot on anything ambiguous, and it cannot do that if
+/// this function launders "I could not tell" into "there is nothing here".
 #[tauri::command]
 pub fn vault_state(app: tauri::AppHandle) -> Result<VaultState, String> {
     let vault = vault_path(&app)?;
     let db = db_path(&app)?;
-    let mode = if vault.exists() {
-        match fs::read(&vault) {
-            Ok(raw) => parse_header(&raw).ok().map(|h| match h.mode {
-                MODE_PASSPHRASE => "passphrase",
-                _ => "keychain",
-            }),
-            Err(_) => None,
+    let vault_exists = vault.exists();
+
+    let (mode, header_readable, header_error) = if vault_exists {
+        match fs::read(&vault).map_err(|e| e.to_string()) {
+            Ok(raw) => match format::parse_header(&raw) {
+                Ok(h) => (Some(h.mode_name()), true, None),
+                Err(e) => {
+                    log::error!("vault: header of {} is unreadable: {e}", vault.display());
+                    (None, false, Some(e.to_string()))
+                }
+            },
+            Err(e) => {
+                log::error!("vault: cannot read {}: {e}", vault.display());
+                (None, false, Some(e))
+            }
         }
     } else {
-        None
+        (None, true, None)
     };
-    let keychain_key_present = matches!(
-        key_entry().and_then(|e| match e.get_password() {
-            Ok(_) => Ok(true),
-            Err(keyring::Error::NoEntry) => Ok(false),
-            Err(e) => Err(e.to_string()),
-        }),
-        Ok(true)
-    );
-    Ok(VaultState {
-        vault_exists: vault.exists(),
+
+    let (keychain_key_status, keychain_error) = match keychain::status() {
+        keychain::KeyStatus::Present => (KeychainKeyStatus::Present, None),
+        keychain::KeyStatus::Missing => (KeychainKeyStatus::Missing, None),
+        keychain::KeyStatus::Unavailable(e) => {
+            log::error!("vault: the keychain refused the database key: {e}");
+            (KeychainKeyStatus::Unavailable, Some(e))
+        }
+    };
+
+    let size_of = |p: &std::path::Path| fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+    let state = VaultState {
+        vault_exists,
         plaintext_exists: db.exists(),
+        plaintext_size: size_of(&db),
+        vault_size: size_of(&vault),
+        attachments_vault_exists: attachments_vault_path(&app)?.exists(),
         mode,
-        keychain_key_present,
-    })
+        header_readable,
+        header_error,
+        keychain_key_status,
+        keychain_error,
+        data_dir: config_dir(&app)?.to_string_lossy().into_owned(),
+    };
+    log::info!(
+        "vault: state vault={} plaintext={} attachments_vault={} mode={:?} header_ok={} key={:?}",
+        state.vault_exists,
+        state.plaintext_exists,
+        state.attachments_vault_exists,
+        state.mode,
+        state.header_readable,
+        state.keychain_key_status,
+    );
+    Ok(state)
 }
 
 /// Returns the staging path the frontend should `VACUUM INTO` before locking or
@@ -364,21 +207,39 @@ fn write_vault_from_snapshot(
     mode: u8,
 ) -> Result<(), String> {
     let plain = fs::read(snapshot_path).map_err(|e| format!("read snapshot: {e}"))?;
-    let out = encrypt_snapshot(&plain, source, mode)?;
+    let out = format::encrypt_snapshot(&plain, source, mode)?;
     // Atomic write: the plaintext DB is only removed by the caller after this
     // returns, so a crash mid-write can never leave a truncated vault AND no
     // plaintext. The old vault survives until the new one is durably in place.
     atomic_write(&vault_path(app)?, &out)?;
     let _ = fs::remove_file(snapshot_path);
+    log::info!("vault: sealed the database ({} bytes)", out.len());
     Ok(())
 }
 
 // ── attachments (sealed alongside the DB, in a sibling file) ──────────────────
 
-/// How to obtain the attachments-vault key on restore.
+/// How to obtain the attachments-vault key.
+#[derive(Clone, Copy)]
 enum Unlock<'a> {
-    Keychain,
+    Key(&'a [u8; 32]),
     Passphrase(&'a str),
+}
+
+impl<'a> Unlock<'a> {
+    fn as_source(&self) -> KeySource<'a> {
+        match self {
+            Unlock::Key(k) => KeySource::Raw(k),
+            Unlock::Passphrase(p) => KeySource::Passphrase(p),
+        }
+    }
+
+    fn mode(&self) -> u8 {
+        match self {
+            Unlock::Key(_) => MODE_KEYCHAIN,
+            Unlock::Passphrase(_) => MODE_PASSPHRASE,
+        }
+    }
 }
 
 fn attachments_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -403,6 +264,13 @@ fn read_attachment_entries(dir: &std::path::Path) -> Result<Vec<archive::Entry>,
                 .and_then(|n| n.to_str())
                 .ok_or("attachment has a non-UTF-8 name")?
                 .to_string();
+            // `atomic_write` stages through `<name>.tmp`; one left behind by an
+            // interrupted restore is debris, not an attachment, and sealing it
+            // would resurrect it on every future unlock.
+            if name.ends_with(".tmp") {
+                log::warn!("vault: ignoring leftover staging file {name}");
+                continue;
+            }
             let data = fs::read(&path).map_err(|e| format!("read attachment: {e}"))?;
             entries.push(archive::Entry {
                 name: format!("{ATTACHMENTS_DIR}/{name}"),
@@ -414,53 +282,105 @@ fn read_attachment_entries(dir: &std::path::Path) -> Result<Vec<archive::Entry>,
 }
 
 /// Packs the attachments into an encrypted sibling vault and removes the
-/// cleartext files. A no-op (clearing any stale vault) when there are none.
-fn seal_attachments(app: &tauri::AppHandle, source: KeySource, mode: u8) -> Result<(), String> {
+/// cleartext files.
+///
+/// Invariant 1 lives here. An `attachments.vault` still on disk at lock time
+/// means this session never opened it, so the attachments directory does **not**
+/// represent its contents — it is missing every file the old vault holds. The
+/// old vault is therefore restored (without overwriting anything live) before
+/// the directory is packed. Skipping that step is how a sealed set of documents
+/// gets replaced by an empty one and deleted, which is precisely what a
+/// half-finished unlock used to cause.
+fn seal_attachments(app: &tauri::AppHandle, unlock: Unlock) -> Result<(), String> {
+    let target = attachments_vault_path(app)?;
+    if target.exists() {
+        log::warn!(
+            "vault: {ATTACHMENTS_VAULT} was never opened this session — folding it back in \
+             before re-sealing, so its files are not lost"
+        );
+        restore_attachments(app, unlock, KeepExisting::Yes)?;
+    }
+
     let dir = attachments_dir(app)?;
     let entries = read_attachment_entries(&dir)?;
-    let target = attachments_vault_path(app)?;
     if entries.is_empty() {
+        // Nothing to seal. There is also nothing to delete: the restore above
+        // guarantees any previous vault has already been folded into this
+        // directory, so an empty directory really does mean no attachments.
         if target.exists() {
             let _ = fs::remove_file(&target);
         }
         return Ok(());
     }
     let packed = archive::pack(&entries);
-    let out = seal(&packed, source, mode)?;
+    let out = format::seal(&packed, unlock.as_source(), unlock.mode())?;
     atomic_write(&target, &out)?;
     // Only now, with the encrypted copy durably written, remove the plaintext.
+    let mut removed = 0usize;
     for e in &entries {
         let name = e.name.trim_start_matches(&format!("{ATTACHMENTS_DIR}/"));
-        let _ = fs::remove_file(dir.join(name));
+        if fs::remove_file(dir.join(name)).is_ok() {
+            removed += 1;
+        }
     }
+    log::info!(
+        "vault: sealed {} attachment(s), removed {removed} cleartext file(s)",
+        entries.len()
+    );
     Ok(())
 }
 
+/// Whether a restore may replace a file that is already in the attachments dir.
+#[derive(PartialEq, Clone, Copy)]
+enum KeepExisting {
+    /// Fold-in during a lock: a live file is newer than the sealed copy.
+    Yes,
+    /// Startup restore: the directory should be empty, and the vault wins.
+    No,
+}
+
 /// Decrypts the attachments vault back into cleartext files and removes it.
-fn restore_attachments(app: &tauri::AppHandle, unlock: Unlock) -> Result<(), String> {
+fn restore_attachments(
+    app: &tauri::AppHandle,
+    unlock: Unlock,
+    keep_existing: KeepExisting,
+) -> Result<(), String> {
     let vault = attachments_vault_path(app)?;
     if !vault.exists() {
         return Ok(());
     }
     let raw = fs::read(&vault).map_err(|e| format!("read attachments vault: {e}"))?;
-    let header = parse_header(&raw)?;
+    let header = format::parse_header(&raw)?;
     let key = match unlock {
-        Unlock::Keychain => read_keychain_key()?,
-        Unlock::Passphrase(p) => derive_key_for_header(p, &header)?,
+        Unlock::Key(k) => *k,
+        Unlock::Passphrase(p) => format::derive_key_for_header(p, &header)?,
     };
-    let plain = open(&raw, &header, &key)?;
+    let plain = format::open(&raw, &header, &key)?;
     let entries = archive::unpack(&plain)?;
     let dir = attachments_dir(app)?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let mut written = 0usize;
     for e in entries {
         let name = e.name.trim_start_matches(&format!("{ATTACHMENTS_DIR}/"));
         // Reject a tampered archive that tries to escape the attachments dir.
         if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
+            log::warn!(
+                "vault: skipping attachment with an unsafe name {:?}",
+                e.name
+            );
             continue;
         }
-        atomic_write(&dir.join(name), &e.data)?;
+        let target = dir.join(name);
+        if keep_existing == KeepExisting::Yes && target.exists() {
+            continue;
+        }
+        atomic_write(&target, &e.data)?;
+        written += 1;
     }
-    let _ = fs::remove_file(&vault);
+    // Only once every file is durably on disk does the ciphertext go.
+    fs::remove_file(&vault).map_err(|e| format!("remove attachments vault: {e}"))?;
+    log::info!("vault: restored {written} attachment(s)");
     Ok(())
 }
 
@@ -469,7 +389,8 @@ fn restore_attachments(app: &tauri::AppHandle, unlock: Unlock) -> Result<(), Str
 /// the plaintext is only removed on the next clean exit (lock).
 #[tauri::command]
 pub fn vault_enable_keychain(app: tauri::AppHandle, snapshot_path: String) -> Result<(), String> {
-    let key = ensure_keychain_key()?;
+    let key = keychain::ensure_key(<[u8; 32]>::generate())?;
+    log::info!("vault: enabling keychain-mode encryption");
     write_vault_from_snapshot(&app, &snapshot_path, KeySource::Raw(&key), MODE_KEYCHAIN)
 }
 
@@ -484,6 +405,7 @@ pub fn vault_enable_passphrase(
     if passphrase.len() < 8 {
         return Err("Passphrase must be at least 8 characters".into());
     }
+    log::info!("vault: enabling passphrase-mode encryption");
     write_vault_from_snapshot(
         &app,
         &snapshot_path,
@@ -492,10 +414,35 @@ pub fn vault_enable_passphrase(
     )
 }
 
+/// Hands the frontend the raw 32-byte keychain key as hex, so the user can
+/// write down a recovery code while the key is still readable.
+///
+/// This exists because of how keychain mode actually fails: the key is bound to
+/// the app's code signature, Soma is ad-hoc signed, and every update therefore
+/// arrives as a different application that the OS will not hand the key to. A
+/// user with this string on paper is ten seconds from their data; a user
+/// without it is dependent on a keychain that has already let them down.
+#[tauri::command]
+pub fn vault_recovery_key() -> Result<String, String> {
+    let key = keychain::read_key()?;
+    Ok(keychain::to_hex(&key))
+}
+
 // ── unlock (startup) ──────────────────────────────────────────────────────────
 
 fn write_plaintext_db(app: &tauri::AppHandle, plain: &[u8]) -> Result<(), String> {
     let db = db_path(app)?;
+    // Invariant 2. A plaintext database next to the vault is newer than the
+    // vault — it is what an unclean exit left behind — so decrypting over it
+    // would throw away a whole session. The startup gate already avoids this;
+    // refusing here too means no future caller can get it wrong.
+    if db.exists() {
+        return Err(format!(
+            "Refusing to unlock over the existing database at {}: it is newer than the vault. \
+             Move it aside first if you really mean to restore the vault.",
+            db.display()
+        ));
+    }
     // A stale WAL/SHM from a previous run must not be replayed onto the fresh DB.
     let cfg = config_dir(app)?;
     let _ = fs::remove_file(cfg.join(format!("{DB_FILE}-wal")));
@@ -509,24 +456,109 @@ fn write_plaintext_db(app: &tauri::AppHandle, plain: &[u8]) -> Result<(), String
 /// startup (keychain mode) before the SQLite plugin opens the database.
 #[tauri::command]
 pub fn vault_unlock_keychain(app: tauri::AppHandle) -> Result<(), String> {
+    log::info!("vault: unlocking with the keychain key");
     let raw = fs::read(vault_path(&app)?).map_err(|e| format!("read vault: {e}"))?;
-    let header = parse_header(&raw)?;
-    let key = read_keychain_key()?;
-    let plain = decrypt_snapshot(&raw, &header, &key)?;
-    write_plaintext_db(&app, &plain)?;
-    restore_attachments(&app, Unlock::Keychain)
+    let header = format::parse_header(&raw)?;
+    let key = keychain::read_key().inspect_err(|e| log::error!("vault: unlock failed: {e}"))?;
+    unlock_with(&app, &raw, &header, Unlock::Key(&key))
 }
 
 /// Decrypts the vault into `soma.db` using a passphrase. A wrong passphrase is
 /// reported as an error the unlock screen surfaces ("wrong passphrase").
 #[tauri::command]
 pub fn vault_unlock_passphrase(app: tauri::AppHandle, passphrase: String) -> Result<(), String> {
+    log::info!("vault: unlocking with a passphrase");
     let raw = fs::read(vault_path(&app)?).map_err(|e| format!("read vault: {e}"))?;
-    let header = parse_header(&raw)?;
-    let key = derive_key_for_header(&passphrase, &header)?;
-    let plain = decrypt_snapshot(&raw, &header, &key)?;
-    write_plaintext_db(&app, &plain)?;
-    restore_attachments(&app, Unlock::Passphrase(&passphrase))
+    let header = format::parse_header(&raw)?;
+    unlock_with(&app, &raw, &header, Unlock::Passphrase(&passphrase))
+}
+
+/// Unlocks with a hand-supplied recovery key (the hex string from
+/// [`vault_recovery_key`], or read out of the keychain by other means). The
+/// escape hatch inside the app, mirroring what `soma-recover` does outside it.
+#[tauri::command]
+pub fn vault_unlock_with_key(app: tauri::AppHandle, key_hex: String) -> Result<(), String> {
+    log::info!("vault: unlocking with a supplied recovery key");
+    let key = keychain::parse_key(&key_hex)?;
+    let raw = fs::read(vault_path(&app)?).map_err(|e| format!("read vault: {e}"))?;
+    let header = format::parse_header(&raw)?;
+    unlock_with(&app, &raw, &header, Unlock::Key(&key))
+}
+
+/// The database is decrypted first and the attachments second, and a failure in
+/// either leaves the vaults on disk. A partially unlocked app is recoverable;
+/// a deleted ciphertext is not.
+fn unlock_with(
+    app: &tauri::AppHandle,
+    raw: &[u8],
+    header: &format::Header,
+    unlock: Unlock,
+) -> Result<(), String> {
+    let key = match unlock {
+        Unlock::Key(k) => *k,
+        Unlock::Passphrase(p) => format::derive_key_for_header(p, header)?,
+    };
+    let plain = format::decrypt_snapshot(raw, header, &key)
+        .inspect_err(|e| log::error!("vault: could not open the database vault: {e}"))?;
+    write_plaintext_db(app, &plain)?;
+    restore_attachments(app, unlock, KeepExisting::No)
+        .inspect_err(|e| log::error!("vault: database unlocked but attachments did not: {e}"))?;
+    log::info!("vault: unlocked");
+    Ok(())
+}
+
+/// Moves an unexpected plaintext `soma.db` out of the way so the vault can be
+/// unlocked over it, keeping the file under a timestamped name.
+///
+/// Nothing is ever deleted here. The file being moved aside is, by definition,
+/// one Soma could not account for — which is exactly the kind of file that
+/// turns out to matter after all.
+#[tauri::command]
+pub fn vault_quarantine_plaintext(app: tauri::AppHandle) -> Result<String, String> {
+    let cfg = config_dir(&app)?;
+    let db = cfg.join(DB_FILE);
+    if !db.exists() {
+        return Err("There is no plaintext database to move aside".into());
+    }
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let target = cfg.join(format!("{DB_FILE}.set-aside-{stamp}"));
+    fs::rename(&db, &target).map_err(|e| format!("move {} aside: {e}", db.display()))?;
+    for suffix in ["-wal", "-shm"] {
+        let side = cfg.join(format!("{DB_FILE}{suffix}"));
+        if side.exists() {
+            let _ = fs::rename(
+                &side,
+                cfg.join(format!("{DB_FILE}.set-aside-{stamp}{suffix}")),
+            );
+        }
+    }
+    log::warn!(
+        "vault: moved an unexpected plaintext database to {}",
+        target.display()
+    );
+    Ok(target.to_string_lossy().into_owned())
+}
+
+/// Restores sealed attachments without touching the database.
+///
+/// The case this exists for: an unclean exit left a newer plaintext `soma.db`
+/// next to a still-sealed `attachments.vault`. The database must not be
+/// overwritten by the older vault, but the attachments are simply *missing*
+/// from the running app until they are unpacked — every PDF and scan silently
+/// gone from the UI while the ciphertext sits right there. Pass the passphrase
+/// in passphrase mode; omit it to use the keychain key.
+#[tauri::command]
+pub fn vault_restore_attachments(
+    app: tauri::AppHandle,
+    passphrase: Option<String>,
+) -> Result<(), String> {
+    match passphrase {
+        Some(p) => restore_attachments(&app, Unlock::Passphrase(&p), KeepExisting::Yes),
+        None => {
+            let key = keychain::read_key()?;
+            restore_attachments(&app, Unlock::Key(&key), KeepExisting::Yes)
+        }
+    }
 }
 
 /// Verifies a passphrase against the vault WITHOUT writing `soma.db`. Used on an
@@ -537,9 +569,9 @@ pub fn vault_unlock_passphrase(app: tauri::AppHandle, passphrase: String) -> Res
 #[tauri::command]
 pub fn vault_verify_passphrase(app: tauri::AppHandle, passphrase: String) -> Result<(), String> {
     let raw = fs::read(vault_path(&app)?).map_err(|e| format!("read vault: {e}"))?;
-    let header = parse_header(&raw)?;
-    let key = derive_key_for_header(&passphrase, &header)?;
-    decrypt_snapshot(&raw, &header, &key)?;
+    let header = format::parse_header(&raw)?;
+    let key = format::derive_key_for_header(&passphrase, &header)?;
+    format::decrypt_snapshot(&raw, &header, &key)?;
     Ok(())
 }
 
@@ -553,6 +585,7 @@ fn remove_plaintext(app: &tauri::AppHandle) -> Result<(), String> {
     if db.exists() {
         fs::remove_file(&db).map_err(|e| format!("remove plaintext db: {e}"))?;
     }
+    log::info!("vault: locked; no plaintext database left on disk");
     Ok(())
 }
 
@@ -561,10 +594,8 @@ fn remove_plaintext(app: &tauri::AppHandle) -> Result<(), String> {
 /// connection, having first vacuumed a snapshot to `snapshot_path`.
 #[tauri::command]
 pub fn vault_lock_keychain(app: tauri::AppHandle, snapshot_path: String) -> Result<(), String> {
-    let key = read_keychain_key()?;
-    write_vault_from_snapshot(&app, &snapshot_path, KeySource::Raw(&key), MODE_KEYCHAIN)?;
-    seal_attachments(&app, KeySource::Raw(&key), MODE_KEYCHAIN)?;
-    remove_plaintext(&app)
+    let key = keychain::read_key()?;
+    lock_with(&app, &snapshot_path, Unlock::Key(&key))
 }
 
 /// Passphrase-mode counterpart of [`vault_lock_keychain`].
@@ -574,164 +605,68 @@ pub fn vault_lock_passphrase(
     snapshot_path: String,
     passphrase: String,
 ) -> Result<(), String> {
-    write_vault_from_snapshot(
-        &app,
-        &snapshot_path,
-        KeySource::Passphrase(&passphrase),
-        MODE_PASSPHRASE,
-    )?;
-    seal_attachments(&app, KeySource::Passphrase(&passphrase), MODE_PASSPHRASE)?;
-    remove_plaintext(&app)
+    lock_with(&app, &snapshot_path, Unlock::Passphrase(&passphrase))
+}
+
+/// The plaintext database is removed **last**, and only if both the database
+/// vault and the attachments vault were written. An interrupted lock therefore
+/// leaves a readable `soma.db` rather than a half-sealed app.
+fn lock_with(app: &tauri::AppHandle, snapshot_path: &str, unlock: Unlock) -> Result<(), String> {
+    log::info!("vault: locking");
+    write_vault_from_snapshot(app, snapshot_path, unlock.as_source(), unlock.mode())?;
+    seal_attachments(app, unlock)
+        .inspect_err(|e| log::error!("vault: attachments were not sealed: {e}"))?;
+    remove_plaintext(app)
 }
 
 // ── disable ───────────────────────────────────────────────────────────────────
 
 /// Turns off encryption: removes the vault file and the keychain key. The live
 /// plaintext `soma.db` (current while the app runs) simply stays as-is.
+///
+/// Invariant 3: any sealed attachments are decrypted back to cleartext *before*
+/// the key is destroyed. Deleting the key first would leave an
+/// `attachments.vault` that nothing on earth can open.
 #[tauri::command]
 pub fn vault_disable(app: tauri::AppHandle) -> Result<(), String> {
+    if attachments_vault_path(&app)?.exists() {
+        let key = keychain::read_key().map_err(|e| {
+            format!(
+                "Cannot turn off encryption yet: your attachments are still sealed and the key \
+                 is unavailable ({e}). Unlock them first, or encryption would be turned off with \
+                 those files permanently unreadable."
+            )
+        })?;
+        restore_attachments(&app, Unlock::Key(&key), KeepExisting::Yes)?;
+    }
     let vault = vault_path(&app)?;
     if vault.exists() {
         fs::remove_file(&vault).map_err(|e| format!("remove vault: {e}"))?;
     }
-    match key_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+    keychain::delete_key()?;
+    log::info!("vault: encryption disabled");
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn fake_snapshot() -> Vec<u8> {
-        let mut v = SQLITE_MAGIC.to_vec();
-        v.extend_from_slice(b"-- soma vault round-trip payload --");
-        v
-    }
-
-    /// Builds a legacy v1 blob (no Argon2 params in the header) the way pre-v2
-    /// builds did, to prove such files still decrypt under the pinned params.
-    fn v1_passphrase_blob(plain: &[u8], passphrase: &str) -> Vec<u8> {
-        let salt = <[u8; 16]>::generate();
-        let key = kdf::derive_key_pinned(passphrase, &salt).unwrap();
-        let nonce = <[u8; 12]>::generate();
-        let cipher = Aes256Gcm::new((&key).into());
-        let ciphertext = cipher.encrypt((&nonce).into(), plain).unwrap();
-        let mut out = Vec::new();
-        out.extend_from_slice(MAGIC);
-        out.push(1); // v1
-        out.push(MODE_PASSPHRASE);
-        out.extend_from_slice(&salt);
-        out.extend_from_slice(&nonce);
-        out.extend_from_slice(&ciphertext);
-        out
-    }
-
+    /// The recovery CLI resolves Soma's data directory on its own, without
+    /// Tauri. If the two ever disagree, `soma-recover` would politely report
+    /// that a user with a full vault has no vault at all.
     #[test]
-    fn hex_round_trips() {
-        let bytes = [0u8, 1, 15, 16, 255, 128, 64];
-        assert_eq!(from_hex(&to_hex(&bytes)).unwrap(), bytes);
+    fn the_standalone_path_resolver_agrees_with_the_bundle_identifier() {
+        let dir = paths::app_config_dir().unwrap();
+        assert_eq!(dir.file_name().unwrap(), "com.soma.health");
     }
 
+    /// Guards the file names the app and the CLI must agree on.
     #[test]
-    fn keychain_mode_round_trips() {
-        let key = [42u8; 32];
-        let plain = fake_snapshot();
-        let blob = encrypt_snapshot(&plain, KeySource::Raw(&key), MODE_KEYCHAIN).unwrap();
-        assert_eq!(blob[8], FORMAT_VERSION);
-        let header = parse_header(&blob).unwrap();
-        assert_eq!(header.mode, MODE_KEYCHAIN);
-        let restored = decrypt_snapshot(&blob, &header, &key).unwrap();
-        assert_eq!(restored, plain);
-    }
-
-    #[test]
-    fn passphrase_mode_round_trips() {
-        let plain = fake_snapshot();
-        let pass = "correct horse battery staple";
-        let blob = encrypt_snapshot(&plain, KeySource::Passphrase(pass), MODE_PASSPHRASE).unwrap();
-        let header = parse_header(&blob).unwrap();
-        assert_eq!(header.mode, MODE_PASSPHRASE);
-        let key = derive_key_for_header(pass, &header).unwrap();
-        let restored = decrypt_snapshot(&blob, &header, &key).unwrap();
-        assert_eq!(restored, plain);
-    }
-
-    #[test]
-    fn wrong_passphrase_is_rejected() {
-        let blob = encrypt_snapshot(
-            &fake_snapshot(),
-            KeySource::Passphrase("right"),
-            MODE_PASSPHRASE,
-        )
-        .unwrap();
-        let header = parse_header(&blob).unwrap();
-        let key = derive_key_for_header("wrong", &header).unwrap();
-        assert!(decrypt_snapshot(&blob, &header, &key).is_err());
-    }
-
-    /// A v1 file (written before params were stored in the header) must still
-    /// decrypt — the whole point of pinning the legacy Argon2 parameters.
-    #[test]
-    fn legacy_v1_file_still_decrypts() {
-        let plain = fake_snapshot();
-        let pass = "an old vault from before v2";
-        let blob = v1_passphrase_blob(&plain, pass);
-        let header = parse_header(&blob).unwrap();
-        assert_eq!(header.body_offset, HEADER_LEN_V1);
-        let key = derive_key_for_header(pass, &header).unwrap();
-        let restored = decrypt_snapshot(&blob, &header, &key).unwrap();
-        assert_eq!(restored, plain);
-    }
-
-    /// A v2 header carrying corrupt Argon2 parameters is rejected rather than
-    /// attempting an absurd derivation.
-    #[test]
-    fn corrupt_v2_params_are_rejected() {
-        let mut blob = encrypt_snapshot(
-            &fake_snapshot(),
-            KeySource::Passphrase("x"),
-            MODE_PASSPHRASE,
-        )
-        .unwrap();
-        // Zero out the m_cost field (bytes 10..14) — below the valid range.
-        blob[10..14].copy_from_slice(&0u32.to_le_bytes());
-        assert!(parse_header(&blob).is_err());
-    }
-
-    #[test]
-    fn tampered_ciphertext_fails_authentication() {
-        let key = [9u8; 32];
-        let mut blob =
-            encrypt_snapshot(&fake_snapshot(), KeySource::Raw(&key), MODE_KEYCHAIN).unwrap();
-        let last = blob.len() - 1;
-        blob[last] ^= 0xFF;
-        let header = parse_header(&blob).unwrap();
-        assert!(decrypt_snapshot(&blob, &header, &key).is_err());
-    }
-
-    #[test]
-    fn refuses_to_encrypt_non_sqlite_input() {
-        let key = [1u8; 32];
-        let err =
-            encrypt_snapshot(b"not a database", KeySource::Raw(&key), MODE_KEYCHAIN).unwrap_err();
-        assert!(err.contains("SQLite"));
-    }
-
-    #[test]
-    fn rejects_a_file_without_the_vault_magic() {
-        let err = parse_header(b"definitely not a soma vault, just random bytes here").unwrap_err();
-        assert!(err.contains("vault"));
-    }
-
-    #[test]
-    fn fresh_salt_and_nonce_per_encryption() {
-        let key = [3u8; 32];
-        let a = encrypt_snapshot(&fake_snapshot(), KeySource::Raw(&key), MODE_KEYCHAIN).unwrap();
-        let b = encrypt_snapshot(&fake_snapshot(), KeySource::Raw(&key), MODE_KEYCHAIN).unwrap();
-        // The salt+nonce region (after the fixed params) must differ each time.
-        assert_ne!(a[22..HEADER_LEN_V2], b[22..HEADER_LEN_V2]);
-        assert_ne!(a[HEADER_LEN_V2..], b[HEADER_LEN_V2..]);
+    fn file_names_are_shared_with_the_recovery_tool() {
+        assert_eq!(VAULT_FILE, "soma.db.vault");
+        assert_eq!(DB_FILE, "soma.db");
+        assert_eq!(ATTACHMENTS_VAULT, "attachments.vault");
+        assert_eq!(ATTACHMENTS_DIR, "attachments");
     }
 }

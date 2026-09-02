@@ -25,6 +25,20 @@ export function vaultLockedMessage(dbPath: string): string {
   return `The Soma database at ${dbPath} is currently locked by Soma's at-rest encryption (only the encrypted ${dbPath}.vault file exists). Open the Soma app to unlock it, then retry.`;
 }
 
+/**
+ * Error for a database that was unlinked or replaced underneath an open handle.
+ *
+ * This is what Soma's at-rest encryption does on a clean exit: it removes
+ * `soma.db` and leaves only `soma.db.vault`. A long-lived MCP server that
+ * opened the file before that keeps a handle to the now-unlinked inode, and
+ * SQLite will happily go on reading and writing it — into a file no one will
+ * ever open again. Every write must therefore check that the path still names
+ * the file we hold before it commits a medical record into a ghost.
+ */
+export function databaseNoLongerLiveMessage(dbPath: string): string {
+  return `The Soma database at ${dbPath} is no longer the file this server has open — Soma has locked it with at-rest encryption, or it was replaced or restored. Nothing was written. Restart this MCP server after unlocking Soma in the app, so it reopens the current database.`;
+}
+
 /** Error for a DB that simply doesn't exist yet. */
 export function missingDbMessage(dbPath: string): string {
   return `Soma database not found at ${dbPath}. Run the Soma app once to create it, or pass --db <path> / set SOMA_DB.`;

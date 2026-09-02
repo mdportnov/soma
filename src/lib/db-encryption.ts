@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { beginDatabaseShutdown, closeDatabase, vacuumInto } from "@/db/client";
+import type { VaultState } from "@/lib/startup-gate";
 
 /**
  * Optional at-rest database encryption (frontend side).
@@ -40,15 +41,47 @@ export function saveEncryptionSettings(settings: EncryptionSettings): void {
 
 // ── on-disk vault state (read by the startup gate) ──────────────────────────
 
-export type VaultState = {
-  vaultExists: boolean;
-  plaintextExists: boolean;
-  mode: EncryptionMode | null;
-  keychainKeyPresent: boolean;
-};
+export type { VaultState } from "@/lib/startup-gate";
 
+/**
+ * Reads what is actually on disk. This call is allowed to fail, and a failure
+ * is meaningful: it means Soma does not know whether the user has encrypted
+ * data, which the startup gate treats as a reason to stop rather than a reason
+ * to assume the best. Do not add a fallback value here.
+ */
 export function vaultState(): Promise<VaultState> {
   return invoke<VaultState>("vault_state");
+}
+
+/**
+ * Unpacks a still-sealed `attachments.vault` without touching the database.
+ * Used when an unclean exit left a newer plaintext database next to sealed
+ * attachments — the records are there but every document is missing.
+ */
+export function restoreAttachments(passphrase?: string): Promise<void> {
+  return invoke("vault_restore_attachments", { passphrase: passphrase ?? null });
+}
+
+/**
+ * The raw keychain data key, as hex, for the user to write down. Only readable
+ * while the keychain is still cooperating — which is exactly why it is worth
+ * offering before it stops.
+ */
+export function recoveryKey(): Promise<string> {
+  return invoke<string>("vault_recovery_key");
+}
+
+/**
+ * Moves an unexpected plaintext `soma.db` aside (never deletes it) so the vault
+ * can be unlocked over it. Returns the path it was moved to.
+ */
+export function quarantinePlaintext(): Promise<string> {
+  return invoke<string>("vault_quarantine_plaintext");
+}
+
+/** Unlocks with a hex recovery key typed by the user. */
+export async function unlockWithKey(keyHex: string): Promise<void> {
+  await invoke("vault_unlock_with_key", { keyHex });
 }
 
 // ── session passphrase (in memory only; never persisted) ────────────────────
@@ -147,8 +180,18 @@ export async function lockNow(): Promise<void> {
 
 let closeHookRegistered = false;
 
-/** Hard cap on the on-exit lock so a stalled lock can never trap the user. */
-const LOCK_TIMEOUT_MS = 15_000;
+/**
+ * Hard cap on the on-exit lock so a stalled lock can never trap the user.
+ *
+ * The cap is generous on purpose. Locking re-encrypts the database *and* every
+ * imported PDF and scan, so the work scales with a folder that can be hundreds
+ * of megabytes; the previous 15 seconds was chosen against the database alone.
+ * Timing out does not corrupt anything — every write is atomic and the
+ * plaintext is removed last — but it does leave the database in the clear on
+ * disk, which is the one thing this feature exists to prevent. Waiting a minute
+ * is a far better trade than silently not encrypting.
+ */
+const LOCK_TIMEOUT_MS = 60_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -181,6 +224,8 @@ export async function initVaultCloseHook(): Promise<void> {
     try {
       await withTimeout(lockNow(), LOCK_TIMEOUT_MS);
     } catch (e) {
+      // Mirrored into soma.log by initLogging(). This is the only trace of a
+      // failed lock, and the incident that prompted this work had none at all.
       console.error("Failed to lock the database on exit:", e);
     } finally {
       await win.destroy();

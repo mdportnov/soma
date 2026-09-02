@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "crates/soma-vault"]
+
 [package]
 name = "soma"
 version = "0.9.0"
@@ -28,4 +31,8 @@ sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 aes-gcm = "0.11"
 argon2 = "0.5"
+# The vault format, the Argon2 parameters, the attachment archive and the
+# keychain lookup live in their own crate so the `soma-recover` rescue CLI can
+# be built and run without the GUI stack. One implementation, two consumers.
+soma-vault = { path = "crates/soma-vault" }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

@@ -15,6 +15,7 @@ import {
   enableKeychainEncryption,
   enablePassphraseEncryption,
   loadEncryptionSettings,
+  recoveryKey,
   type EncryptionMode,
 } from "@/lib/db-encryption";
 
@@ -30,6 +31,7 @@ export function EncryptionCard() {
   const [mode, setMode] = React.useState<EncryptionMode>(settings.mode);
   const [busy, setBusy] = React.useState(false);
   const [passOpen, setPassOpen] = React.useState(false);
+  const [keyOpen, setKeyOpen] = React.useState(false);
 
   const keychainBlocked = keychain?.available === false;
 
@@ -50,8 +52,18 @@ export function EncryptionCard() {
   };
 
   const onEnable = () => {
-    if (mode === "passphrase") setPassOpen(true);
-    else void run(enableKeychainEncryption, "dbEncryption.enabledToast");
+    if (mode === "passphrase") {
+      setPassOpen(true);
+      return;
+    }
+    void (async () => {
+      // Show the recovery key immediately on success. The keychain key is bound
+      // to the app's code signature, and Soma is ad-hoc signed, so the next
+      // update will look like a different application to the OS and be refused
+      // the key. A user who wrote it down loses ten seconds; one who did not
+      // loses access to their entire medical history until they find this out.
+      if (await run(enableKeychainEncryption, "dbEncryption.enabledToast")) setKeyOpen(true);
+    })();
   };
 
   const segment = (active: boolean): "secondary" | "ghost" => (active ? "secondary" : "ghost");
@@ -90,6 +102,23 @@ export function EncryptionCard() {
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
                 {t("dbEncryption.warning")}
               </p>
+            )}
+            {settings.mode === "keychain" && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
+                <p className="flex items-start gap-1.5 font-medium">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                  {t("dbEncryption.keychainUpdateWarning")}
+                </p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => setKeyOpen(true)}
+                >
+                  <KeyRound />
+                  {t("dbEncryption.showRecoveryKey")}
+                </Button>
+              </div>
             )}
             <div>
               <Button
@@ -134,9 +163,15 @@ export function EncryptionCard() {
                 : t("dbEncryption.modeKeychainDesc")}
             </p>
             {mode === "keychain" && (
-              <p className="text-[11px] text-muted-foreground">
-                {t("dbEncryption.requiresKeychainNote")}
-              </p>
+              <>
+                <p className="text-[11px] text-muted-foreground">
+                  {t("dbEncryption.requiresKeychainNote")}
+                </p>
+                <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                  {t("dbEncryption.keychainUpdateWarning")}
+                </p>
+              </>
             )}
 
             <div>
@@ -152,6 +187,8 @@ export function EncryptionCard() {
         )}
       </CardContent>
 
+      {keyOpen && <RecoveryKeyDialog onClose={() => setKeyOpen(false)} />}
+
       {passOpen && (
         <PassphraseDialog
           busy={busy}
@@ -166,6 +203,68 @@ export function EncryptionCard() {
         />
       )}
     </Card>
+  );
+}
+
+/**
+ * Shows the raw keychain data key so the user can write it down.
+ *
+ * This is not a nicety. Keychain mode's failure mode is not "you forgot
+ * something" — it is the operating system refusing to hand the key to an
+ * updated Soma, which will happen to everyone on every update for as long as
+ * the app is ad-hoc signed. This string is the whole difference between a
+ * ten-second recovery and a support thread that starts "all my records are
+ * gone". It is read out of the keychain live, so it only works while the
+ * keychain is still cooperating — which is exactly why it is offered now.
+ */
+function RecoveryKeyDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
+  const [key, setKey] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    recoveryKey().then(setKey, (e: unknown) =>
+      setError(e instanceof Error ? e.message : String(e)),
+    );
+  }, []);
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t("dbEncryption.recoveryKeyTitle")}
+      onSubmit={onClose}
+      submitDisabled={!saved}
+    >
+      <div className="grid gap-3">
+        <p className="text-xs text-muted-foreground">{t("dbEncryption.recoveryKeyIntro")}</p>
+        {error ? (
+          <p className="flex items-start gap-1.5 text-xs text-destructive">
+            <XCircle className="mt-0.5 size-3.5 shrink-0" /> {error}
+          </p>
+        ) : (
+          <code className="block rounded bg-muted px-3 py-2 font-mono text-xs break-all select-all">
+            {key ?? "…"}
+          </code>
+        )}
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={saved}
+            onChange={(e) => setSaved(e.target.checked)}
+            className="size-4 accent-primary"
+          />
+          {t("dbEncryption.recoveryKeySaved")}
+        </label>
+        <DialogActions
+          onClose={onClose}
+          onSubmit={onClose}
+          submitLabel={t("dbEncryption.recoveryKeyDone")}
+          disabled={!saved}
+        />
+      </div>
+    </Dialog>
   );
 }
 

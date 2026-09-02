@@ -26,7 +26,7 @@ import {
   type AllergySeverity,
 } from "../vocab";
 import { ReviewBanner } from "../ReviewBanner";
-import { storeSourceAttachment } from "../save-helpers";
+import { withSourceAttachment } from "../save-helpers";
 import { createAllergy, listAllergies } from "@/db/repos";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
@@ -119,20 +119,29 @@ export const allergyModule: DocTypeModule<AllergyDraft> = {
   Review: AllergyReview,
 
   async save(draft, ctx): Promise<string> {
-    await storeSourceAttachment(ctx, "allergy_doc", "allergy");
-    const included = draft.rows.filter((r) => r.include && r.allergen.trim());
-    for (const r of included) {
-      await createAllergy({
-        profileId: ctx.profileId,
-        allergen: r.allergen.trim(),
-        category: r.category,
-        severity: r.severity,
-        reaction: r.reaction?.trim() || null,
-        onsetDate: r.onsetDate || null,
-        status: "active",
-      });
-    }
-    return "/allergies";
+    // The source document used to be stored and then never linked to anything,
+    // which left a row `deleteAllergy` could never find. The first allergy
+    // created now owns it.
+    return withSourceAttachment(ctx, "allergy_doc", "allergy", async (source) => {
+      const included = draft.rows.filter((r) => r.include && r.allergen.trim());
+      let linked = false;
+      for (const r of included) {
+        const allergyId = await createAllergy({
+          profileId: ctx.profileId,
+          allergen: r.allergen.trim(),
+          category: r.category,
+          severity: r.severity,
+          reaction: r.reaction?.trim() || null,
+          onsetDate: r.onsetDate || null,
+          status: "active",
+        });
+        if (!linked) {
+          await source.link(allergyId);
+          linked = true;
+        }
+      }
+      return "/allergies";
+    });
   },
 };
 

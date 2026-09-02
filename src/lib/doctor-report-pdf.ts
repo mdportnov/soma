@@ -5,7 +5,7 @@ import regularUrl from "@/assets/fonts/PTSans-Regular.ttf?url";
 import boldUrl from "@/assets/fonts/PTSans-Bold.ttf?url";
 import type { DoctorReportData } from "@/db/repos";
 import type { Biomarker, Profile } from "@/db/schema";
-import { formatValue } from "@/lib/utils";
+import { formatDateIn, formatValue } from "@/lib/utils";
 
 const FONT_FAMILY = "PTSans";
 const PAGE_BOTTOM = 270; // mm; trigger a page break past this y-cursor
@@ -55,12 +55,8 @@ async function ensureFonts(): Promise<{ regular: string; bold: string }> {
   return fontCache;
 }
 
-function formatDate(iso: string | null | undefined, locale: string): string {
-  if (!iso) return "—";
-  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
-}
+const formatDate = (iso: string | null | undefined, locale: string): string =>
+  formatDateIn(iso, locale);
 
 function ageFromBirthDate(iso: string | null | undefined): number | null {
   if (!iso) return null;

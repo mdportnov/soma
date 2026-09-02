@@ -12,9 +12,9 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.235 0.01 250);
   --muted: oklch(0.962 0.004 95);
-  --muted-foreground: oklch(0.52 0.012 250);
-  --border: oklch(0.912 0.005 95);
-  --input: oklch(0.912 0.005 95);
+  --muted-foreground: oklch(0.45 0.014 250);
+  --border: oklch(0.885 0.006 95);
+  --input: oklch(0.885 0.006 95);
   --primary: oklch(0.55 0.11 183);
   --primary-foreground: oklch(0.985 0.005 183);
   --secondary: oklch(0.955 0.006 183);
@@ -26,6 +26,11 @@
   --ring: oklch(0.55 0.11 183);
   --success: oklch(0.6 0.13 155);
   --warning: oklch(0.72 0.15 75);
+  /* Text-safe pairs. `--success`/`--warning` are tuned as fills; at their
+     lightness they fall under 4.5:1 on the light background, so anything that
+     colors *text* uses these darker variants instead. */
+  --success-strong: oklch(0.52 0.12 155);
+  --warning-strong: oklch(0.55 0.13 75);
   --radius: 0.625rem;
 }
 
@@ -52,6 +57,9 @@
   --ring: oklch(0.7 0.1 183);
   --success: oklch(0.68 0.12 155);
   --warning: oklch(0.78 0.13 75);
+  /* On the dark ground the fills are already the readable end of the ramp. */
+  --success-strong: oklch(0.75 0.13 155);
+  --warning-strong: oklch(0.83 0.13 75);
 }
 
 @theme inline {
@@ -76,6 +84,8 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-success-strong: var(--success-strong);
+  --color-warning-strong: var(--warning-strong);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -90,6 +100,7 @@
   --animate-step-in: step-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-rise-in: rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-combobox-in: combobox-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.15s ease both;
 }
 
 @keyframes overlay-in {
@@ -154,6 +165,26 @@
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes combobox-in {
   from {
     opacity: 0;
@@ -195,13 +226,41 @@
   ::selection {
     background: color-mix(in oklch, var(--primary) 25%, transparent);
   }
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    ::before,
-    ::after {
-      animation-duration: 0.01ms !important;
-      transition-duration: 0.01ms !important;
-    }
+}
+
+/**
+ * Route entrance. The animation is put on the page's own root elements rather
+ * than on the shell wrapper: the wrapper mounts empty (the page is still
+ * resolving its query) and would burn its animation on nothing, leaving the real
+ * content to appear with a hard cut. A child inserted later starts its animation
+ * at insertion, so the content itself is what fades in — whenever it arrives.
+ */
+.page-enter > * {
+  animation: page-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Motion off, but not content-appears-out-of-nowhere: every entrance in the
+     app degrades to a short opacity fade, and every exit to its mirror. The
+     wildcard clamp covers third-party and utility transitions we don't name. */
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .page-enter > *,
+  .animate-fade-in,
+  .animate-step-in,
+  .animate-rise-in,
+  .animate-combobox-in,
+  .animate-dialog-in,
+  .animate-overlay-in {
+    animation: fade-in 0.12s linear both !important;
+  }
+  .animate-dialog-out,
+  .animate-overlay-out {
+    animation: overlay-out 0.1s linear both !important;
   }
 }
 

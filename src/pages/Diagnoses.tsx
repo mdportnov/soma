@@ -23,6 +23,7 @@ import {
 import type { Diagnosis } from "@/db/schema";
 import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
 import { PageHeader } from "@/components/app/PageHeader";
 import { IconAction } from "@/components/app/IconAction";
 import { Loading } from "@/components/app/Loading";
@@ -59,6 +60,7 @@ export function Diagnoses() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const navigate = useNavigate();
   const {
     data: diagnoses,
@@ -76,6 +78,25 @@ export function Diagnoses() {
   const [resolvingId, setResolvingId] = React.useState<number | null>(null);
   const [resolveDate, setResolveDate] = React.useState(todayISO());
 
+  // One removal path for all three lists (active cards, remission and resolved
+  // tables) so the confirmation and the Undo toast can never drift apart.
+  const removeDiagnosis = async (d: Diagnosis) => {
+    const { id: _id, ...data } = d;
+    const ok = await confirmDelete({
+      entity: "diagnosis",
+      name: d.name,
+      dateLabel: formatDate(d.date),
+      undoable: true,
+    });
+    if (!ok) return;
+    await deleteDiagnosis(d.id);
+    void reload();
+    toast.showUndo(t("toasts.deleted", { name: d.name }), async () => {
+      await createDiagnosis(data);
+      void reload();
+    });
+  };
+
   if (loading || !diagnoses) return <Loading />;
 
   const active = diagnoses.filter((d) => d.status === "active");
@@ -91,15 +112,15 @@ export function Diagnoses() {
     end: d.status === "active" ? null : (d.resolvedDate ?? d.date),
     color: STATUS_COLOR[d.status],
     tooltip: (
-      <>
-        <span className="font-medium">{d.name}</span>
+      <div className="space-y-0.5">
+        <div className="font-semibold text-pretty">{d.name}</div>
         {d.icdCode && <div className="text-muted-foreground">{d.icdCode}</div>}
-        <div className="text-muted-foreground">
+        <div className="text-muted-foreground tabular-nums">
           {t(`status.${d.status}`)} · {formatDate(d.date)}
           {d.status !== "active" && d.resolvedDate ? ` → ${formatDate(d.resolvedDate)}` : ""}
         </div>
         {d.notes && <div className="text-muted-foreground">{d.notes}</div>}
-      </>
+      </div>
     ),
   }));
 
@@ -255,19 +276,7 @@ export function Diagnoses() {
                           label={t("common.delete")}
                           icon={<Trash2 />}
                           destructive
-                          onClick={async () => {
-                            const { id: _id, ...data } = d;
-                            await deleteDiagnosis(d.id);
-                            void reload();
-                            toast.showAction(
-                              t("toasts.deleted", { name: d.name }),
-                              t("common.undo"),
-                              async () => {
-                                await createDiagnosis(data);
-                                void reload();
-                              },
-                            );
-                          }}
+                          onClick={() => void removeDiagnosis(d)}
                         />
                       </div>
                     </CardContent>
@@ -288,19 +297,7 @@ export function Diagnoses() {
                   setEditing(d);
                   setFormOpen(true);
                 }}
-                onDelete={async (d) => {
-                  const { id: _id, ...data } = d;
-                  await deleteDiagnosis(d.id);
-                  void reload();
-                  toast.showAction(
-                    t("toasts.deleted", { name: d.name }),
-                    t("common.undo"),
-                    async () => {
-                      await createDiagnosis(data);
-                      void reload();
-                    },
-                  );
-                }}
+                onDelete={removeDiagnosis}
               />
             </section>
           )}
@@ -316,19 +313,7 @@ export function Diagnoses() {
                   setEditing(d);
                   setFormOpen(true);
                 }}
-                onDelete={async (d) => {
-                  const { id: _id, ...data } = d;
-                  await deleteDiagnosis(d.id);
-                  void reload();
-                  toast.showAction(
-                    t("toasts.deleted", { name: d.name }),
-                    t("common.undo"),
-                    async () => {
-                      await createDiagnosis(data);
-                      void reload();
-                    },
-                  );
-                }}
+                onDelete={removeDiagnosis}
               />
             </section>
           )}

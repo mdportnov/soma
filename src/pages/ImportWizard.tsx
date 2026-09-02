@@ -12,7 +12,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { listBiomarkers, listMedications } from "@/db/repos";
+import { findDuplicatePanelsForImport, listBiomarkers, listMedications } from "@/db/repos";
+import type { PanelDuplicate, RecordDuplicate } from "@/lib/import-duplicates";
+import { HIGHLIGHT_PARAM } from "@/db/search-index";
 import { getConfiguredProvider } from "@/ai";
 import { AIProviderError } from "@/ai/types";
 import type { AIErrorKind } from "@/ai/types";
@@ -22,6 +24,7 @@ import { mimeFromPath, toBase64 } from "@/lib/attachments";
 import { PageHeader } from "@/components/app/PageHeader";
 import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
+import { ImportDuplicateNotice, type DuplicateRow } from "@/components/app/ImportDuplicateNotice";
 import { useToast } from "@/components/app/Toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,6 +106,48 @@ export function ImportWizard() {
     preselect ? { name: "pick" } : { name: "selectType" },
   );
   const [error, setError] = React.useState<ImportError | null>(null);
+
+  // Re-import detection for lab panels. The draft carries the verdict computed
+  // at extraction time, but the review screen lets the user correct the date
+  // and the lab — both inputs of the check — so it is re-run against the
+  // current draft, and only the latest answer is shown.
+  const reviewDraft = step.name === "review" ? step.draft : null;
+  const reviewDocType = step.name === "review" ? step.module.id : null;
+  const labKey =
+    reviewDocType === "lab" && reviewDraft
+      ? JSON.stringify([
+          reviewDraft.meta?.date,
+          reviewDraft.meta?.labName,
+          includedBiomarkerIds(reviewDraft),
+        ])
+      : null;
+  const [panelDuplicates, setPanelDuplicates] = React.useState<PanelDuplicate[]>([]);
+  React.useEffect(() => {
+    if (!labKey) {
+      setPanelDuplicates([]);
+      return;
+    }
+    const [date, labName, biomarkerIds] = JSON.parse(labKey) as [
+      string | undefined,
+      string | undefined,
+      number[],
+    ];
+    if (!date) {
+      setPanelDuplicates([]);
+      return;
+    }
+    let cancelled = false;
+    void findDuplicatePanelsForImport(profileId, {
+      date,
+      labName: labName?.trim() || null,
+      biomarkerIds,
+    }).then((found) => {
+      if (!cancelled) setPanelDuplicates(found);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [labKey, profileId]);
 
   // The section this import belongs to — drives the back link + breadcrumb.
   const section = SECTIONS[docType ?? preselect ?? "lab"];
@@ -394,6 +439,13 @@ export function ImportWizard() {
         )}
 
         {step.name === "review" && (
+          <ImportDuplicateNotice
+            panels={step.module.id === "lab" ? panelDuplicates : undefined}
+            rows={duplicateRows(step.module.id, step.draft, t)}
+          />
+        )}
+
+        {step.name === "review" && (
           <step.module.Review
             draft={step.draft}
             setDraft={(next) => setStep({ name: "review", module: step.module, draft: next })}
@@ -406,6 +458,61 @@ export function ImportWizard() {
       </div>
     </>
   );
+}
+
+/** Biomarker ids of the rows the user is about to save, for the re-import check. */
+function includedBiomarkerIds(draft: any): number[] {
+  const rows: { include?: boolean; biomarkerId?: number | null }[] = draft?.rows ?? [];
+  return [
+    ...new Set(
+      rows
+        .filter((r) => r.include !== false && r.biomarkerId != null)
+        .map((r) => r.biomarkerId as number),
+    ),
+  ].sort((a, b) => a - b);
+}
+
+/**
+ * Rows of a multi-row draft (vaccines, imaging) that the data layer flagged as
+ * already recorded. The modules keep the verdict on each row; the shell only
+ * lifts it into the notice above the table, named and dated so the user can
+ * find the row and open what it collides with.
+ */
+function duplicateRows(
+  docType: DocType,
+  draft: any,
+  t: (key: string) => string,
+): DuplicateRow[] | undefined {
+  const rows: any[] = draft?.rows ?? [];
+  if (docType === "vaccine") {
+    return rows.map((r, i) => ({
+      row: i + 1,
+      name: r.match?.name ?? r.vaccineName ?? "—",
+      date: r.date ?? null,
+      duplicates: (r.duplicates ?? []) as RecordDuplicate[],
+      href: (d) => `/vaccines?${HIGHLIGHT_PARAM}=${d.id}`,
+    }));
+  }
+  if (docType === "imaging") {
+    return rows.map((r, i) => ({
+      row: i + 1,
+      name: `${r.modality ? t(`imagingModality.${r.modality}`) : ""} ${r.bodyArea ?? ""}`.trim(),
+      date: r.date ?? null,
+      duplicates: ((r.duplicates ?? []) as RecordDuplicate[]).map((d) => ({
+        ...d,
+        name: describeImaging(d.name, t),
+      })),
+      href: (d) => `/imaging/${d.id}`,
+    }));
+  }
+  return undefined;
+}
+
+/** The stored imaging key is "<modality> <body area>"; show the modality by its label. */
+function describeImaging(key: string, t: (key: string) => string): string {
+  const [modality, ...rest] = key.split(" ");
+  const label = t(`imagingModality.${modality}`);
+  return `${label.startsWith("imagingModality.") ? modality : label} ${rest.join(" ")}`.trim();
 }
 
 function SelectTypeStep({

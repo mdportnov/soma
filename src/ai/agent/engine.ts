@@ -1,6 +1,12 @@
 import type { AIProvider, AgentMessage } from "../types";
 import type { ChatMessageRecord } from "@/db/schema";
-import { addChatToolEvent, createChatChangeSet, type ChangeSetWithItems } from "@/db/chat-repos";
+import {
+  addChatToolEvent,
+  createChatChangeSet,
+  recordThreadRecords,
+  type ChangeSetWithItems,
+} from "@/db/chat-repos";
+import { parseRecordRefs } from "@/db/chat-threads";
 import { buildHealthContext } from "../context";
 import { healthChangeSetSchema } from "./change-schema";
 import { validateHealthChangeSet } from "./change-validator";
@@ -8,8 +14,10 @@ import { agentToolDefinitions, executeReadTool } from "./tools";
 import { buildHealthAgentSystem } from "./system";
 import { localIsoDate } from "@/lib/clinical-date";
 
-const MAX_ROUNDS = 6;
-const MAX_TOOL_CALLS = 12;
+// The overview tools answer broad questions in one call, so these bounds are
+// about runaway loops, not about starving a legitimate multi-step review.
+const MAX_ROUNDS = 8;
+const MAX_TOOL_CALLS = 16;
 
 export type HealthAgentResult = {
   content: string;
@@ -49,7 +57,9 @@ export async function runHealthAgentTurn(input: {
       signal: input.signal,
     });
     if (result.kind === "message") {
-      return { content: sanitizeEvidence(result.content, evidenceRefs), changeSet: null };
+      const content = sanitizeEvidence(result.content, evidenceRefs);
+      await rememberCitations(input.threadId, content);
+      return { content, changeSet: null };
     }
     callsUsed += result.calls.length;
     if (callsUsed > MAX_TOOL_CALLS) throw new Error("AI tool-call limit exceeded");
@@ -78,9 +88,11 @@ export async function runHealthAgentTurn(input: {
           status: "completed",
           durationMs: Math.round(performance.now() - startedAt),
         });
+        const content = sanitizeEvidence(result.content, evidenceRefs);
+        await rememberCitations(input.threadId, content);
         return {
           content:
-            sanitizeEvidence(result.content, evidenceRefs) ||
+            content ||
             (input.language === "ru"
               ? "Я подготовил изменения. Проверьте карточки перед сохранением."
               : "I prepared the changes. Review the cards before saving."),
@@ -149,6 +161,21 @@ export async function runHealthAgentTurn(input: {
     messages.push(...outputs);
   }
   throw new Error("AI agent did not finish within the tool-call limit");
+}
+
+/**
+ * Stores the records an answer cited as the thread's footprint. Only refs that
+ * survived `sanitizeEvidence` reach here, i.e. records a tool actually
+ * returned this turn — the model cannot claim a record it never read.
+ * Best-effort: a bookkeeping failure must never turn a finished answer into
+ * an error.
+ */
+async function rememberCitations(threadId: number, content: string): Promise<void> {
+  try {
+    await recordThreadRecords(threadId, parseRecordRefs(content), "cited");
+  } catch (error) {
+    console.error("Failed to record thread citations", error);
+  }
 }
 
 function collectEvidenceRefs(value: unknown, refs: Set<string>): void {

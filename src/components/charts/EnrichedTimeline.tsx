@@ -6,7 +6,7 @@ import { bpStageColor } from "@/lib/vitals";
 import { useI18n } from "@/lib/i18n";
 import { Tooltip } from "@/components/ui/tooltip";
 import { OVERLAY_COLORS } from "./TrendChart";
-import { cn, formatDate, formatValue, uiLocale } from "@/lib/utils";
+import { cn, formatDate, formatDateObject, formatValue, uiLocale } from "@/lib/utils";
 import { allTimeTimelineWidth, timelineTickStep } from "@/lib/timeline-layout";
 
 /** Medications shown before the lane collapses behind a "show more" toggle. */
@@ -122,7 +122,7 @@ export function EnrichedTimeline({
     if (cursor.getUTCMonth() % step === 0) {
       ticks.push({
         t: cursor.getTime(),
-        label: cursor.toLocaleDateString(uiLocale(), {
+        label: formatDateObject(cursor, uiLocale(), {
           month: "short",
           ...(step >= 3 || cursor.getUTCMonth() === 0 ? { year: "2-digit" } : {}),
         }),
@@ -242,15 +242,18 @@ export function EnrichedTimeline({
                     <Tooltip
                       key={`${e.kind}-${e.id}`}
                       content={
-                        <>
-                          <span className="font-medium">{e.title}</span> — {formatDate(e.date)}
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-pretty">{e.title}</div>
+                          <div className="text-muted-foreground tabular-nums">
+                            {formatDate(e.date)}
+                          </div>
                           {e.subtitle && <div className="text-muted-foreground">{e.subtitle}</div>}
                           {shift && (
-                            <div className="font-medium text-warning">
+                            <div className="font-medium text-warning-strong">
                               {t("timeline.shiftCount", { count: String(shift.count) })}
                             </div>
                           )}
-                        </>
+                        </div>
                       }
                     >
                       <button
@@ -343,11 +346,11 @@ export function EnrichedTimeline({
               <LaneGrid ticks={ticks} pos={pos} nowX={nowX} />
               <Tooltip
                 content={
-                  <>
-                    <span className="font-medium">{m.title}</span>
-                    {m.subtitle ? ` · ${m.subtitle}` : ""}
-                    <div className="text-muted-foreground">{range}</div>
-                  </>
+                  <div className="space-y-0.5">
+                    <div className="font-semibold text-pretty">{m.title}</div>
+                    {m.subtitle && <div className="text-muted-foreground">{m.subtitle}</div>}
+                    <div className="text-muted-foreground tabular-nums">{range}</div>
+                  </div>
                 }
               >
                 <button

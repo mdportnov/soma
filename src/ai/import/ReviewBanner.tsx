@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n";
 export function ReviewBanner() {
   const { t } = useI18n();
   return (
-    <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning-strong">
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
       <div>
         <p className="font-medium">{t("importWizard.reviewBanner.title")}</p>

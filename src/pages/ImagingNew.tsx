@@ -7,6 +7,7 @@ import {
   createImagingRecord,
   deleteImagingRecord,
   getImagingRecord,
+  getLinkedAttachment,
   listVisits,
   updateImagingRecord,
 } from "@/db/repos";
@@ -25,6 +26,8 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, todayISO } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
+import { undoToastCaveat, type UndoCaveat } from "@/lib/undo-scope";
 import { useI18n } from "@/lib/i18n";
 
 const MODALITIES = ["xray", "ct", "mri", "ultrasound", "pet", "other"] as const;
@@ -36,6 +39,7 @@ export function ImagingNew() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const editing = id != null;
   const recordId = id ? Number(id) : null;
 
@@ -61,14 +65,33 @@ export function ImagingNew() {
       onDeleted={async () => {
         if (recordId == null) return;
         const rec = data.record;
+        // The imported report is erased with the record; Undo re-creates the
+        // record without it, so the snapshot must not keep the file id.
+        const attached =
+          rec != null &&
+          (rec.attachmentId != null ||
+            (await getLinkedAttachment("imaging_record", recordId)) != null);
+        const caveats: UndoCaveat[] = attached ? ["file"] : [];
+        const ok = await confirmDelete({
+          entity: "imaging",
+          name: rec ? `${t(`imagingModality.${rec.modalityType}`)} ${rec.bodyArea}`.trim() : null,
+          dateLabel: rec ? formatDate(rec.date) : null,
+          undoable: true,
+          undoCaveats: caveats,
+        });
+        if (!ok) return;
         await deleteImagingRecord(recordId);
         navigate("/imaging");
         if (rec) {
           const { id: _id, createdAt: _c, ...recData } = rec;
           const label = `${t(`imagingModality.${rec.modalityType}`)} ${rec.bodyArea}`.trim();
-          toast.showAction(t("toasts.deleted", { name: label }), t("common.undo"), async () => {
-            await createImagingRecord(recData);
-          });
+          toast.showUndo(
+            t("toasts.deleted", { name: label }),
+            async () => {
+              await createImagingRecord({ ...recData, attachmentId: null });
+            },
+            { caveat: undoToastCaveat(t, caveats) },
+          );
         }
       }}
     />

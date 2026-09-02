@@ -56,6 +56,67 @@ export const en = {
     viewContext: "What the assistant can see",
     contextExplainer:
       "This safety summary is sent with each question. The assistant retrieves other records only when needed. Names are omitted.",
+    copyAnswer: "Copy answer",
+    regenerateAnswer: "Regenerate answer",
+    regenerateBlocked: "Wait for the current answer or stop it first",
+    showEarlier: "Show earlier messages",
+    threads: {
+      title: "Chats",
+      new: "New chat",
+      newUntitled: "New chat",
+      search: "Search chats",
+      noMatches: "No chats match “{{query}}”",
+      empty: "Your chats will show up here",
+      today: "Today",
+      yesterday: "Yesterday",
+      lastWeek: "Last 7 days",
+      earlier: "Earlier",
+      archived: "Archived",
+      current: "Current chat",
+      menu: "Chat actions",
+      rename: "Rename",
+      renamePlaceholder: "Chat title",
+      archive: "Archive",
+      restore: "Restore",
+      delete: "Delete",
+      archivedToast: "Chat archived",
+      restoredToast: "Chat restored",
+      deletedToast: "Chat deleted",
+      undo: "Undo",
+      details: "Chat details",
+      recordGone: "no longer exists",
+      created: "Started",
+      lastActivity: "Last activity",
+      messages: { one: "{{n}} message", few: "{{n}} messages", many: "{{n}} messages" },
+      model: "Model",
+      modelsUsed: "Models used",
+      replies: { one: "{{n}} reply", few: "{{n}} replies", many: "{{n}} replies" },
+      recordsCited: "Records the assistant relied on",
+      recordsChanged: "Records changed from this chat",
+      noRecords: "No records yet — they appear once an answer cites one or a change is saved.",
+      changesSaved: {
+        one: "{{n}} change saved",
+        few: "{{n}} changes saved",
+        many: "{{n}} changes saved",
+      },
+      pending: {
+        one: "{{n}} draft waiting",
+        few: "{{n}} drafts waiting",
+        many: "{{n}} drafts waiting",
+      },
+      toolCalls: {
+        one: "{{n}} record lookup",
+        few: "{{n}} record lookups",
+        many: "{{n}} record lookups",
+      },
+      records: { one: "{{n}} record", few: "{{n}} records", many: "{{n}} records" },
+      hits: { one: "cited once", few: "cited {{n}} times", many: "cited {{n}} times" },
+      switchBlocked: "Wait for the answer or stop it before switching chats",
+      showPanel: "Show chats",
+      hidePanel: "Hide chats",
+      listError: "Couldn't load your chats.",
+      retry: "Try again",
+    },
     changes: {
       saved: "Saved to your health record",
       itemCount: "{{count}} record(s)",
@@ -228,6 +289,8 @@ export const en = {
       "Something went wrong while loading your data. The error was written to the log file (Settings → Open logs).",
     retry: "Retry",
     actionFailed: "That action couldn't be completed. Please try again.",
+    prescriptionHasMedications:
+      "The prescription was not deleted: medications are still linked to it. Confirm detaching them and try again.",
   },
   common: {
     save: "Save",
@@ -246,6 +309,7 @@ export const en = {
     copy: "Copy",
     select: "Select",
     undo: "Undo",
+    kg: "kg",
     resume: "Resume",
     expand: "Expand",
     collapse: "Collapse",
@@ -352,6 +416,148 @@ export const en = {
     allergyResolved: "Marked resolved: {{name}}",
     panelSaved: "Lab panel saved",
     importSaved: "Import saved",
+    // Second line of an Undo toast: what pressing Undo will NOT bring back.
+    undoCaveat: {
+      file: "Undo won't bring back the source file.",
+      links: "Undo won't reattach its prescriptions.",
+      log: "Undo won't bring back the intake log.",
+    },
+  },
+
+  // Destructive-action confirmations. Every prompt names the row it is about
+  // to remove and, when the delete pulls child rows with it, says so.
+  confirm: {
+    unnamedTarget: "untitled record",
+    irreversible: "This cannot be undone.",
+    undoHint: "You can undo it from the notification right afterwards.",
+    undoPartial:
+      "You can undo it from the notification right afterwards — but Undo brings back only part of it:",
+    deleteAndDetach: "Delete and detach",
+    // What a partial Undo leaves behind. Each line states the loss and what
+    // Undo does instead, so the user can weigh it before confirming.
+    undoCaveat: {
+      file: "The attached file is erased from disk for good; Undo restores the record without it.",
+      links:
+        "Undo restores the visit and reattaches its diagnoses, symptoms and imaging, but its prescriptions stay detached.",
+      log: "The intake history is erased for good; Undo restores the medication with an empty log.",
+    },
+    period: {
+      since: "since {{date}}",
+      range: "{{from}} – {{to}}",
+    },
+    cascade: {
+      chatMessage: {
+        one: "1 message is deleted with it.",
+        few: "{{n}} messages are deleted with it.",
+        many: "{{n}} messages are deleted with it.",
+      },
+      chatDraft: {
+        one: "1 unsaved draft of changes is discarded with it.",
+        few: "{{n}} unsaved drafts of changes are discarded with it.",
+        many: "{{n}} unsaved drafts of changes are discarded with it.",
+      },
+      medicationLog: {
+        one: "1 intake entry is deleted with it.",
+        few: "{{n}} intake entries are deleted with it.",
+        many: "{{n}} intake entries are deleted with it.",
+      },
+      labResult: {
+        one: "1 biomarker result is deleted with it.",
+        few: "{{n}} biomarker results are deleted with it.",
+        many: "{{n}} biomarker results are deleted with it.",
+      },
+      labFinding: {
+        one: "1 unrecognised line is deleted with it.",
+        few: "{{n}} unrecognised lines are deleted with it.",
+        many: "{{n}} unrecognised lines are deleted with it.",
+      },
+    },
+    notes: {
+      attachedFile: "The attached source file is removed from disk too.",
+      visitLinks:
+        "Diagnoses, prescriptions, symptoms and imaging from this visit stay in your records, but lose the link to it.",
+      prescriptionDetach: {
+        one: "1 medication is tracked from it. It stays in your list but loses the link to this prescription:",
+        few: "{{n}} medications are tracked from it. They stay in your list but lose the link to this prescription:",
+        many: "{{n}} medications are tracked from it. They stay in your list but lose the link to this prescription:",
+      },
+      medicationItem: "{{name}} — {{period}}",
+      allergyOnEmergencyCard: "It also disappears from the emergency card and drug-safety checks.",
+    },
+    delete: {
+      vaccine: {
+        title: "Delete vaccination “{{target}}”?",
+        body: "The dose leaves your immunisation history and the vaccine calendar.",
+      },
+      allergy: {
+        title: "Delete allergy “{{target}}”?",
+        body: "The allergen stops being checked against your medications.",
+      },
+      diagnosis: {
+        title: "Delete diagnosis “{{target}}”?",
+        body: "Its dates, status and notes go with it.",
+      },
+      medication: {
+        title: "Delete medication “{{target}}”?",
+        body: "The intake period and everything logged against it are removed.",
+      },
+      medicationLog: {
+        title: "Delete the intake entry of {{target}}?",
+        body: "Adherence is recalculated without this day.",
+      },
+      prescription: {
+        title: "Delete prescription “{{target}}”?",
+        body: "It disappears from this visit.",
+      },
+      finding: {
+        title: "Delete line “{{target}}”?",
+        body: "This unrecognised line leaves the panel.",
+      },
+      weight: {
+        title: "Delete the weight entry of {{target}}?",
+        body: "The point disappears from the weight chart.",
+      },
+      bp: {
+        title: "Delete the blood pressure entry of {{target}}?",
+        body: "The reading disappears from the chart and from the pressure statistics.",
+      },
+      symptom: {
+        title: "Delete the symptom entry “{{target}}”?",
+        body: "The episode leaves the symptom log and its chart.",
+      },
+      lifestyle: {
+        title: "Delete the lifestyle day {{target}}?",
+        body: "Sleep, training, stress and energy recorded for that day are lost.",
+      },
+      note: {
+        title: "Delete note “{{target}}”?",
+        body: "The text and everything parsed out of it are removed.",
+      },
+      imaging: {
+        title: "Delete imaging record “{{target}}”?",
+        body: "The study, its findings and its conclusion are removed.",
+      },
+      retest: {
+        title: "Delete retest reminder “{{target}}”?",
+        body: "It stops appearing in notifications.",
+      },
+      visit: {
+        title: "Delete visit {{target}}?",
+        body: "The appointment leaves your history.",
+      },
+      labPanel: {
+        title: "Delete panel {{target}}?",
+        body: "The panel and everything measured in it are removed.",
+      },
+      chatThread: {
+        title: "Delete chat “{{target}}”?",
+        body: "The conversation and what the assistant looked up in it are removed. Records you saved to your health record from this chat stay.",
+      },
+      apiKey: {
+        title: "Remove the API key for {{target}}?",
+        body: "The key is deleted from the system keychain and AI features stop working until a new one is saved.",
+      },
+    },
   },
 
   // Settings
@@ -543,7 +749,8 @@ export const en = {
     // Export section
     export: {
       title: "Data export",
-      description: "Everything is yours — full dump anytime, no lock-in.",
+      description:
+        "Every record in your health record as JSON or CSV — yours to keep, no lock-in. Attached documents (PDFs, photos) are listed by file name only; to carry them over, use the encrypted backup.",
       exportAll: "Export all (JSON)",
       exportLabs: "Lab results (CSV)",
       exporting: "Exporting…",
@@ -849,9 +1056,6 @@ export const en = {
     allInRange: "all in range",
     outOfRange: "out of range",
     deletePanel: "Delete panel",
-    deletePanelTitle: "Delete this panel?",
-    deletePanelDescription:
-      "The panel and all its results will be removed. You can undo right after.",
     deletedToast: "Panel deleted.",
     findingsTitle: "Additional findings",
     findingsDescription:
@@ -1438,6 +1642,29 @@ export const en = {
     matchColumn: "Match",
     panelDetailsTitle: "Panel details",
     duplicateBadge: "duplicate",
+    // Re-import detection: the document looks like something already stored.
+    duplicates: {
+      title: "Looks like this report is already imported",
+      titlePossible: "A similar record already exists",
+      likely: "likely duplicate",
+      possible: "possible duplicate",
+      panelMatch: "Panel from {{date}}, {{lab}} — {{shared}}",
+      sharedCount: {
+        one: "{{n}} biomarker matches",
+        few: "{{n}} biomarkers match",
+        many: "{{n}} biomarkers match",
+      },
+      unknownLab: "lab not named",
+      rowMatch: "Row {{row}} ({{name}}, {{date}}) is already recorded as “{{existing}}”",
+      rowBadge: "already recorded",
+      explain:
+        "Two draws on one day are perfectly normal — but the same PDF imported twice doubles every point in your trends. Check the existing record before saving.",
+      openExisting: "Open existing record",
+      importAnyway: "Import anyway",
+      acknowledged: "You chose to import despite a possible duplicate.",
+      savedSibling:
+        "Another panel from the same day is in your records: {{date}}, {{lab}} — {{shared}}. If this is the same report imported twice, delete one of them.",
+    },
     duplicateGroupHint:
       "Two rows mapped to the same biomarker. The best match is kept by default — pick another if needed.",
     duplicatesUnresolved:
@@ -1692,9 +1919,6 @@ export const en = {
   visitDetail: {
     visitNotFound: "Visit not found",
     deleteVisit: "Delete visit",
-    deleteVisitTitle: "Delete this visit?",
-    deleteVisitDescription:
-      "Prescriptions of this visit are removed; linked diagnoses are kept but unlinked.",
     addPrescription: "Add prescription",
     diagnosesTitle: "Diagnoses",
     prescriptionsTitle: "Prescriptions",
@@ -1735,22 +1959,52 @@ export const en = {
   search: {
     title: "Search",
     open: "Search",
-    placeholder: "Search records…",
+    placeholder: "Search records, sections and actions…",
     timelineFilter: "Filter events…",
     esc: "Esc",
-    hint: "Type to search your health records",
+    hint: "Start typing to search records, or pick a section below",
     noResults: 'No results for "{{query}}"',
-    footer: "↑↓ navigate · Enter open · Esc close",
+    noResultsHint: "Try a shorter word, or part of a name — spelling is forgiven.",
+    footer: "↑↓ move · Tab group · Enter open · Esc close",
+    resultCount: {
+      one: "{{count}} match",
+      few: "{{count}} matches",
+      many: "{{count}} matches",
+    },
+    groups: {
+      commands: "Go to",
+      recent: "Recent",
+      nav: "Section",
+      action: "Action",
+    },
+    commands: {
+      newLabPanel: "New lab panel",
+      importLabs: "Import lab results",
+      compareLabs: "Compare lab panels",
+      newImaging: "Add imaging record",
+      emergencyCard: "Emergency card",
+      settings: "Settings",
+    },
     types: {
       biomarker: "Biomarker",
       lab_panel: "Lab",
+      lab_result: "Result",
+      lab_finding: "Finding",
       visit: "Visit",
       diagnosis: "Diagnosis",
       medication: "Medication",
+      prescription: "Prescription",
       allergy: "Allergy",
       vaccine: "Vaccine",
       symptom: "Symptom",
       imaging: "Imaging",
+      health_note: "Note",
+      weight_log: "Weight",
+      bp_log: "Blood pressure",
+      lifestyle_log: "Lifestyle",
+      retest: "Re-test",
+      attachment: "File",
+      chat_thread: "Chat",
     },
   },
 

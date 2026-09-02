@@ -83,7 +83,7 @@ export function NotableChanges({
       </CardHeader>
       <CardContent>
         {shown.length === 0 ? (
-          <p className="flex items-center gap-2 py-2 text-sm text-success">
+          <p className="flex items-center gap-2 py-2 text-sm text-success-strong">
             <TrendingUp className="size-4" /> {t("insights.allStable")}
           </p>
         ) : (

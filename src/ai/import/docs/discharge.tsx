@@ -10,7 +10,7 @@
 import { FileText } from "lucide-react";
 import { DISCHARGE_EXTRACTION_PROMPT } from "../../prompts";
 import type { RawDischargeExtraction } from "../../types";
-import type { DocTypeModule, ReviewProps } from "../registry";
+import type { DocTypeModule, ImportContext, ReviewProps } from "../registry";
 import { asArray, asObject, expectObject, isoDateOrNull, nullableStr } from "../validate";
 import { resolveEnum, parseDose } from "../resolve";
 import {
@@ -20,14 +20,8 @@ import {
   type AllergyCategory,
 } from "../vocab";
 import { ReviewBanner } from "../ReviewBanner";
-import { storeSourceAttachment } from "../save-helpers";
-import {
-  createAllergy,
-  createDiagnosis,
-  createMedication,
-  createVisit,
-  updateAttachment,
-} from "@/db/repos";
+import { withSourceAttachment, type SourceAttachment } from "../save-helpers";
+import { createAllergy, createDiagnosis, createMedication, createVisit } from "@/db/repos";
 import { Field } from "@/components/app/Field";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
@@ -170,64 +164,77 @@ export const dischargeModule: DocTypeModule<DischargeDraft> = {
   Review: DischargeReview,
 
   async save(draft, ctx): Promise<string> {
-    const { meta, rows } = draft;
-    const attachmentId = await storeSourceAttachment(ctx, "discharge", "visit");
-    const visitDate = meta.visitDate || null;
-    const recordDate = visitDate ?? todayISO();
-    let visitId: number | null = null;
-    if (visitDate || meta.clinic.trim() || meta.doctorName.trim()) {
-      visitId = await createVisit({
-        profileId: ctx.profileId,
-        date: recordDate,
-        doctorName: meta.doctorName.trim() || null,
-        clinic: meta.clinic.trim() || null,
-        notes: meta.notes.trim() || null,
-      });
-      if (attachmentId != null) {
-        await updateAttachment(attachmentId, {
-          linkedEntityType: "visit",
-          linkedEntityId: visitId,
-        });
-      }
-    }
-
-    const included = rows.filter((r) => r.include && r.name.trim());
-    for (const r of included) {
-      if (r.type === "diagnosis") {
-        await createDiagnosis({
-          profileId: ctx.profileId,
-          name: r.name.trim(),
-          icdCode: r.icdCode?.trim() || null,
-          date: recordDate,
-          visitId,
-        });
-      } else if (r.type === "medication") {
-        const parsed = parseDose(r.dose);
-        await createMedication({
-          profileId: ctx.profileId,
-          name: r.name.trim(),
-          type: "drug",
-          doseAmount: parsed.amount,
-          doseUnit: parsed.unit,
-          schedule: null,
-          startDate: recordDate,
-          endDate: null,
-        });
-      } else {
-        await createAllergy({
-          profileId: ctx.profileId,
-          allergen: r.name.trim(),
-          category: r.category,
-          severity: r.severity,
-          reaction: r.reaction?.trim() || null,
-          onsetDate: null,
-          status: "active",
-        });
-      }
-    }
-    return visitId != null ? `/visits/${visitId}` : "/visits";
+    return withSourceAttachment(ctx, "discharge", "visit", (source) =>
+      saveDischarge(draft, ctx, source),
+    );
   },
 };
+
+/**
+ * The discharge summary belongs to the visit it describes, and is linked to it
+ * the moment the visit row exists — not at the end of the save, where a crash
+ * would leave the document orphaned. A draft with no visit data creates no
+ * visit at all: then nothing can own the document and it is dropped, rather
+ * than left behind as a file no screen can reach.
+ */
+async function saveDischarge(
+  draft: DischargeDraft,
+  ctx: ImportContext,
+  source: SourceAttachment,
+): Promise<string> {
+  const { meta, rows } = draft;
+  const visitDate = meta.visitDate || null;
+  const recordDate = visitDate ?? todayISO();
+  let visitId: number | null = null;
+  if (visitDate || meta.clinic.trim() || meta.doctorName.trim()) {
+    visitId = await createVisit({
+      profileId: ctx.profileId,
+      date: recordDate,
+      doctorName: meta.doctorName.trim() || null,
+      clinic: meta.clinic.trim() || null,
+      notes: meta.notes.trim() || null,
+    });
+    await source.link(visitId);
+  } else {
+    await source.discard();
+  }
+
+  const included = rows.filter((r) => r.include && r.name.trim());
+  for (const r of included) {
+    if (r.type === "diagnosis") {
+      await createDiagnosis({
+        profileId: ctx.profileId,
+        name: r.name.trim(),
+        icdCode: r.icdCode?.trim() || null,
+        date: recordDate,
+        visitId,
+      });
+    } else if (r.type === "medication") {
+      const parsed = parseDose(r.dose);
+      await createMedication({
+        profileId: ctx.profileId,
+        name: r.name.trim(),
+        type: "drug",
+        doseAmount: parsed.amount,
+        doseUnit: parsed.unit,
+        schedule: null,
+        startDate: recordDate,
+        endDate: null,
+      });
+    } else {
+      await createAllergy({
+        profileId: ctx.profileId,
+        allergen: r.name.trim(),
+        category: r.category,
+        severity: r.severity,
+        reaction: r.reaction?.trim() || null,
+        onsetDate: null,
+        status: "active",
+      });
+    }
+  }
+  return visitId != null ? `/visits/${visitId}` : "/visits";
+}
 
 function DischargeReview({ draft, setDraft, onSave }: ReviewProps<DischargeDraft>) {
   const { t } = useI18n();

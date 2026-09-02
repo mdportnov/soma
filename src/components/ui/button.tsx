@@ -27,7 +27,14 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
+  /**
+   * React 19 passes refs as a plain prop, but `ButtonHTMLAttributes` does not
+   * declare one — spelled out here so callers can drive focus (e.g. a
+   * confirmation dialog putting the caret on Cancel).
+   */
+  ref?: React.Ref<HTMLButtonElement>;
+}
 
 export function Button({ className, variant, size, type = "button", ...props }: ButtonProps) {
   return (

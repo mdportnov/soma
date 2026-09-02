@@ -123,6 +123,19 @@ Without the flag every write tool refuses with an explanation and all read tools
 keep working. Rows written via MCP are stamped `import_method = "mcp"` so their
 provenance is distinguishable from hand-entered and AI-imported data.
 
+## Write and delete semantics
+
+The sidecar and the app write the same file, so a record deleted through the
+assistant has to end up in the state the UI would have left. That is enforced by
+sharing the code that decides it, not by keeping two copies in sync:
+`src/db/tx-plans.ts` builds the statement plans (child rows first, the imported
+document last and only when nothing else references it) and both sides execute
+them — the app through `src-tauri/src/transaction.rs`, the sidecar through
+`src/tx.ts`. Multi-step writes run as one IMMEDIATE transaction with
+`foreign_keys = ON`, so an interrupted delete leaves nothing half-removed, and
+the read-then-write upserts (`log_lifestyle`, `set_retest_schedule`) cannot race
+the app into a duplicate row.
+
 ## Notes
 
 - No raw SQL is exposed — only typed, validated tools.

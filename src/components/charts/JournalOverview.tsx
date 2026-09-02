@@ -20,7 +20,7 @@ import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatDate, formatValue } from "@/lib/utils";
+import { cn, formatDate, formatDateObject, formatValue } from "@/lib/utils";
 import { kgToLb, type UnitSystem } from "@/lib/units";
 import { bpStageColor, isCrisis, isStage2 } from "@/lib/vitals";
 import { buildWeightSeries, goalStatus, goalTs, type WeightGoal } from "@/lib/weightGoal";
@@ -189,7 +189,7 @@ export function JournalOverview({
   };
   // Compact month axis shown under every panel (e.g. "Jun 25" / "июн. 25").
   const monthFmt = (v: number) =>
-    new Date(v).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-GB", {
+    formatDateObject(new Date(v), lang === "ru" ? "ru-RU" : "en-GB", {
       month: "short",
       year: "2-digit",
     });

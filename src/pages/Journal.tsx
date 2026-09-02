@@ -23,6 +23,7 @@ import {
 } from "recharts";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
+import { useHighlight } from "@/hooks/useHighlight";
 import {
   createBpEntry,
   createSymptomEntry,
@@ -64,10 +65,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDate, formatValue, todayISO, uiLocale } from "@/lib/utils";
+import { formatDate, formatDateObject, formatValue, todayISO, uiLocale } from "@/lib/utils";
 import { kgToLb, lbToKg, type UnitSystem } from "@/lib/units";
 import { isCrisis, isStage2 } from "@/lib/vitals";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
 import { useI18n } from "@/lib/i18n";
 
 type Tab = "overview" | "weight" | "bp" | "symptoms";
@@ -202,6 +204,9 @@ function WeightTab({
 }) {
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
+  // ⌘K lands here as /journal?tab=weight&highlight=<id> — flash that entry.
+  const highlight = useHighlight();
   const { data: rows, loading, reload } = useQuery(() => listWeightLog(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<WeightLog | null>(null);
@@ -249,7 +254,13 @@ function WeightTab({
         })()
       : ["auto", "auto"];
 
-  const visible = showAll ? rows : rows.slice(0, 20);
+  const collapsed = rows.slice(0, 20);
+  // A ⌘K jump can point past the collapsed window; expand rather than land on a
+  // tab where the flagged row isn't rendered at all.
+  const visible =
+    showAll || (highlight.id !== null && !collapsed.some((r) => r.id === highlight.id))
+      ? rows
+      : collapsed;
 
   const openNew = () => {
     setEditing(null);
@@ -414,7 +425,11 @@ function WeightTab({
                 </TableHeader>
                 <TableBody>
                   {visible.map((r) => (
-                    <TableRow key={r.id}>
+                    <TableRow
+                      key={r.id}
+                      ref={highlight.id === r.id ? highlight.ref : undefined}
+                      className={highlight.className(r.id)}
+                    >
                       <TableCell>{formatDate(r.date)}</TableCell>
                       <TableCell className="font-medium tabular-nums">
                         {formatValue(toDisplay(r.weightKg))} {unitLabel}
@@ -428,11 +443,16 @@ function WeightTab({
                           }}
                           onDelete={async () => {
                             const { id: _id, ...data } = r;
+                            const ok = await confirmDelete({
+                              entity: "weight",
+                              dateLabel: formatDate(r.date),
+                              undoable: true,
+                            });
+                            if (!ok) return;
                             await deleteWeightEntry(r.id);
                             void reload();
-                            toast.showAction(
+                            toast.showUndo(
                               t("toasts.deleted", { name: t("journal.tabs.weight") }),
-                              t("common.undo"),
                               async () => {
                                 await createWeightEntry(data);
                                 void reload();
@@ -576,6 +596,9 @@ function BpTab({
 }) {
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
+  // ⌘K lands here as /journal?tab=bp&highlight=<id> — flash that reading.
+  const highlight = useHighlight();
   const { data: rows, loading, reload } = useQuery(() => listBpLog(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<BpLog | null>(null);
@@ -601,7 +624,13 @@ function BpTab({
     (r) => tsOf(r.date) >= sevenDaysAgo && isCrisis(r.systolic, r.diastolic),
   );
 
-  const visible = showAll ? rows : rows.slice(0, 20);
+  const collapsed = rows.slice(0, 20);
+  // A ⌘K jump can point past the collapsed window; expand rather than land on a
+  // tab where the flagged row isn't rendered at all.
+  const visible =
+    showAll || (highlight.id !== null && !collapsed.some((r) => r.id === highlight.id))
+      ? rows
+      : collapsed;
 
   const openNew = () => {
     setEditing(null);
@@ -720,7 +749,11 @@ function BpTab({
                 </TableHeader>
                 <TableBody>
                   {visible.map((r) => (
-                    <TableRow key={r.id}>
+                    <TableRow
+                      key={r.id}
+                      ref={highlight.id === r.id ? highlight.ref : undefined}
+                      className={highlight.className(r.id)}
+                    >
                       <TableCell>{formatDate(r.date)}</TableCell>
                       <TableCell className="text-muted-foreground">{r.time ?? "—"}</TableCell>
                       <TableCell className="font-medium tabular-nums">
@@ -747,11 +780,17 @@ function BpTab({
                           }}
                           onDelete={async () => {
                             const { id: _id, ...data } = r;
+                            const ok = await confirmDelete({
+                              entity: "bp",
+                              name: `${r.systolic}/${r.diastolic}`,
+                              dateLabel: formatDate(r.date),
+                              undoable: true,
+                            });
+                            if (!ok) return;
                             await deleteBpEntry(r.id);
                             void reload();
-                            toast.showAction(
+                            toast.showUndo(
                               t("toasts.deleted", { name: t("journal.tabs.bp") }),
-                              t("common.undo"),
                               async () => {
                                 await createBpEntry(data);
                                 void reload();
@@ -973,6 +1012,7 @@ function SymptomsTab({
 }) {
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const { data, loading, reload } = useQuery(async () => {
     const [rows, names] = await Promise.all([
       listSymptomLog(profileId),
@@ -1074,11 +1114,17 @@ function SymptomsTab({
                           }}
                           onDelete={async () => {
                             const { id: _id, createdAt: _c, ...data } = r;
+                            const ok = await confirmDelete({
+                              entity: "symptom",
+                              name: r.symptomName,
+                              dateLabel: formatDate(r.date),
+                              undoable: true,
+                            });
+                            if (!ok) return;
                             await deleteSymptomEntry(r.id);
                             void reload();
-                            toast.showAction(
+                            toast.showUndo(
                               t("toasts.deleted", { name: r.symptomName }),
-                              t("common.undo"),
                               async () => {
                                 await createSymptomEntry(data);
                                 void reload();
@@ -1147,7 +1193,7 @@ function SymptomStrip({ rows }: { rows: SymptomLog[] }) {
                 )}
               </div>
               <span className="absolute bottom-0 text-[10px] text-muted-foreground">
-                {new Date(`${date}T00:00:00`).toLocaleDateString(uiLocale(), {
+                {formatDateObject(new Date(`${date}T00:00:00`), uiLocale(), {
                   day: "numeric",
                   month: "short",
                 })}

@@ -14,18 +14,22 @@ import {
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import {
+  countMedicationLogEntries,
   createMedication,
   deleteMedication,
   getMedicationRelations,
   listAllergies,
   listMedications,
   updateMedication,
+  getLinkedAttachment,
   type MedicationRelations,
 } from "@/db/repos";
 import type { Allergy, Medication } from "@/db/schema";
 import { matchDrugAllergies } from "@/lib/drug-allergy";
 import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
+import { undoToastCaveat, type UndoCaveat } from "@/lib/undo-scope";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -53,6 +57,7 @@ export function Medications() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const navigate = useNavigate();
   const { data: meds, loading, reload } = useQuery(() => listMedications(profileId), [profileId]);
   const { data: allergies } = useQuery(() => listAllergies(profileId), [profileId]);
@@ -84,14 +89,14 @@ export function Medications() {
       end: m.endDate,
       color: MED_TYPE_COLOR[m.type],
       tooltip: (
-        <>
-          <span className="font-medium">{m.name}</span>
+        <div className="space-y-0.5">
+          <div className="font-semibold text-pretty">{m.name}</div>
           <div className="text-muted-foreground">{dose || t(`types.${m.type}`)}</div>
-          <div className="text-muted-foreground">
+          <div className="text-muted-foreground tabular-nums">
             {formatDate(m.startDate)} → {m.endDate ? formatDate(m.endDate) : t("timeline.now")}
           </div>
           {m.purpose && <div className="text-muted-foreground">{m.purpose}</div>}
-        </>
+        </div>
       ),
     };
   });
@@ -231,15 +236,35 @@ export function Medications() {
                             destructive
                             onClick={async () => {
                               const { id: _id, ...data } = m;
+                              // The medication_log FK cascades, so the prompt
+                              // has to say how much history goes with the drug.
+                              // Undo re-creates the medication only: the log
+                              // and an imported prescription file stay gone.
+                              const [logCount, attached] = await Promise.all([
+                                countMedicationLogEntries(m.id),
+                                getLinkedAttachment("medication", m.id),
+                              ]);
+                              const caveats: UndoCaveat[] = [
+                                ...(logCount > 0 ? (["log"] as const) : []),
+                                ...(attached ? (["file"] as const) : []),
+                              ];
+                              const ok = await confirmDelete({
+                                entity: "medication",
+                                name: m.name,
+                                cascade: [{ key: "medicationLog", count: logCount }],
+                                undoable: true,
+                                undoCaveats: caveats,
+                              });
+                              if (!ok) return;
                               await deleteMedication(m.id);
                               void reload();
-                              toast.showAction(
+                              toast.showUndo(
                                 t("toasts.deleted", { name: m.name }),
-                                t("common.undo"),
                                 async () => {
                                   await createMedication(data);
                                   void reload();
                                 },
+                                { caveat: undoToastCaveat(t, caveats) },
                               );
                             }}
                           />
@@ -497,7 +522,7 @@ function AllergyWarning({ matches }: { matches: Allergy[] }) {
       className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${
         critical
           ? "border-destructive/40 bg-destructive/10 text-destructive"
-          : "border-warning/40 bg-warning/10 text-warning"
+          : "border-warning/40 bg-warning/10 text-warning-strong"
       }`}
     >
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />

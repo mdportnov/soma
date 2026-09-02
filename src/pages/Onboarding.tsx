@@ -148,7 +148,7 @@ export function Onboarding({ profileId, onDone }: { profileId: number; onDone: (
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
+                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success-strong" />
                     {t("onboarding.privacyNote")}
                   </p>
                   <p className="text-xs leading-relaxed text-muted-foreground">

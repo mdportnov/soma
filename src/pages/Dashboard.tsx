@@ -315,7 +315,7 @@ export function Dashboard() {
                           (item.severity === "alert"
                             ? "bg-destructive/10 text-destructive"
                             : item.severity === "watch"
-                              ? "bg-warning/15 text-warning"
+                              ? "bg-warning/15 text-warning-strong"
                               : "bg-secondary text-secondary-foreground")
                         }
                       >
@@ -336,7 +336,7 @@ export function Dashboard() {
         <Card className="mt-6 border-warning/40">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-warning/10">
-              <ClipboardCheck className="size-4 text-warning" />
+              <ClipboardCheck className="size-4 text-warning-strong" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">{t("needsReview.globalTitle")}</p>

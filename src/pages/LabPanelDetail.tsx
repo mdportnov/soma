@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Sparkles, TestTubes, Trash2, Pencil } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
+import { useHighlight } from "@/hooks/useHighlight";
 import {
   createPanelFindings,
   createPanelWithResults,
@@ -22,6 +23,8 @@ import {
 } from "@/db/repos";
 import { SourceFileButton, SourcePageLink } from "@/components/app/SourceFile";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
+import { undoToastCaveat, type UndoCaveat } from "@/lib/undo-scope";
 import { convertToAlternateScale } from "@/lib/units";
 import { PageHeader } from "@/components/app/PageHeader";
 import { crumbs } from "@/app/nav";
@@ -33,7 +36,6 @@ import { NotableChanges } from "@/components/app/NotableChanges";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/app/Field";
 import { Input } from "@/components/ui/input";
@@ -51,7 +53,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDate, formatValue } from "@/lib/utils";
+import { cn, formatDate, formatValue } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 /** Editable panel metadata, held as strings while the dialog is open. */
@@ -96,7 +98,10 @@ export function LabPanelDetail() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const toast = useToast();
-  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const { confirmDelete } = useConfirm();
+  // ⌘K lands on a single measurement as /labs/<panel>?highlight=<row id> —
+  // flash the result or finding the user searched for inside the panel.
+  const highlight = useHighlight();
   const [editFinding, setEditFinding] = React.useState<LabFinding | null>(null);
   const [editDraft, setEditDraft] = React.useState({ valueText: "", unit: "", refRangeText: "" });
   const [editResult, setEditResult] = React.useState<ResultWithBiomarker | null>(null);
@@ -121,6 +126,22 @@ export function LabPanelDetail() {
     resultDraft.unit.trim() !== "";
 
   const removePanel = async () => {
+    // Results and unrecognised lines go with the panel and come back with Undo
+    // (re-created below). The source file is erased from disk the moment the
+    // delete runs and never comes back — the one thing Undo cannot promise.
+    const caveats: UndoCaveat[] = source ? ["file"] : [];
+    const ok = await confirmDelete({
+      entity: "labPanel",
+      name: panel.labName,
+      dateLabel: formatDate(panel.date),
+      cascade: [
+        { key: "labResult", count: results.length },
+        { key: "labFinding", count: findings.length },
+      ],
+      undoable: true,
+      undoCaveats: caveats,
+    });
+    if (!ok) return;
     // Capture before delete so Undo can re-create the panel + results.
     const { id: _id, createdAt: _c, ...panelData } = panel;
     const resultInputs = results.map((r) => ({
@@ -135,13 +156,18 @@ export function LabPanelDetail() {
     const biosById = new Map(results.map((r) => [r.biomarkerId, r.biomarker]));
     const findingInputs = findings.map(({ id: _i, panelId: _p, createdAt: _c2, ...f }) => f);
     await deletePanel(panelId);
-    setConfirmDelete(false);
     navigate("/labs");
-    toast.showAction(t("labPanelDetail.deletedToast"), t("common.undo"), () => {
-      void createPanelWithResults(panelData, resultInputs, biosById).then((newId) =>
-        createPanelFindings(newId, findingInputs),
-      );
-    });
+    // The erased source row must not travel with the snapshot: a re-created
+    // panel pointing at a file id that no longer exists is a broken link.
+    const restoredPanel = { ...panelData, sourceFileId: null };
+    toast.showUndo(
+      t("labPanelDetail.deletedToast"),
+      async () => {
+        const newId = await createPanelWithResults(restoredPanel, resultInputs, biosById);
+        await createPanelFindings(newId, findingInputs);
+      },
+      { caveat: undoToastCaveat(t, caveats) },
+    );
   };
 
   const saveFinding = async () => {
@@ -245,7 +271,7 @@ export function LabPanelDetail() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setConfirmDelete(true)}
+              onClick={() => void removePanel()}
               aria-label={t("labPanelDetail.deletePanel")}
             >
               <Trash2 className="text-destructive" />
@@ -334,7 +360,11 @@ export function LabPanelDetail() {
                 {results.map((r) => (
                   <TableRow
                     key={r.id}
-                    className={r.reviewedAt == null ? "bg-warning/5" : undefined}
+                    ref={highlight.id === r.id ? highlight.ref : undefined}
+                    className={cn(
+                      r.reviewedAt == null && "bg-warning/5",
+                      highlight.className(r.id),
+                    )}
                   >
                     <TableCell>
                       <Link
@@ -461,7 +491,11 @@ export function LabPanelDetail() {
             <Table>
               <TableBody>
                 {findings.map((f) => (
-                  <TableRow key={f.id}>
+                  <TableRow
+                    key={f.id}
+                    ref={highlight.id === f.id ? highlight.ref : undefined}
+                    className={highlight.className(f.id)}
+                  >
                     <TableCell className="max-w-64">
                       <p className="truncate text-sm" title={f.rawLabel}>
                         {f.rawLabel}
@@ -503,8 +537,14 @@ export function LabPanelDetail() {
                           size="iconSm"
                           aria-label={t("common.delete")}
                           onClick={async () => {
+                            const ok = await confirmDelete({
+                              entity: "finding",
+                              name: f.rawLabel,
+                            });
+                            if (!ok) return;
                             await deleteFinding(f.id);
                             await reload();
+                            toast.show(t("toasts.deleted", { name: f.rawLabel }));
                           }}
                         >
                           <Trash2 className="text-destructive" />
@@ -695,17 +735,6 @@ export function LabPanelDetail() {
           </div>
         )}
       </Dialog>
-
-      <ConfirmDialog
-        open={confirmDelete}
-        onClose={() => setConfirmDelete(false)}
-        title={t("labPanelDetail.deletePanelTitle")}
-        description={t("labPanelDetail.deletePanelDescription")}
-        confirmLabel={t("labPanelDetail.deletePanel")}
-        cancelLabel={t("common.cancel")}
-        destructive
-        onConfirm={() => void removePanel()}
-      />
     </>
   );
 }

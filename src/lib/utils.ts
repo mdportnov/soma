@@ -19,15 +19,52 @@ export function uiLocale(): string {
   return lang === "ru" ? "ru-RU" : "en-GB";
 }
 
-export function formatDate(iso: string | null | undefined): string {
+/**
+ * Russian date formats carry an era marker — `ru-RU` renders a year as
+ * "2 сент. 2026 г." The app never shows anything but the common era, so the
+ * suffix is pure noise. Only the trailing " г."/" г" is dropped; the month
+ * abbreviation ("сент.") keeps its own period. A no-op for every other locale.
+ */
+export function stripEraSuffix(formatted: string): string {
+  return formatted.replace(/[\s\u00a0\u202f]+г\.?$/u, "");
+}
+
+const DATE_FORMAT: Intl.DateTimeFormatOptions = {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+};
+
+/**
+ * Same as {@link formatDate} but for callers that carry their own locale —
+ * PDF and HTML exports render under the locale the export was requested in,
+ * not under whatever `<html lang>` happens to say.
+ */
+export function formatDateIn(
+  iso: string | null | undefined,
+  locale: string,
+  options: Intl.DateTimeFormatOptions = DATE_FORMAT,
+): string {
   if (!iso) return "—";
   const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(uiLocale(), {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDateObject(d, locale, options);
+}
+
+/**
+ * Locale-formatted label for an already-parsed `Date` — chart axis ticks build
+ * their own cursors and never go through an ISO string.
+ */
+export function formatDateObject(
+  date: Date,
+  locale: string,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  return stripEraSuffix(date.toLocaleDateString(locale, options));
+}
+
+export function formatDate(iso: string | null | undefined): string {
+  return formatDateIn(iso, uiLocale());
 }
 
 /**

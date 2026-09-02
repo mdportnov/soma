@@ -15,8 +15,9 @@ import { asArray, asObject, isoDateOrNull, nullableStr } from "../validate";
 import { resolveEnum, type ResolveConfidence } from "../resolve";
 import { IMAGING_MODALITY_VOCAB, type ImagingModality } from "../vocab";
 import { ReviewBanner } from "../ReviewBanner";
-import { storeSourceAttachment } from "../save-helpers";
-import { createImagingRecord } from "@/db/repos";
+import { withSourceAttachment } from "../save-helpers";
+import { createImagingRecord, findDuplicateImagingForImport } from "@/db/repos";
+import type { RecordDuplicate } from "@/lib/import-duplicates";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,14 +47,16 @@ type ImagingRow = {
   findings: string | null;
   radiologistName: string | null;
   clinic: string | null;
+  /** Studies of the same modality and body area already stored for that day. */
+  duplicates: RecordDuplicate[];
 };
 
 export type ImagingDraft = { rows: ImagingRow[] };
 
 const MODALITY_VALUES = ["xray", "ct", "mri", "ultrasound", "pet", "other"] as const;
 
-function validateImaging(parsed: unknown): ImagingRow[] {
-  const rows: ImagingRow[] = [];
+function validateImaging(parsed: unknown): Omit<ImagingRow, "duplicates">[] {
+  const rows: Omit<ImagingRow, "duplicates">[] = [];
   let key = 0;
   for (const item of asArray(parsed)) {
     const o = asObject(item);
@@ -86,7 +89,21 @@ export const imagingModule: DocTypeModule<ImagingDraft> = {
 
   async prepare(doc, ctx): Promise<ImagingDraft> {
     const parsed = await ctx.provider.extractStructured(doc, IMAGING_EXTRACTION_PROMPT, 8192);
-    return { rows: validateImaging(parsed) };
+    const rows = validateImaging(parsed);
+    // A report re-imported by mistake would add a second identical study; flag
+    // it here and let the review screen ask instead of deciding for the user.
+    return {
+      rows: await Promise.all(
+        rows.map(async (r) => ({
+          ...r,
+          duplicates: await findDuplicateImagingForImport(ctx.profileId, {
+            date: r.date,
+            modality: r.modality,
+            bodyArea: r.bodyArea,
+          }),
+        })),
+      ),
+    };
   },
 
   isEmpty: (draft) => draft.rows.length === 0,
@@ -94,21 +111,30 @@ export const imagingModule: DocTypeModule<ImagingDraft> = {
   Review: ImagingReview,
 
   async save(draft, ctx): Promise<string> {
-    const attachmentId = await storeSourceAttachment(ctx, "imaging", "imaging_record");
-    const included = draft.rows.filter((r) => r.include && r.bodyArea.trim());
-    for (const r of included) {
-      await createImagingRecord({
-        profileId: ctx.profileId,
-        date: r.date ?? todayISO(),
-        modalityType: r.modality,
-        bodyArea: r.bodyArea.trim(),
-        findings: r.findings?.trim() || null,
-        radiologistName: r.radiologistName?.trim() || null,
-        clinic: r.clinic?.trim() || null,
-        attachmentId,
-      });
-    }
-    return "/imaging";
+    // One report can describe several studies; they all point at the same
+    // document, and the first record created owns the polymorphic link so the
+    // attachment is never left unlinked (and therefore undeletable).
+    return withSourceAttachment(ctx, "imaging", "imaging_record", async (source) => {
+      const included = draft.rows.filter((r) => r.include && r.bodyArea.trim());
+      let linked = false;
+      for (const r of included) {
+        const recordId = await createImagingRecord({
+          profileId: ctx.profileId,
+          date: r.date ?? todayISO(),
+          modalityType: r.modality,
+          bodyArea: r.bodyArea.trim(),
+          findings: r.findings?.trim() || null,
+          radiologistName: r.radiologistName?.trim() || null,
+          clinic: r.clinic?.trim() || null,
+          attachmentId: source.id,
+        });
+        if (!linked) {
+          await source.link(recordId);
+          linked = true;
+        }
+      }
+      return "/imaging";
+    });
   },
 };
 

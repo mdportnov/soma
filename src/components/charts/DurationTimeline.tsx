@@ -2,7 +2,7 @@ import * as React from "react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { TimelinePanel } from "./TimelinePanel";
 import { useI18n } from "@/lib/i18n";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatDateObject } from "@/lib/utils";
 
 const DAY = 86400000;
 const PX_PER_MONTH = 64;
@@ -114,7 +114,7 @@ export function DurationTimeline({
         label:
           m === 0
             ? String(cursor.getUTCFullYear())
-            : cursor.toLocaleDateString(locale, { month: "short", timeZone: "UTC" }),
+            : formatDateObject(cursor, locale, { month: "short", timeZone: "UTC" }),
       });
     }
     cursor.setUTCMonth(cursor.getUTCMonth() + 1);

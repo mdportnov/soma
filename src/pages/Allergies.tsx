@@ -2,9 +2,18 @@ import * as React from "react";
 import { CircleCheck, Lock, Pencil, Plus, ShieldAlert, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
-import { createAllergy, deleteAllergy, listAllergies, updateAllergy } from "@/db/repos";
+import { useHighlight } from "@/hooks/useHighlight";
+import {
+  createAllergy,
+  deleteAllergy,
+  getLinkedAttachment,
+  listAllergies,
+  updateAllergy,
+} from "@/db/repos";
 import type { Allergy } from "@/db/schema";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
+import { undoToastCaveat, type UndoCaveat } from "@/lib/undo-scope";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { IconAction } from "@/components/app/IconAction";
@@ -34,6 +43,9 @@ export function Allergies() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
+  // ⌘K lands here as /allergies?highlight=<id> — flash that card.
+  const highlight = useHighlight();
   const {
     data: allergies,
     loading,
@@ -89,40 +101,57 @@ export function Allergies() {
                 </h2>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {section.items.map((a) => (
-                    <AllergyCard
+                    // The card is a shared component, so the ⌘K flash rides on a
+                    // wrapper rather than threading ref/className through its API.
+                    <div
                       key={a.id}
-                      allergy={a}
-                      isActive={section.isActive}
-                      onEdit={() => {
-                        setEditing(a);
-                        setFormOpen(true);
-                      }}
-                      onResolve={async () => {
-                        await updateAllergy(a.id, { status: "resolved" });
-                        void reload();
-                        toast.showAction(
-                          t("toasts.allergyResolved", { name: a.allergen }),
-                          t("common.undo"),
-                          async () => {
-                            await updateAllergy(a.id, { status: "active" });
-                            void reload();
-                          },
-                        );
-                      }}
-                      onDelete={async () => {
-                        const { id: _id, createdAt: _c, ...data } = a;
-                        await deleteAllergy(a.id);
-                        void reload();
-                        toast.showAction(
-                          t("toasts.deleted", { name: a.allergen }),
-                          t("common.undo"),
-                          async () => {
-                            await createAllergy(data);
-                            void reload();
-                          },
-                        );
-                      }}
-                    />
+                      ref={highlight.id === a.id ? highlight.ref : undefined}
+                      className={highlight.className(a.id)}
+                    >
+                      <AllergyCard
+                        allergy={a}
+                        isActive={section.isActive}
+                        onEdit={() => {
+                          setEditing(a);
+                          setFormOpen(true);
+                        }}
+                        onResolve={async () => {
+                          await updateAllergy(a.id, { status: "resolved" });
+                          void reload();
+                          toast.showAction(
+                            t("toasts.allergyResolved", { name: a.allergen }),
+                            t("common.undo"),
+                            async () => {
+                              await updateAllergy(a.id, { status: "active" });
+                              void reload();
+                            },
+                          );
+                        }}
+                        onDelete={async () => {
+                          const { id: _id, createdAt: _c, ...data } = a;
+                          const attached = await getLinkedAttachment("allergy", a.id);
+                          const caveats: UndoCaveat[] = attached ? ["file"] : [];
+                          const ok = await confirmDelete({
+                            entity: "allergy",
+                            name: a.allergen,
+                            notes: [t("confirm.notes.allergyOnEmergencyCard")],
+                            undoable: true,
+                            undoCaveats: caveats,
+                          });
+                          if (!ok) return;
+                          await deleteAllergy(a.id);
+                          void reload();
+                          toast.showUndo(
+                            t("toasts.deleted", { name: a.allergen }),
+                            async () => {
+                              await createAllergy(data);
+                              void reload();
+                            },
+                            { caveat: undoToastCaveat(t, caveats) },
+                          );
+                        }}
+                      />
+                    </div>
                   ))}
                 </div>
               </section>

@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
 
 const NONE = "__none__";
 
@@ -70,7 +71,7 @@ function severityChip(severity: NotificationSeverity): string {
   return severity === "alert"
     ? "bg-destructive/10 text-destructive"
     : severity === "watch"
-      ? "bg-warning/15 text-warning"
+      ? "bg-warning/15 text-warning-strong"
       : "bg-secondary text-secondary-foreground";
 }
 
@@ -339,6 +340,7 @@ function SchedulesSection({
 }) {
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<RetestSchedule | null>(null);
 
@@ -361,9 +363,11 @@ function SchedulesSection({
 
   const remove = async (s: RetestSchedule) => {
     const { id: _id, createdAt: _c, ...data } = s;
+    const ok = await confirmDelete({ entity: "retest", name: s.label, undoable: true });
+    if (!ok) return;
     await deleteRetestSchedule(s.id);
     void reload();
-    toast.showAction(t("toasts.deleted", { name: s.label }), t("common.undo"), async () => {
+    toast.showUndo(t("toasts.deleted", { name: s.label }), async () => {
       await createRetestSchedule(data);
       void reload();
     });

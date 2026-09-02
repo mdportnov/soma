@@ -128,7 +128,7 @@ export function TrendChart({
   return (
     <div className="w-full">
       {(hiddenCount > 0 || usingRawFallback) && (
-        <p className="mb-1 text-[11px] text-warning">
+        <p className="mb-1 text-[11px] text-warning-strong">
           {usingRawFallback
             ? t("trendChart.unitsNotRecognized")
             : t("trendChart.pointsHidden", { count: String(hiddenCount) })}

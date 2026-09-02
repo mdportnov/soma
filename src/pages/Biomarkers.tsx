@@ -405,7 +405,7 @@ export function CreateBiomarkerDialog({
           </Field>
         </div>
         {!refLow.trim() && !refHigh.trim() && (
-          <p className="flex items-start gap-1.5 text-[11px] text-warning">
+          <p className="flex items-start gap-1.5 text-[11px] text-warning-strong">
             <AlertTriangle className="mt-0.5 size-3 shrink-0" />
             {t("biomarkers.createDialog.noRangeWarning")}
           </p>

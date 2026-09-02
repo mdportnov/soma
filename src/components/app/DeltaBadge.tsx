@@ -25,11 +25,11 @@ export function DeltaBadge({
 
   const tone =
     change.trajectory === "improved"
-      ? "text-success"
+      ? "text-success-strong"
       : change.trajectory === "worsened"
         ? change.severity === "alert"
           ? "text-destructive"
-          : "text-warning"
+          : "text-warning-strong"
         : "text-muted-foreground";
 
   const sign = change.absChange > 0 ? "+" : change.absChange < 0 ? "−" : "";

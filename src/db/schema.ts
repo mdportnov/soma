@@ -102,6 +102,14 @@ export const chatThread = sqliteTable(
       .notNull()
       .references(() => profile.id),
     title: text("title"),
+    /**
+     * Who chose the title. "auto" = derived from the first user message (and
+     * re-derivable); "user" = typed in a rename and never overwritten by the
+     * auto-titler. A null title with "auto" means "not titled yet".
+     */
+    titleSource: text("title_source", { enum: ["auto", "user"] })
+      .notNull()
+      .default("auto"),
     status: text("status", { enum: ["active", "archived"] })
       .notNull()
       .default("active"),
@@ -111,8 +119,42 @@ export const chatThread = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+    /** When the thread was archived; null while active. Kept apart from
+     *  `updatedAt` so archiving does not reorder the "recent" list. */
+    archivedAt: text("archived_at"),
   },
   (t) => [index("chat_thread_profile_updated_idx").on(t.profileId, t.updatedAt)],
+);
+
+// ── chat_thread_record (what a thread touched) ──────────────────────────────
+// One row per (thread, record, relation): the health records an answer cited
+// as evidence ("cited") and the records a confirmed change set created or
+// modified ("changed"). It is the thread's footprint — shown in the thread's
+// metadata and used to find "the chat where we discussed my ferritin". Rows
+// are derived from tool evidence and commits, never from model text alone.
+export const chatThreadRecord = sqliteTable(
+  "chat_thread_record",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    threadId: integer("thread_id")
+      .notNull()
+      .references(() => chatThread.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    relation: text("relation", { enum: ["cited", "changed"] }).notNull(),
+    /** How many turns touched the record this way. */
+    hits: integer("hits").notNull().default(1),
+    firstSeenAt: text("first_seen_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+    lastSeenAt: text("last_seen_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`),
+  },
+  (t) => [
+    uniqueIndex("chat_thread_record_uq").on(t.threadId, t.entityType, t.entityId, t.relation),
+    index("chat_thread_record_entity_idx").on(t.entityType, t.entityId),
+  ],
 );
 
 export const chatMessage = sqliteTable(
@@ -908,6 +950,8 @@ export type ChatChangeSet = typeof chatChangeSet.$inferSelect;
 export type NewChatChangeSet = typeof chatChangeSet.$inferInsert;
 export type ChatChangeItem = typeof chatChangeItem.$inferSelect;
 export type NewChatChangeItem = typeof chatChangeItem.$inferInsert;
+export type ChatThreadRecord = typeof chatThreadRecord.$inferSelect;
+export type NewChatThreadRecord = typeof chatThreadRecord.$inferInsert;
 export type HealthNote = typeof healthNote.$inferSelect;
 export type NewHealthNote = typeof healthNote.$inferInsert;
 export type LabFinding = typeof labFinding.$inferSelect;

@@ -2,7 +2,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { DayPicker } from "react-day-picker";
 import { CalendarDays, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDateObject, uiLocale } from "@/lib/utils";
 
 type DateInputProps = {
   /** ISO date `yyyy-mm-dd`, or "" when empty. */
@@ -202,7 +202,7 @@ export function DateInput({
         <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
         {selected ? (
           <span className="flex-1 truncate">
-            {selected.toLocaleDateString(undefined, {
+            {formatDateObject(selected, uiLocale(), {
               day: "numeric",
               month: "short",
               year: "numeric",

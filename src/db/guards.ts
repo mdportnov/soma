@@ -19,3 +19,23 @@ export function assertAllergyDeletable(severity: string | null | undefined): voi
     throw new Error(ANAPHYLACTIC_DELETE_MESSAGE);
   }
 }
+
+export const PRESCRIPTION_HAS_MEDICATIONS_MESSAGE =
+  "This prescription still has medications linked to it.";
+
+/**
+ * `medication.prescription_id` is a `NO ACTION` foreign key: deleting a
+ * prescription that still has medications on it would either be rejected by
+ * SQLite or (with FK enforcement off) silently point those medications at a row
+ * that no longer exists. Deleting is therefore only allowed once the caller has
+ * seen the linked medications and explicitly chose to detach them — the
+ * decision belongs to the user, not to a cascade.
+ */
+export function assertPrescriptionDeletable(
+  linkedMedicationCount: number,
+  detachMedications: boolean,
+): void {
+  if (linkedMedicationCount > 0 && !detachMedications) {
+    throw new Error(`${PRESCRIPTION_HAS_MEDICATIONS_MESSAGE} (${linkedMedicationCount})`);
+  }
+}

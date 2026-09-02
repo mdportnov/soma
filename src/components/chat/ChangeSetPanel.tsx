@@ -37,7 +37,7 @@ export function ChangeSetPanel(props: {
         <div className="min-w-0">
           <div className="flex items-center gap-2 font-medium">
             {committed ? (
-              <CheckCircle2 className="size-4 shrink-0 text-success" />
+              <CheckCircle2 className="size-4 shrink-0 text-success-strong" />
             ) : (
               <Database className="size-4 shrink-0" />
             )}
@@ -122,13 +122,13 @@ export function ChangeSetPanel(props: {
                     ))}
                 </dl>
                 {item.candidateMatchesJson.length > 0 && (
-                  <p className="mt-2 text-xs text-warning">
+                  <p className="mt-2 text-xs text-warning-strong">
                     {t("aiAnalysis.changes.matches")}:{" "}
                     {item.candidateMatchesJson.map((candidate) => candidate.label).join(", ")}
                   </p>
                 )}
                 {item.warningsJson.map((warning) => (
-                  <p key={warning} className="mt-2 flex gap-1 text-xs text-warning">
+                  <p key={warning} className="mt-2 flex gap-1 text-xs text-warning-strong">
                     <AlertTriangle className="mt-0.5 size-3 shrink-0" /> {warning}
                   </p>
                 ))}

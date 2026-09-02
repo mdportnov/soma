@@ -9,11 +9,23 @@ import {
   deletePrescription,
   deleteVisit,
   getLinkedAttachment,
+  getPrescriptionDeleteImpact,
   getVisit,
   listDiagnosesForVisit,
+  listImagingRecords,
   listMedicationsForVisit,
   listPrescriptionsForVisit,
+  listSymptomLog,
+  updateDiagnosis,
+  updateImagingRecord,
+  updateMedication,
+  updateSymptomEntry,
+  type LinkedMedication,
 } from "@/db/repos";
+import { PRESCRIPTION_HAS_MEDICATIONS_MESSAGE } from "@/db/guards";
+import type { UndoCaveat } from "@/lib/undo-scope";
+import { undoToastCaveat } from "@/lib/undo-scope";
+import { pluralForm } from "@/lib/plural";
 import { SourceFileButton } from "@/components/app/SourceFile";
 import { IconAction } from "@/components/app/IconAction";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -25,51 +37,160 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VisitForm } from "./Visits";
 import { DiagnosisForm } from "./Diagnoses";
 import { formatDate, formatValue } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
 import { useI18n } from "@/lib/i18n";
 
 export function VisitDetail() {
   const { id } = useParams();
   const visitId = Number(id);
   const { profileId } = useApp();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
+  const { confirmDelete } = useConfirm();
   const [editOpen, setEditOpen] = React.useState(false);
   const [diagnosisOpen, setDiagnosisOpen] = React.useState(false);
   const [rxOpen, setRxOpen] = React.useState(false);
-  const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const { data, loading, reload } = useQuery(async () => {
-    const [visit, diagnoses, prescriptions, medications, source] = await Promise.all([
-      getVisit(visitId),
-      listDiagnosesForVisit(visitId),
-      listPrescriptionsForVisit(visitId),
-      listMedicationsForVisit(visitId),
-      getLinkedAttachment("visit", visitId),
-    ]);
-    return { visit, diagnoses, prescriptions, medications, source };
-  }, [visitId]);
+    const [visit, diagnoses, prescriptions, medications, source, symptoms, imaging] =
+      await Promise.all([
+        getVisit(visitId),
+        listDiagnosesForVisit(visitId),
+        listPrescriptionsForVisit(visitId),
+        listMedicationsForVisit(visitId),
+        getLinkedAttachment("visit", visitId),
+        listSymptomLog(profileId),
+        listImagingRecords(profileId),
+      ]);
+    // Symptoms and imaging are not shown on the page, but they are detached by
+    // the delete too — their ids are what lets Undo reattach them.
+    return {
+      visit,
+      diagnoses,
+      prescriptions,
+      medications,
+      source,
+      linkedSymptomIds: symptoms.filter((x) => x.visitId === visitId).map((x) => x.id),
+      linkedImagingIds: imaging.filter((x) => x.visitId === visitId).map((x) => x.id),
+    };
+  }, [visitId, profileId]);
 
   if (loading || !data) return <Loading />;
   if (!data.visit) return <EmptyState icon={Stethoscope} title={t("visitDetail.visitNotFound")} />;
-  const { visit, diagnoses, prescriptions, medications, source } = data;
+  const {
+    visit,
+    diagnoses,
+    prescriptions,
+    medications,
+    source,
+    linkedSymptomIds,
+    linkedImagingIds,
+  } = data;
 
   const visitLabel = `${formatDate(visit.date)}${visit.doctorName ? ` — ${visit.doctorName}` : ""}`;
 
   const removeVisit = async () => {
     const { id: _id, ...visitData } = visit;
     const label = visit.doctorName || visit.clinic || visit.specialty || t("nav.visits");
+    // What came out of the visit is unlinked, not deleted — spelling that out
+    // keeps the prompt from reading as "your diagnoses go too". Undo re-creates
+    // the visit and reattaches diagnoses, symptoms and imaging by id; it cannot
+    // reattach prescriptions (no update path for them) and cannot bring back
+    // the attached file, which is erased the moment the delete runs — both are
+    // stated as caveats so the prompt and the toast promise only what happens.
+    const diagnosisIds = diagnoses.map((d) => d.id);
+    const hasLinks =
+      diagnosisIds.length +
+        prescriptions.length +
+        linkedSymptomIds.length +
+        linkedImagingIds.length >
+      0;
+    const caveats: UndoCaveat[] = [
+      ...(source ? (["file"] as const) : []),
+      ...(prescriptions.length ? (["links"] as const) : []),
+    ];
+    const ok = await confirmDelete({
+      entity: "visit",
+      name: label,
+      dateLabel: formatDate(visit.date),
+      notes: hasLinks ? [t("confirm.notes.visitLinks")] : [],
+      undoable: true,
+      undoCaveats: caveats,
+    });
+    if (!ok) return;
     await deleteVisit(visitId);
     navigate("/visits");
-    toast.showAction(t("toasts.deleted", { name: label }), t("common.undo"), async () => {
-      await createVisit(visitData);
+    toast.showUndo(
+      t("toasts.deleted", { name: label }),
+      async () => {
+        const newId = await createVisit(visitData);
+        await Promise.all([
+          ...diagnosisIds.map((id) => updateDiagnosis(id, { visitId: newId })),
+          ...linkedSymptomIds.map((id) => updateSymptomEntry(id, { visitId: newId })),
+          ...linkedImagingIds.map((id) => updateImagingRecord(id, { visitId: newId })),
+        ]);
+      },
+      { caveat: undoToastCaveat(t, caveats) },
+    );
+  };
+
+  /** "Ibuprofen — 12 Mar 2024 – 20 Mar 2024" for the detach list. */
+  const medicationLine = (m: LinkedMedication) =>
+    t("confirm.notes.medicationItem", {
+      name: m.name,
+      period: m.endDate
+        ? t("confirm.period.range", { from: formatDate(m.startDate), to: formatDate(m.endDate) })
+        : t("confirm.period.since", { date: formatDate(m.startDate) }),
+    });
+
+  const removePrescription = async (p: (typeof prescriptions)[number]) => {
+    const { id: _id, ...rx } = p;
+    const name = p.drugName ?? t("visitDetail.fields.prescription");
+    // A prescription promoted into tracked medications is still referenced by
+    // them. The repository refuses to detach on its own: the prompt lists each
+    // medication by name and period, and confirming is what authorises it.
+    // Undo re-creates the prescription and points those medications back at it.
+    const { linkedMedications } = await getPrescriptionDeleteImpact(p.id);
+    const detaching = linkedMedications.length > 0;
+    const ok = await confirmDelete({
+      entity: "prescription",
+      name,
+      notes: detaching
+        ? [
+            t(`confirm.notes.prescriptionDetach.${pluralForm(lang, linkedMedications.length)}`, {
+              n: String(linkedMedications.length),
+            }),
+            ...linkedMedications.map(medicationLine),
+          ]
+        : [],
+      confirmLabel: detaching ? t("confirm.deleteAndDetach") : undefined,
+      undoable: true,
+    });
+    if (!ok) return;
+    try {
+      await deletePrescription(p.id, { detachMedications: detaching });
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith(PRESCRIPTION_HAS_MEDICATIONS_MESSAGE)) {
+        toast.error(t("errors.prescriptionHasMedications"));
+        void reload();
+        return;
+      }
+      throw e;
+    }
+    void reload();
+    toast.showUndo(t("toasts.deleted", { name }), async () => {
+      const newId = await createPrescription(rx);
+      await Promise.all(
+        linkedMedications.map((m) => updateMedication(m.id, { prescriptionId: newId })),
+      );
+      void reload();
     });
   };
 
@@ -101,7 +222,7 @@ export function VisitDetail() {
               label={t("visitDetail.deleteVisit")}
               icon={<Trash2 />}
               destructive
-              onClick={() => setConfirmDelete(true)}
+              onClick={() => void removeVisit()}
             />
           </>
         }
@@ -205,21 +326,7 @@ export function VisitDetail() {
                       label={t("common.delete")}
                       icon={<Trash2 />}
                       destructive
-                      onClick={async () => {
-                        const { id: _id, ...rx } = p;
-                        await deletePrescription(p.id);
-                        void reload();
-                        toast.showAction(
-                          t("toasts.deleted", {
-                            name: p.drugName ?? t("visitDetail.fields.prescription"),
-                          }),
-                          t("common.undo"),
-                          async () => {
-                            await createPrescription(rx);
-                            void reload();
-                          },
-                        );
-                      }}
+                      onClick={() => void removePrescription(p)}
                     />
                   </li>
                 ))}
@@ -307,17 +414,6 @@ export function VisitDetail() {
           setRxOpen(false);
           void reload();
         }}
-      />
-
-      <ConfirmDialog
-        open={confirmDelete}
-        onClose={() => setConfirmDelete(false)}
-        title={t("visitDetail.deleteVisitTitle")}
-        description={t("visitDetail.deleteVisitDescription")}
-        confirmLabel={t("visitDetail.deleteVisit")}
-        cancelLabel={t("common.cancel")}
-        destructive
-        onConfirm={() => void removeVisit()}
       />
     </>
   );

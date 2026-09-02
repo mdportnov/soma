@@ -1,29 +1,10 @@
 import * as React from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigationType } from "react-router-dom";
-import {
-  Activity,
-  Bell,
-  CalendarRange,
-  FileText,
-  FlaskConical,
-  HeartPulse,
-  LayoutDashboard,
-  NotebookPen,
-  NotebookText,
-  Pill,
-  Search,
-  ScanLine,
-  Settings,
-  ShieldAlert,
-  SlidersHorizontal,
-  Sparkles,
-  Stethoscope,
-  Syringe,
-  TestTubes,
-} from "lucide-react";
+import { Bell, Search, Settings, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { useApp } from "@/app/AppContext";
+import { NAV, type NavItem } from "@/app/nav-items";
 import { useQuery } from "@/hooks/useQuery";
 import { getNotificationFeedData } from "@/db/repos";
 import { INTERESTS_EVENT, isRouteEnabled, loadInterests } from "@/lib/interests";
@@ -42,33 +23,8 @@ import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import logo from "@/assets/logo.svg";
 import { settingsPath } from "@/lib/settings-navigation";
 
-type NavItem =
-  | { kind: "link"; to: string; labelKey: string; icon: React.ElementType; end?: boolean }
-  | { kind: "label"; labelKey: string };
-
 /** Cap on retained per-history-entry scroll offsets (prevents unbounded growth). */
 const MAX_SCROLL_ENTRIES = 50;
-
-const NAV: NavItem[] = [
-  { kind: "link", to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
-  { kind: "link", to: "/timeline", labelKey: "nav.timeline", icon: CalendarRange },
-  { kind: "link", to: "/assistant", labelKey: "nav.assistant", icon: Sparkles },
-  { kind: "label", labelKey: "nav.records" },
-  { kind: "link", to: "/diagnoses", labelKey: "nav.diagnoses", icon: FlaskConical },
-  { kind: "link", to: "/allergies", labelKey: "nav.allergies", icon: ShieldAlert },
-  { kind: "link", to: "/vaccines", labelKey: "nav.vaccines", icon: Syringe },
-  { kind: "link", to: "/imaging", labelKey: "nav.imaging", icon: ScanLine },
-  { kind: "link", to: "/notes", labelKey: "nav.notes", icon: NotebookText },
-  { kind: "label", labelKey: "nav.labsVitals" },
-  { kind: "link", to: "/labs", labelKey: "nav.labResults", icon: TestTubes },
-  { kind: "link", to: "/biomarkers", labelKey: "nav.biomarkers", icon: Activity },
-  { kind: "link", to: "/journal", labelKey: "nav.journal", icon: NotebookPen },
-  { kind: "link", to: "/lifestyle", labelKey: "nav.lifestyle", icon: HeartPulse },
-  { kind: "label", labelKey: "nav.care" },
-  { kind: "link", to: "/medications", labelKey: "nav.medications", icon: Pill },
-  { kind: "link", to: "/visits", labelKey: "nav.visits", icon: Stethoscope },
-  { kind: "link", to: "/report", labelKey: "nav.report", icon: FileText },
-];
 
 /**
  * Bell affordance in the chrome header: a count badge of the live in-app
@@ -152,9 +108,14 @@ export function Shell() {
   const fillsViewport = location.pathname === "/assistant";
   const navType = useNavigationType();
   const mainRef = React.useRef<HTMLElement>(null);
+  const pageRef = React.useRef<HTMLDivElement>(null);
   // Per-history-entry scroll offsets, keyed by location.key (unique per entry).
   const scrollPositions = React.useRef(new Map<string, number>());
   const lastKey = React.useRef<string>(location.key);
+  // Offset we still owe the entry we just landed on: on POP the page's content
+  // usually mounts a tick after the route does, so the container is too short to
+  // scroll at restore time. Held until the content is tall enough to honour it.
+  const pendingScroll = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -174,6 +135,10 @@ export function Shell() {
     const main = mainRef.current;
     if (!main) return;
     const onScroll = () => {
+      // While a restore is outstanding the container is mid-reflow and its
+      // scrollTop is not the user's position — recording it would overwrite the
+      // very offset we are about to restore with a 0.
+      if (pendingScroll.current !== null) return;
       const positions = scrollPositions.current;
       positions.set(lastKey.current, main.scrollTop);
       // Bound the map: one entry per visited history key would otherwise grow
@@ -195,12 +160,38 @@ export function Shell() {
     const main = mainRef.current;
     if (!main) return;
     lastKey.current = location.key;
-    if (navType === "POP") {
-      main.scrollTop = scrollPositions.current.get(location.key) ?? 0;
-    } else {
-      main.scrollTop = 0;
-    }
+    const target = navType === "POP" ? (scrollPositions.current.get(location.key) ?? 0) : 0;
+    main.scrollTop = target;
+    // Applied before the paint that shows the content, so the restore is never
+    // visible as a jump; if the page was still empty it lands short and the
+    // observer below finishes the job as the content lays out.
+    pendingScroll.current = main.scrollTop < target ? target : null;
   }, [location.key, navType]);
+
+  // Re-apply the outstanding offset while the page grows into its final height.
+  // Re-created per history entry (and per retry) because the page element it
+  // watches is re-mounted with the keyed wrapper.
+  React.useLayoutEffect(() => {
+    const main = mainRef.current;
+    const page = pageRef.current;
+    if (!main || !page || pendingScroll.current === null) return;
+    const observer = new ResizeObserver(() => {
+      const target = pendingScroll.current;
+      if (target === null) return;
+      main.scrollTop = target;
+      // Reached (or the page turned out to be shorter than it was) — stop, so a
+      // later content change or a user scroll is never yanked back.
+      if (main.scrollTop >= target || main.scrollHeight <= main.clientHeight) {
+        pendingScroll.current = null;
+        observer.disconnect();
+      }
+    });
+    observer.observe(page);
+    return () => {
+      pendingScroll.current = null;
+      observer.disconnect();
+    };
+  }, [location.key, retryNonce]);
 
   // Section interests filter the sidebar. Re-read on navigation and on the live
   // INTERESTS_EVENT so a toggle on the Settings page updates the sidebar at once.
@@ -300,7 +291,7 @@ export function Shell() {
                 </span>
                 <span className="hidden md:block">{label}</span>
                 {needsSetup && (
-                  <span className="ml-auto hidden rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning md:inline-block">
+                  <span className="ml-auto hidden rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-strong md:inline-block">
                     {t("nav.aiNeedsSetup")}
                   </span>
                 )}
@@ -364,12 +355,16 @@ export function Shell() {
           fillsViewport ? "overflow-y-hidden" : "overflow-y-auto",
         )}
       >
-        {/* key on location.key re-mounts the page so navigation fades in;
-            scroll restoration is handled imperatively on <main> above. */}
+        {/* key on location.key re-mounts the page so each navigation starts
+            clean; `page-enter` fades in the page's own root elements as they
+            mount (see index.css) rather than this wrapper, which is still empty
+            while the page resolves its query. Scroll restoration is handled
+            imperatively on <main> above. */}
         <div
           key={`${location.key}:${retryNonce}`}
+          ref={pageRef}
           className={cn(
-            "animate-step-in mx-auto flex w-full min-w-0 max-w-6xl flex-col p-6 md:p-8",
+            "page-enter mx-auto flex w-full min-w-0 max-w-6xl flex-col p-6 md:p-8",
             // The chat page owns the viewport: it fills the main area exactly so
             // its composer sits at the bottom edge and only the transcript
             // scrolls. Bottom padding is trimmed so the input is not left

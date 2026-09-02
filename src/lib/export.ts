@@ -6,32 +6,53 @@ import {
   allergy,
   attachment,
   biomarker,
+  biomarkerReferenceRange,
   bpLog,
   diagnosis,
+  healthNote,
   imagingRecord,
+  labFinding,
   labPanel,
   labResult,
+  lifestyleLog,
   medication,
   medicationLog,
   prescription,
   profile,
+  recordAuditEvent,
+  recordProvenance,
+  recordRelation,
+  retestSchedule,
   symptomLog,
   vaccine,
   visit,
   weightLog,
 } from "@/db/schema";
+import { EXPORTED_TABLES, EXPORT_SCOPE } from "./export-manifest";
 
-/** Full data export to JSON — no lock-in (§8). */
+/**
+ * Row-level export of every health table to JSON — no lock-in (§8).
+ *
+ * The set of tables is declared in `export-manifest.ts` and verified against the
+ * schema by a test: an earlier version silently omitted lab findings, health
+ * notes, retest schedules and the lifestyle diary, and nothing would have caught
+ * the next omission either. The file carries its own scope statement so it can
+ * never claim more than it contains.
+ */
 export async function exportAllJson(): Promise<boolean> {
   const payload = {
     exportedAt: new Date().toISOString(),
     app: "soma",
-    schemaVersion: 1,
+    schemaVersion: 2,
+    scope: EXPORT_SCOPE,
+    tables: EXPORTED_TABLES,
     data: {
       profiles: await db.select().from(profile),
       biomarkers: await db.select().from(biomarker),
+      biomarkerReferenceRanges: await db.select().from(biomarkerReferenceRange),
       labPanels: await db.select().from(labPanel),
       labResults: await db.select().from(labResult),
+      labFindings: await db.select().from(labFinding),
       medications: await db.select().from(medication),
       medicationLogs: await db.select().from(medicationLog),
       visits: await db.select().from(visit),
@@ -43,6 +64,14 @@ export async function exportAllJson(): Promise<boolean> {
       imagingRecords: await db.select().from(imagingRecord),
       weightLogs: await db.select().from(weightLog),
       bpLogs: await db.select().from(bpLog),
+      lifestyleLogs: await db.select().from(lifestyleLog),
+      healthNotes: await db.select().from(healthNote),
+      retestSchedules: await db.select().from(retestSchedule),
+      // The provenance/audit trail of AI-made edits: without it the export
+      // shows the values but not where they came from.
+      recordProvenance: await db.select().from(recordProvenance),
+      recordAuditEvents: await db.select().from(recordAuditEvent),
+      recordRelations: await db.select().from(recordRelation),
       attachments: await db.select().from(attachment),
     },
   };

@@ -152,7 +152,7 @@ export function BiomarkerDetail() {
             </div>
             <InfoBlock label={t("biomarkerInfo.affectsLabel")} text={info.affects} />
             <p className="flex items-start gap-1.5 border-t pt-3 text-[11px] text-muted-foreground">
-              <AlertTriangle className="mt-0.5 size-3 shrink-0 text-warning" />
+              <AlertTriangle className="mt-0.5 size-3 shrink-0 text-warning-strong" />
               {t("biomarkerInfo.disclaimer")}
             </p>
           </CardContent>

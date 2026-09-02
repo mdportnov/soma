@@ -4,7 +4,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { TimelinePanel } from "./TimelinePanel";
 import { useI18n } from "@/lib/i18n";
 import { OVERLAY_COLORS } from "./TrendChart";
-import { cn, formatDate, todayISO } from "@/lib/utils";
+import { cn, formatDate, formatDateObject, todayISO } from "@/lib/utils";
 
 const DAY = 86400000;
 const PX_PER_MONTH = 64;
@@ -95,7 +95,7 @@ export function VaccineTimeline({
         label:
           m === 0
             ? String(cursor.getUTCFullYear())
-            : cursor.toLocaleDateString(locale, { month: "short", timeZone: "UTC" }),
+            : formatDateObject(cursor, locale, { month: "short", timeZone: "UTC" }),
       });
     }
     cursor.setUTCMonth(cursor.getUTCMonth() + 1);
@@ -201,28 +201,51 @@ export function VaccineTimeline({
                   {lane.records.map((v) => {
                     const x = frac(ts(v.date)) * 100;
                     const expired = v.expiresAt != null && v.expiresAt < today;
-                    const detail = [
-                      v.dose != null ? `${t("vaccines.table.dose")} ${v.dose}` : null,
-                      [v.manufacturer, v.batchNumber].filter(Boolean).join(" / ") || null,
-                      v.country,
-                      v.administeredBy,
-                      v.expiresAt
-                        ? `${t("vaccines.table.expires")}: ${formatDate(v.expiresAt)}${expired ? ` (${t("vaccines.expired")})` : ""}`
-                        : null,
-                    ].filter(Boolean);
+                    const meta: { label: string; value: React.ReactNode }[] = [];
+                    const lot = [v.manufacturer, v.batchNumber].filter(Boolean).join(" / ");
+                    if (lot)
+                      meta.push({ label: t("vaccines.table.manufacturerBatch"), value: lot });
+                    if (v.administeredBy)
+                      meta.push({
+                        label: t("vaccines.table.administeredBy"),
+                        value: v.administeredBy,
+                      });
+                    if (v.country)
+                      meta.push({ label: t("vaccines.table.country"), value: v.country });
+                    if (v.expiresAt)
+                      meta.push({
+                        label: t("vaccines.table.expires"),
+                        value: (
+                          <span className={cn("tabular-nums", expired && "text-destructive")}>
+                            {formatDate(v.expiresAt)}
+                            {expired && ` · ${t("vaccines.expired")}`}
+                          </span>
+                        ),
+                      });
                     return (
                       <Tooltip
                         key={v.id}
                         content={
-                          <>
-                            <span className="font-medium">{v.vaccineName}</span>
-                            <div className="text-muted-foreground">{formatDate(v.date)}</div>
-                            {detail.map((d, k) => (
-                              <div key={k} className="text-muted-foreground">
-                                {d}
-                              </div>
-                            ))}
-                          </>
+                          <div className="space-y-1">
+                            <div className="font-semibold text-pretty">{v.vaccineName}</div>
+                            <div className="text-muted-foreground tabular-nums">
+                              {formatDate(v.date)}
+                              {v.dose != null &&
+                                ` · ${t("vaccines.calendar.doseN", { n: String(v.dose) })}`}
+                            </div>
+                            {meta.length > 0 && (
+                              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 border-t border-border pt-1">
+                                {meta.map((row) => (
+                                  <React.Fragment key={row.label}>
+                                    <dt className="whitespace-nowrap text-muted-foreground">
+                                      {row.label}
+                                    </dt>
+                                    <dd className="min-w-0">{row.value}</dd>
+                                  </React.Fragment>
+                                ))}
+                              </dl>
+                            )}
+                          </div>
                         }
                       >
                         <button

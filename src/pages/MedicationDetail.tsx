@@ -15,6 +15,8 @@ import type { Allergy, MedicationLog } from "@/db/schema";
 import { matchDrugAllergies } from "@/lib/drug-allergy";
 import { adherenceStats } from "@/lib/adherence";
 import { RelatedLinks, type RelatedItem } from "@/components/app/RelatedLinks";
+import { useConfirm } from "@/components/app/Confirm";
+import { useToast } from "@/components/app/Toast";
 import { PageHeader } from "@/components/app/PageHeader";
 import { crumbs } from "@/app/nav";
 import { Loading } from "@/components/app/Loading";
@@ -154,6 +156,8 @@ function AdherenceCard({
   onChange: () => void | Promise<void>;
 }) {
   const { t } = useI18n();
+  const { confirmDelete } = useConfirm();
+  const toast = useToast();
   const [busy, setBusy] = React.useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const loggedToday = logs.some((l) => l.takenAt.slice(0, 10) === today);
@@ -196,7 +200,7 @@ function AdherenceCard({
         {active &&
           (loggedToday ? (
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Check className="size-4 text-success" />
+              <Check className="size-4 text-success-strong" />
               {t("adherence.loggedToday")}
             </p>
           ) : (
@@ -240,7 +244,15 @@ function AdherenceCard({
                   disabled={busy}
                   title={t("adherence.delete")}
                   aria-label={t("adherence.delete")}
-                  onClick={() => act(() => deleteMedicationLogEntry(l.id))}
+                  onClick={async () => {
+                    const ok = await confirmDelete({
+                      entity: "medicationLog",
+                      dateLabel: formatDate(l.takenAt),
+                    });
+                    if (!ok) return;
+                    await act(() => deleteMedicationLogEntry(l.id));
+                    toast.show(t("toasts.deleted", { name: formatDate(l.takenAt) }));
+                  }}
                 >
                   <Trash2 className="size-3.5" />
                 </Button>
@@ -277,7 +289,7 @@ function AllergyCaution({ matches }: { matches: Allergy[] }) {
       className={`mb-4 flex items-start gap-2 rounded-lg border p-3 text-xs ${
         critical
           ? "border-destructive/40 bg-destructive/10 text-destructive"
-          : "border-warning/40 bg-warning/10 text-warning"
+          : "border-warning/40 bg-warning/10 text-warning-strong"
       }`}
     >
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />

@@ -2,6 +2,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { EmergencyCardData } from "@/db/repos";
 import type { Allergy } from "@/db/schema";
+import { formatDateIn } from "@/lib/utils";
 
 /** Translator signature compatible with the i18n `t` returned by useI18n(). */
 export type Translate = (key: string, vars?: Record<string, string>) => string;
@@ -22,12 +23,8 @@ const escapeHtml = (s: string): string =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 
-function formatDate(iso: string | null | undefined, locale: string): string {
-  if (!iso) return "—";
-  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
-}
+const formatDate = (iso: string | null | undefined, locale: string): string =>
+  formatDateIn(iso, locale);
 
 function ageFromBirthDate(iso: string | null | undefined): number | null {
   if (!iso) return null;

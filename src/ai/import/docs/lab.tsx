@@ -33,7 +33,7 @@ import {
   reconvertRow,
   type MappedRow,
 } from "../../pipeline/map";
-import type { DocTypeModule, ReviewProps } from "../registry";
+import type { DocTypeModule, ImportContext, ReviewProps } from "../registry";
 import {
   asArray,
   asObject,
@@ -43,13 +43,10 @@ import {
   nullableStr,
   numberOrNull,
 } from "../validate";
-import {
-  createAttachment,
-  createPanelFindings,
-  createPanelWithResults,
-  updateAttachment,
-} from "@/db/repos";
-import { storeAttachmentFile, mimeFromPath } from "@/lib/attachments";
+import { createPanelWithResults, findDuplicatePanelsForImport } from "@/db/repos";
+import type { PanelDuplicate } from "@/lib/import-duplicates";
+import { withSourceAttachment, type SourceAttachment } from "../save-helpers";
+import { mimeFromPath } from "@/lib/attachments";
 import { Field } from "@/components/app/Field";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
@@ -115,6 +112,11 @@ export type LabDraft = {
   /** The model's reply hit the token cap and was salvaged mid-way: rows after the
    *  cut are missing from this draft, so the review screen has to say so. */
   truncated: boolean;
+  /** Panels already stored for this day that this import looks like a repeat of.
+   *  Computed once from the extracted date/lab; the review screen lets the user
+   *  change both, so re-check with `findDuplicatePanelsForImport` before acting
+   *  on it if the user edited them. */
+  duplicates: PanelDuplicate[];
 };
 
 /** Parses the free-text cost field into a non-negative USD number, or null. */
@@ -409,6 +411,13 @@ export const labModule: DocTypeModule<LabDraft> = {
       skipped: extraction.skipped ?? [],
       dateGuessed: extraction.collectionDate == null,
       truncated: wasTruncated(parsed),
+      // Importing the same report twice used to silently double every point in
+      // the biomarker trends. Detected here so the review screen can say so.
+      duplicates: await findDuplicatePanelsForImport(ctx.profileId, {
+        date: extraction.collectionDate ?? todayISO(),
+        labName: extraction.labName ?? null,
+        biomarkerIds: rows.map((r) => r.biomarkerId).filter((id): id is number => id != null),
+      }),
     };
   },
 
@@ -417,84 +426,87 @@ export const labModule: DocTypeModule<LabDraft> = {
   Review: LabReview,
 
   async save(draft, ctx): Promise<string> {
-    let sourceFileId: number | null = null;
-    if (ctx.sourceFilePath) {
-      const stored = await storeAttachmentFile(ctx.sourceFilePath);
-      const mime = mimeFromPath(ctx.sourceFilePath);
-      sourceFileId = await createAttachment({
-        profileId: ctx.profileId,
-        filePath: stored,
-        mimeType: mime,
-        kind: mime === "application/pdf" ? "lab_pdf" : "photo",
-        linkedEntityType: "lab_panel",
-      });
-    }
-
-    const byId = new Map<number, Biomarker>(ctx.biomarkers.map((b) => [b.id, b]));
-    const included = draft.rows.filter((r) => r.include && r.biomarkerId != null);
-    const results = included.map((r) => ({
-      biomarkerId: r.biomarkerId!,
-      value: r.raw.value,
-      unit: r.raw.unit || byId.get(r.biomarkerId!)?.defaultUnit || "",
-      rawLabel: r.raw.raw_label,
-      sourcePage: r.raw.page,
-      // "none" only survives here when the user hand-picked the biomarker for a
-      // previously-unmatched row, so that selection is author-trusted.
-      confidence: r.confidence === "none" ? ("manual" as const) : r.confidence,
-    }));
-    const panelId = await createPanelWithResults(
-      {
-        profileId: ctx.profileId,
-        date: draft.meta.date,
-        labName: draft.meta.labName.trim() || null,
-        city: draft.meta.city.trim() || null,
-        country: draft.meta.country.trim() || null,
-        sampleTypes: draft.meta.sampleTypes.length ? draft.meta.sampleTypes : ["blood"],
-        cost: parseCost(draft.meta.cost),
-        importMethod: "ai",
-        sourceFileId,
-      },
-      results,
-      byId,
+    // The report is a PDF or a photo of the same thing; the kind follows the
+    // file, the rest of the source handling is shared with every other importer.
+    const kind = mimeFromPath(ctx.sourceFilePath ?? "") === "application/pdf" ? "lab_pdf" : "photo";
+    return withSourceAttachment(ctx, kind, "lab_panel", (source) =>
+      saveLabPanel(draft, ctx, source),
     );
-    // Remember each (lab, biomarker) → unit so the next import from this lab
-    // defaults to the same unit — most useful when the document omits it.
-    for (const res of results) rememberUnit(draft.meta.labName, res.biomarkerId, res.unit);
-    // Everything the dictionary couldn't absorb is kept as structured findings:
-    // qualitative rows staged on the review screen + unmapped numeric rows the
-    // user left flagged "save as finding".
-    const findingsToSave = [
-      ...draft.findings
-        // A finding whose value the user blanked out carries no information.
-        .filter((f) => f.include && f.valueText.trim())
-        .map((f) => ({
-          rawLabel: f.rawLabel,
-          nameEn: f.nameEn,
-          valueText: f.valueText.trim(),
-          valueNumeric: f.valueNumeric,
-          unit: f.unit,
-          refRangeText: f.refRangeText,
-          sourcePage: f.sourcePage,
-        })),
-      ...draft.rows
-        .filter((r) => r.biomarkerId == null && r.saveAsFinding)
-        .map((r) => ({
-          rawLabel: r.raw.raw_label,
-          nameEn: r.raw.analyte_en,
-          valueText: String(r.raw.value),
-          valueNumeric: r.raw.value,
-          unit: r.raw.unit || null,
-          refRangeText: r.raw.ref_range_text,
-          sourcePage: r.raw.page,
-        })),
-    ];
-    await createPanelFindings(panelId, findingsToSave);
-    if (sourceFileId != null) {
-      await updateAttachment(sourceFileId, { linkedEntityId: panelId });
-    }
-    return `/labs/${panelId}`;
   },
 };
+
+/**
+ * Writes the panel, its results and its findings in a single transaction, then
+ * links the source document to it. Nothing here compensates after the fact: a
+ * failed save leaves no panel, and `withSourceAttachment` takes the stored file
+ * back with it.
+ */
+async function saveLabPanel(
+  draft: LabDraft,
+  ctx: ImportContext,
+  source: SourceAttachment,
+): Promise<string> {
+  const sourceFileId = source.id;
+  const byId = new Map<number, Biomarker>(ctx.biomarkers.map((b) => [b.id, b]));
+  const included = draft.rows.filter((r) => r.include && r.biomarkerId != null);
+  const results = included.map((r) => ({
+    biomarkerId: r.biomarkerId!,
+    value: r.raw.value,
+    unit: r.raw.unit || byId.get(r.biomarkerId!)?.defaultUnit || "",
+    rawLabel: r.raw.raw_label,
+    sourcePage: r.raw.page,
+    // "none" only survives here when the user hand-picked the biomarker for a
+    // previously-unmatched row, so that selection is author-trusted.
+    confidence: r.confidence === "none" ? ("manual" as const) : r.confidence,
+  }));
+  const panelData = {
+    profileId: ctx.profileId,
+    date: draft.meta.date,
+    labName: draft.meta.labName.trim() || null,
+    city: draft.meta.city.trim() || null,
+    country: draft.meta.country.trim() || null,
+    sampleTypes: draft.meta.sampleTypes.length
+      ? draft.meta.sampleTypes
+      : (["blood"] as SampleType[]),
+    cost: parseCost(draft.meta.cost),
+    importMethod: "ai" as const,
+    sourceFileId,
+  };
+  // Everything the dictionary couldn't absorb is kept as structured findings:
+  // qualitative rows staged on the review screen + unmapped numeric rows the
+  // user left flagged "save as finding".
+  const findingsToSave = [
+    ...draft.findings
+      // A finding whose value the user blanked out carries no information.
+      .filter((f) => f.include && f.valueText.trim())
+      .map((f) => ({
+        rawLabel: f.rawLabel,
+        nameEn: f.nameEn,
+        valueText: f.valueText.trim(),
+        valueNumeric: f.valueNumeric,
+        unit: f.unit,
+        refRangeText: f.refRangeText,
+        sourcePage: f.sourcePage,
+      })),
+    ...draft.rows
+      .filter((r) => r.biomarkerId == null && r.saveAsFinding)
+      .map((r) => ({
+        rawLabel: r.raw.raw_label,
+        nameEn: r.raw.analyte_en,
+        valueText: String(r.raw.value),
+        valueNumeric: r.raw.value,
+        unit: r.raw.unit || null,
+        refRangeText: r.raw.ref_range_text,
+        sourcePage: r.raw.page,
+      })),
+  ];
+  const panelId = await createPanelWithResults(panelData, results, byId, findingsToSave);
+  // Remember each (lab, biomarker) → unit so the next import from this lab
+  // defaults to the same unit — most useful when the document omits it.
+  for (const res of results) rememberUnit(draft.meta.labName, res.biomarkerId, res.unit);
+  await source.link(panelId);
+  return `/labs/${panelId}`;
+}
 
 function ConfidenceBadge({ confidence }: { confidence: MappedRow["confidence"] }) {
   const { t } = useI18n();
@@ -605,13 +617,13 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
   return (
     <>
       {truncated && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning-strong">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <p>{t("importErrors.truncated")}</p>
         </div>
       )}
       {skipped.length > 0 && !skippedDismissed && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning-strong">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <p>{t("importErrors.droppedRows", { count: String(skipped.length) })}</p>
@@ -636,7 +648,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
           <button
             type="button"
             aria-label="Dismiss"
-            className="cursor-pointer text-warning/70 hover:text-warning"
+            className="cursor-pointer text-warning-strong/70 hover:text-warning-strong"
             onClick={() => setSkippedDismissed(true)}
           >
             ✕
@@ -895,7 +907,7 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
               }
             />
             {dateGuessed && (
-              <p className="mt-1 flex items-start gap-1 text-[11px] text-warning">
+              <p className="mt-1 flex items-start gap-1 text-[11px] text-warning-strong">
                 <AlertTriangle className="mt-px size-3 shrink-0" />
                 {t("importErrors.dateNotRecognized")}
               </p>

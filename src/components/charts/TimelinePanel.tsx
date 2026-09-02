@@ -51,9 +51,7 @@ export function TimelinePanel({
   return (
     <div className="rounded-xl border bg-card">
       <div className="flex items-center gap-2 border-b px-3 py-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h2>
+        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
         <div className="ml-auto flex items-center gap-3">
           {right}
           <button

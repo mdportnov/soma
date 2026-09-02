@@ -13,7 +13,7 @@ import { Collapsible } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ToggleRow } from "@/components/app/ToggleRow";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useConfirm } from "@/components/app/Confirm";
 
 function CopyButton({
   text,
@@ -38,7 +38,7 @@ function CopyButton({
 
   return (
     <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2.5" onClick={copy}>
-      {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+      {copied ? <Check className="size-3.5 text-success-strong" /> : <Copy className="size-3.5" />}
       {copied ? copiedLabel : label}
     </Button>
   );
@@ -52,12 +52,12 @@ type RowState =
 
 export function McpCard() {
   const { t } = useI18n();
+  const { confirm } = useConfirm();
   const [info, setInfo] = React.useState<McpServerInfo | null>(null);
   const [clients, setClients] = React.useState<McpClientStatus[] | null>(null);
   const [rows, setRows] = React.useState<Record<string, RowState>>({});
   const [manual, setManual] = React.useState(false);
   const [writesEnabled, setWritesEnabled] = React.useState(false);
-  const [confirmWrites, setConfirmWrites] = React.useState(false);
   const writesInitialized = React.useRef(false);
 
   const serverPath = info?.path ?? "";
@@ -125,6 +125,19 @@ export function McpCard() {
 
   /** Re-writes every already-configured client's config with the new flag —
    * so flipping the switch takes effect without re-running install by hand. */
+  // Turning writes on is the only direction that needs a pause: it hands an
+  // external client permission to change medical records.
+  const toggleWrites = async (next: boolean) => {
+    if (!next) return applyWritesToggle(false);
+    const ok = await confirm({
+      title: t("settings.mcp.writesConfirm.title"),
+      description: t("settings.mcp.writesConfirm.body"),
+      confirmLabel: t("settings.mcp.writesConfirm.confirm"),
+      destructive: true,
+    });
+    if (ok) await applyWritesToggle(true);
+  };
+
   const applyWritesToggle = async (next: boolean) => {
     setWritesEnabled(next);
     if (!clients) return;
@@ -148,7 +161,7 @@ export function McpCard() {
     >
       <div className="grid gap-4 p-5 pt-0">
         {info && !info.exists && (
-          <p className="flex items-start gap-1.5 rounded-lg border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning">
+          <p className="flex items-start gap-1.5 rounded-lg border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning-strong">
             <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("settings.mcp.notBuilt")}
           </p>
         )}
@@ -164,10 +177,7 @@ export function McpCard() {
             label={t("settings.mcp.writesTitle")}
             description={t("settings.mcp.writesDesc")}
             checked={writesEnabled}
-            onChange={(next) => {
-              if (next) setConfirmWrites(true);
-              else void applyWritesToggle(false);
-            }}
+            onChange={(next) => void toggleWrites(next)}
           />
         </div>
 
@@ -236,7 +246,7 @@ export function McpCard() {
                   </Button>
                 </div>
                 {row.kind === "done" && (
-                  <p className="mt-2 flex items-start gap-1.5 text-[11px] text-success">
+                  <p className="mt-2 flex items-start gap-1.5 text-[11px] text-success-strong">
                     <Check className="mt-0.5 size-3 shrink-0" /> {row.message}
                   </p>
                 )}
@@ -320,19 +330,6 @@ export function McpCard() {
           </div>
         )}
       </div>
-      <ConfirmDialog
-        open={confirmWrites}
-        title={t("settings.mcp.writesConfirm.title")}
-        description={t("settings.mcp.writesConfirm.body")}
-        confirmLabel={t("settings.mcp.writesConfirm.confirm")}
-        cancelLabel={t("common.cancel")}
-        destructive
-        onConfirm={() => {
-          setConfirmWrites(false);
-          void applyWritesToggle(true);
-        }}
-        onClose={() => setConfirmWrites(false)}
-      />
     </Collapsible>
   );
 }

@@ -14,7 +14,7 @@ import { asArray, asObject, boolOrNull, nullableStr } from "../validate";
 import { resolveEnum, parseDose } from "../resolve";
 import { MEDICATION_TYPE_VOCAB, type MedicationType } from "../vocab";
 import { ReviewBanner } from "../ReviewBanner";
-import { storeSourceAttachment } from "../save-helpers";
+import { withSourceAttachment } from "../save-helpers";
 import { createMedication } from "@/db/repos";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
@@ -104,24 +104,32 @@ export const prescriptionModule: DocTypeModule<PrescriptionDraft> = {
   Review: PrescriptionReview,
 
   async save(draft, ctx): Promise<string> {
-    await storeSourceAttachment(ctx, "prescription", "medication");
-    const included = draft.rows.filter((r) => r.include && r.name.trim());
-    for (const r of included) {
-      const { amount, unit } = parseDose(r.dose);
-      await createMedication({
-        profileId: ctx.profileId,
-        name: r.name.trim(),
-        type: r.type,
-        doseAmount: amount,
-        doseUnit: unit,
-        schedule: r.frequency?.trim() ? { frequency: r.frequency.trim() } : null,
-        asNeeded: r.asNeeded,
-        startDate: todayISO(),
-        endDate: null,
-        purpose: r.purpose?.trim() || null,
-      });
-    }
-    return "/medications";
+    // Same as the allergy importer: the prescription scan was stored unlinked
+    // and could never be cleaned up. The first medication created owns it.
+    return withSourceAttachment(ctx, "prescription", "medication", async (source) => {
+      const included = draft.rows.filter((r) => r.include && r.name.trim());
+      let linked = false;
+      for (const r of included) {
+        const { amount, unit } = parseDose(r.dose);
+        const medicationId = await createMedication({
+          profileId: ctx.profileId,
+          name: r.name.trim(),
+          type: r.type,
+          doseAmount: amount,
+          doseUnit: unit,
+          schedule: r.frequency?.trim() ? { frequency: r.frequency.trim() } : null,
+          asNeeded: r.asNeeded,
+          startDate: todayISO(),
+          endDate: null,
+          purpose: r.purpose?.trim() || null,
+        });
+        if (!linked) {
+          await source.link(medicationId);
+          linked = true;
+        }
+      }
+      return "/medications";
+    });
   },
 };
 

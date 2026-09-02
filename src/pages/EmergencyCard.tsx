@@ -14,7 +14,7 @@ import { Loading } from "@/components/app/Loading";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate, todayISO } from "@/lib/utils";
+import { formatDate, formatDateIn, todayISO } from "@/lib/utils";
 import { settingsPath } from "@/lib/settings-navigation";
 
 function ageFromBirthDate(iso: string | null | undefined): number | null {
@@ -130,14 +130,7 @@ export function EmergencyCard() {
 function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
   const { t } = useI18n();
   const p = data.profile;
-  const fd = (iso: string | null | undefined) =>
-    iso
-      ? new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })
-      : "—";
+  const fd = (iso: string | null | undefined) => formatDateIn(iso, locale);
 
   const age = ageFromBirthDate(p.birthDate);
   const sexLabel = p.sex
@@ -155,7 +148,7 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
   return (
     <div className="space-y-4">
       {incomplete && (
-        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-strong">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <p>
             {t("emergency.incompleteBanner")}{" "}

@@ -17,9 +17,15 @@ import {
   getRecentLifestyle,
   listAllergies,
   listBiomarkers,
+  listBpLog,
   listDiagnoses,
   listHealthNotes,
   listMedications,
+  listPanels,
+  listSymptomLog,
+  listVaccines,
+  listVisits,
+  listWeightLog,
 } from "@/db/repos";
 import type { LifestyleLog } from "@/db/schema";
 
@@ -72,6 +78,19 @@ function lifestyleSummaryLine(rows: LifestyleLog[]): string | null {
 
 const SEVERITY_ORDER = { anaphylactic: 0, severe: 1, moderate: 2, mild: 3 } as const;
 
+/** "labs 12 panels (2022-03-01..2026-07-10); vaccines none; …" */
+function coverageLine(sections: Record<string, { date: string }[]>): string {
+  return Object.entries(sections)
+    .map(([name, rows]) => {
+      if (!rows.length) return `${name} none`;
+      const dates = rows.map((r) => r.date.slice(0, 10)).sort();
+      const span =
+        dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]}..${dates[dates.length - 1]}`;
+      return `${name} ${rows.length} (${span})`;
+    })
+    .join("; ");
+}
+
 function bloodTypeLabel(
   bloodType: string | null,
   rhFactor: string | null | undefined,
@@ -97,6 +116,12 @@ export async function buildHealthContext(profileId: number): Promise<string> {
     lifestyle,
     findings,
     notes,
+    panels,
+    vaccines,
+    visits,
+    bpLog,
+    weightLog,
+    symptoms,
   ] = await Promise.all([
     getProfile(profileId),
     listAllergies(profileId),
@@ -107,6 +132,12 @@ export async function buildHealthContext(profileId: number): Promise<string> {
     getRecentLifestyle(profileId, LIFESTYLE_WINDOW_DAYS),
     getRecentFindings(profileId),
     listHealthNotes(profileId),
+    listPanels(profileId),
+    listVaccines(profileId),
+    listVisits(profileId),
+    listBpLog(profileId),
+    listWeightLog(profileId),
+    listSymptomLog(profileId),
   ]);
   if (!profile) return "No profile data is available yet.";
 
@@ -115,14 +146,23 @@ export async function buildHealthContext(profileId: number): Promise<string> {
   const age = ageYearsFrom(profile.birthDate);
   const blood = bloodTypeLabel(profile.bloodType, profile.rhFactor);
   const demographics = [
-    age != null ? `${age}y` : null,
-    profile.sex,
+    age != null ? `${age}y` : "birth date not recorded",
+    profile.sex ?? "sex not recorded",
     blood ? `blood ${blood}` : null,
+    profile.pregnancyStatus && profile.pregnancyStatus !== "unknown"
+      ? `pregnancy: ${profile.pregnancyStatus.replace("_", " ")}`
+      : null,
   ]
     .filter(Boolean)
     .join(", ");
-  lines.push(`Profile: ${demographics || "no demographics recorded"}.`);
+  lines.push(`Profile: ${demographics}.`);
   if (profile.conditions) lines.push(`Stated conditions: ${profile.conditions}`);
+
+  // What the record contains and how far it reaches — so the model knows
+  // which tools can pay off and never describes an empty section as "normal".
+  lines.push(
+    `Record coverage: ${coverageLine({ panels, vaccines, visits, bpLog, weightLog, symptoms })}`,
+  );
 
   const activeAllergies = allergies
     .filter((a) => a.status === "active")

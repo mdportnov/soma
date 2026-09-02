@@ -45,6 +45,7 @@ import { deleteApiKey, getApiKey, setApiKey } from "@/ai/keystore";
 import { useKeychainStatus } from "@/hooks/useKeychainStatus";
 import { KeychainNotice } from "@/components/app/KeychainNotice";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
 import { appLogDir, join } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { applyThemePreference, loadThemePreference, type ThemePreference } from "@/lib/theme";
@@ -57,7 +58,6 @@ import { GROUP_META } from "@/components/app/SectionToggles";
 import { resetPersonalization } from "@/lib/personalization";
 import { notifySetupChanged } from "@/lib/setup-state";
 import { ToggleRow } from "@/components/app/ToggleRow";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Loading } from "@/components/app/Loading";
 import { Field } from "@/components/app/Field";
 import {
@@ -296,7 +296,7 @@ function UpdatesCard() {
           )}
           {!checking && result?.status === "current" && (
             <p className="flex items-center gap-2">
-              <CheckCircle2 className="size-4 text-success" />
+              <CheckCircle2 className="size-4 text-success-strong" />
               {t("settings.updates.current", { version: result.latestVersion })}
             </p>
           )}
@@ -481,10 +481,8 @@ const WIDGET_KEYS: Record<DashboardWidget, { labelKey: string; descKey: string }
 
 function DashboardCard() {
   const { t } = useI18n();
+  const { confirm } = useConfirm();
   const [enabled, setEnabled] = React.useState<Set<DashboardWidget>>(() => loadDashboardWidgets());
-  // Confirm before hiding the safety banner: it's a life-safety surface, so a
-  // stray toggle shouldn't silently bury it (the Emergency Card still has it).
-  const [confirmSafety, setConfirmSafety] = React.useState(false);
 
   const apply = (w: DashboardWidget, on: boolean) =>
     setEnabled((prev) => {
@@ -495,10 +493,17 @@ function DashboardCard() {
       return next;
     });
 
-  const toggle = (w: DashboardWidget) => {
-    // Intercept only the off-switch of the safety banner.
+  const toggle = async (w: DashboardWidget) => {
+    // Confirm before hiding the safety banner: it's a life-safety surface, so a
+    // stray toggle shouldn't silently bury it (the Emergency Card still has it).
     if (w === "safetyBanner" && enabled.has(w)) {
-      setConfirmSafety(true);
+      const ok = await confirm({
+        title: t("settings.dashboard.safetyConfirm.title"),
+        description: t("settings.dashboard.safetyConfirm.body"),
+        confirmLabel: t("settings.dashboard.safetyConfirm.confirm"),
+        destructive: true,
+      });
+      if (ok) apply(w, false);
       return;
     }
     apply(w, !enabled.has(w));
@@ -520,23 +525,10 @@ function DashboardCard() {
             label={t(WIDGET_KEYS[w].labelKey)}
             description={t(WIDGET_KEYS[w].descKey)}
             checked={enabled.has(w)}
-            onChange={() => toggle(w)}
+            onChange={() => void toggle(w)}
           />
         ))}
       </CardContent>
-      <ConfirmDialog
-        open={confirmSafety}
-        title={t("settings.dashboard.safetyConfirm.title")}
-        description={t("settings.dashboard.safetyConfirm.body")}
-        confirmLabel={t("settings.dashboard.safetyConfirm.confirm")}
-        cancelLabel={t("common.cancel")}
-        destructive
-        onConfirm={() => {
-          apply("safetyBanner", false);
-          setConfirmSafety(false);
-        }}
-        onClose={() => setConfirmSafety(false)}
-      />
     </Card>
   );
 }
@@ -547,11 +539,16 @@ function ResetPersonalizationCard() {
   const { t } = useI18n();
   const toast = useToast();
   const { profileId } = useApp();
-  const [open, setOpen] = React.useState(false);
+  const { confirm } = useConfirm();
 
   const reset = async () => {
+    const ok = await confirm({
+      title: t("settings.reset.confirm.title"),
+      description: t("settings.reset.confirm.body"),
+      confirmLabel: t("settings.reset.action"),
+    });
+    if (!ok) return;
     await resetPersonalization(profileId);
-    setOpen(false);
     toast.show(t("settings.reset.done"));
   };
 
@@ -565,19 +562,10 @@ function ResetPersonalizationCard() {
         <CardDescription>{t("settings.reset.description")}</CardDescription>
       </CardHeader>
       <CardContent>
-        <Button variant="outline" onClick={() => setOpen(true)}>
+        <Button variant="outline" onClick={() => void reset()}>
           <RotateCcw /> {t("settings.reset.action")}
         </Button>
       </CardContent>
-      <ConfirmDialog
-        open={open}
-        title={t("settings.reset.confirm.title")}
-        description={t("settings.reset.confirm.body")}
-        confirmLabel={t("settings.reset.action")}
-        cancelLabel={t("common.cancel")}
-        onConfirm={reset}
-        onClose={() => setOpen(false)}
-      />
     </Card>
   );
 }
@@ -587,6 +575,7 @@ function ResetPersonalizationCard() {
 function AiSettingsCard({ focused }: { focused: boolean }) {
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const {
     status: keychain,
     checking: keychainChecking,
@@ -649,6 +638,11 @@ function AiSettingsCard({ focused }: { focused: boolean }) {
 
   const removeKey = async () => {
     if (!settings.providerId) return;
+    const ok = await confirmDelete({
+      entity: "apiKey",
+      name: provider?.label ?? settings.providerId,
+    });
+    if (!ok) return;
     await deleteApiKey(settings.providerId);
     setHasStoredKey(false);
     setTestState({ kind: "idle" });
@@ -773,14 +767,18 @@ function AiSettingsCard({ focused }: { focused: boolean }) {
                       {testState.kind === "testing" ? <Loader2 className="animate-spin" /> : null}
                       {t("settings.ai.testKey")}
                     </Button>
-                    <Button variant="ghost" className="text-destructive" onClick={removeKey}>
+                    <Button
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => void removeKey()}
+                    >
                       <Trash2 /> {t("common.remove")}
                     </Button>
                   </>
                 )}
               </div>
               {testState.kind === "ok" && (
-                <p className="mt-2 flex items-center gap-1.5 text-xs text-success">
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-success-strong">
                   <CheckCircle2 className="size-3.5" /> {t("settings.ai.keyWorks")}
                 </p>
               )}

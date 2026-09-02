@@ -9,6 +9,8 @@ import {
   getHealthNote,
   getMedication,
   getPanel,
+  getProfile,
+  getReferenceRangesByBiomarker,
   getSymptomSeries,
   getVisit,
   listBiomarkers,
@@ -25,6 +27,11 @@ import {
 } from "@/db/repos";
 import { ensureSearchIndex, searchRecords } from "@/db/search";
 import { normalizeLabel, similarity } from "@/lib/fuzzy";
+import { ageYearsFrom, resolveRange } from "@/lib/units";
+import { localIsoDate } from "@/lib/clinical-date";
+import { buildChangesSince, buildHealthReview, medicationsCovering } from "./review";
+import { loadReviewInput } from "./review-data";
+import { buildVaccinationStatus } from "./vaccination";
 
 const objectSchema = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: "object",
@@ -79,8 +86,33 @@ export const agentToolDefinitions: AIToolDefinition[] = [
     }),
   },
   {
+    name: "get_health_overview",
+    description:
+      "One-call review of the whole record, computed locally: latest out-of-range markers with their previous reading and the change classification, notable moves, sub-optimal values, markers abnormal when last measured but not re-checked for a year, overdue re-test schedules, active medications (days on course, planned end, drug-allergy conflicts), recent blood pressure and weight, symptoms in the last 30 days, data coverage and explicit data gaps. Call it FIRST for broad questions such as 'what should I pay attention to', 'how am I doing', 'anything worrying'. Every entry has a ref for citing.",
+    inputSchema: objectSchema({}),
+  },
+  {
+    name: "get_changes_since",
+    description:
+      "What changed in the record since a date: each marker measured on/after the date versus its last reading before it (with the change classification), medications started/stopped, diagnoses added/resolved, visits, vaccines, symptoms and average blood pressure/weight before vs after. Without sinceDate it compares the latest lab panel with the record before it. Use for 'what changed since last time / since June / after I started X'.",
+    inputSchema: objectSchema({
+      sinceDate: {
+        type: "string",
+        description:
+          "ISO date YYYY-MM-DD; omit to compare the latest panel with the previous state.",
+      },
+    }),
+  },
+  {
+    name: "get_vaccination_status",
+    description:
+      "Personalized vaccination status against the built-in WHO-based calendar, graded exactly as the Vaccines screen: actionable items (overdue adult boosters, lapsed certificates), doses due now, upcoming, done, childhood doses never recorded (a documentation gap, NOT overdue), travel/risk antigens (contextual), and recorded shots that match no calendar antigen. Includes a legend explaining each status. Call it for any question about vaccines, boosters or certificates; never answer those from general knowledge alone.",
+    inputSchema: objectSchema({}),
+  },
+  {
     name: "get_biomarker_trend",
-    description: "Resolves a biomarker name and returns its normalized time series.",
+    description:
+      "Resolves a biomarker name and returns its full normalized time series with the reference and optimal range in effect for this profile and the medications taken at each reading.",
     inputSchema: objectSchema({ query: { type: "string", minLength: 1 } }, ["query"]),
   },
   {
@@ -185,11 +217,46 @@ export async function executeReadTool(
           .slice(0, 5),
       };
     }
-    const points = await getBiomarkerSeries(profileId, target.item.id);
+    const [points, profile, rangesByBiomarker, medications] = await Promise.all([
+      getBiomarkerSeries(profileId, target.item.id),
+      getProfile(profileId),
+      getReferenceRangesByBiomarker(),
+      listMedications(profileId),
+    ]);
+    // The range the flags were computed against (sex/age-specific when one
+    // exists) and the medications covering each reading: the two things a
+    // trend cannot be read without, so the model never has to guess them.
+    const range = resolveRange(target.item, rangesByBiomarker.get(target.item.id), {
+      sex: profile?.sex ?? null,
+      ageYears: ageYearsFrom(profile?.birthDate),
+    });
     return {
       biomarker: { ...target.item, ref: `biomarker:${target.item.id}`, score: target.score },
-      points,
+      rangeForProfile: range,
+      points: points.map((p) => ({
+        ...p,
+        ref: `lab_panel:${p.panelId}`,
+        medicationsAtReading: medicationsCovering(medications, p.date).map((m) => m.name),
+      })),
     };
+  }
+  if (name === "get_health_overview") {
+    return buildHealthReview(await loadReviewInput(profileId, localIsoDate()));
+  }
+  if (name === "get_changes_since") {
+    const sinceDate = optionalTextArg(args.sinceDate);
+    if (sinceDate && !/^\d{4}-\d{2}-\d{2}$/.test(sinceDate)) {
+      throw new Error("sinceDate must be an ISO date (YYYY-MM-DD)");
+    }
+    return buildChangesSince(await loadReviewInput(profileId, localIsoDate()), sinceDate);
+  }
+  if (name === "get_vaccination_status") {
+    const [profile, vaccines] = await Promise.all([getProfile(profileId), listVaccines(profileId)]);
+    return buildVaccinationStatus({
+      today: localIsoDate(),
+      birthDate: profile?.birthDate ?? null,
+      vaccines,
+    });
   }
   if (name === "get_symptom_trend") {
     const symptomName = textArg(args.symptomName, "symptomName");

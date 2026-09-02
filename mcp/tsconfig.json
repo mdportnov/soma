@@ -18,5 +18,12 @@
       "drizzle-orm/*": ["./node_modules/drizzle-orm/*"]
     }
   },
-  "include": ["src", "../src/db/schema.ts", "../src/lib/units.ts", "../src/lib/fuzzy.ts"]
+  "include": [
+    "src",
+    "../src/db/schema.ts",
+    "../src/db/tx-plans.ts",
+    "../src/db/guards.ts",
+    "../src/lib/units.ts",
+    "../src/lib/fuzzy.ts"
+  ]
 }

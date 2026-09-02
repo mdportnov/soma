@@ -1,8 +1,10 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
-import { Check, TestTubes } from "lucide-react";
+import { AlertTriangle, Check, Info, TestTubes } from "lucide-react";
+import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import {
+  findDuplicatePanelsForImport,
   getPanel,
   getPanelResults,
   getPanelSource,
@@ -10,6 +12,10 @@ import {
   markResultReviewed,
   type ResultWithBiomarker,
 } from "@/db/repos";
+import {
+  ConfidenceBadge as DuplicateConfidenceBadge,
+  panelDuplicateLabel,
+} from "@/components/app/ImportDuplicateNotice";
 import { SourceDocPane } from "@/components/app/SourceFile";
 import { PageHeader } from "@/components/app/PageHeader";
 import { crumbs } from "@/app/nav";
@@ -46,7 +52,8 @@ function ConfidenceBadge({ confidence }: { confidence: ResultWithBiomarker["conf
 export function VerifyImport() {
   const { id } = useParams();
   const panelId = Number(id);
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const { profileId } = useApp();
   const toast = useToast();
   const [activePage, setActivePage] = React.useState<number | null>(null);
   const [onlyUncertain, setOnlyUncertain] = React.useState(true);
@@ -57,8 +64,19 @@ export function VerifyImport() {
       getPanelResults(panelId),
       getPanelSource(panelId),
     ]);
-    return { panel, results, source };
-  }, [panelId]);
+    // The panel is already saved; if a same-day sibling overlaps it, this is
+    // the last screen of the import and the right place to say so.
+    const siblings = panel
+      ? (
+          await findDuplicatePanelsForImport(profileId, {
+            date: panel.date,
+            labName: panel.labName,
+            biomarkerIds: results.map((r) => r.biomarkerId),
+          })
+        ).filter((d) => d.panelId !== panelId)
+      : [];
+    return { panel, results, source, siblings };
+  }, [panelId, profileId]);
 
   // Open the document on the first unverified value's page.
   React.useEffect(() => {
@@ -70,8 +88,9 @@ export function VerifyImport() {
   if (loading || !data) return <Loading />;
   if (!data.panel) return <EmptyState icon={TestTubes} title={t("labPanelDetail.panelNotFound")} />;
 
-  const { panel, results, source } = data;
+  const { panel, results, source, siblings } = data;
   const pending = results.filter((r) => r.reviewedAt == null);
+  const sibling = siblings[0];
   const shown = onlyUncertain ? pending : results;
 
   const confirmOne = async (resultId: number) => {
@@ -109,6 +128,46 @@ export function VerifyImport() {
           )
         }
       />
+
+      {sibling && (
+        <div
+          role="status"
+          className={
+            "mb-4 flex items-start gap-2 rounded-lg border p-3 text-sm " +
+            (sibling.confidence === "likely"
+              ? "border-warning/40 bg-warning/5"
+              : "border-border bg-muted/40")
+          }
+        >
+          {sibling.confidence === "likely" ? (
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-strong" aria-hidden />
+          ) : (
+            <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-medium">
+                {t(
+                  sibling.confidence === "likely"
+                    ? "importWizard.duplicates.title"
+                    : "importWizard.duplicates.titlePossible",
+                )}
+              </p>
+              <DuplicateConfidenceBadge confidence={sibling.confidence} />
+            </div>
+            <p className="mt-1 text-xs">
+              {t("importWizard.duplicates.savedSibling", {
+                date: formatDate(sibling.date),
+                lab: sibling.labName?.trim() || t("importWizard.duplicates.unknownLab"),
+                shared: panelDuplicateLabel(t, lang, sibling).split(" — ").pop() ?? "",
+              })}{" "}
+              <Link to={`/labs/${sibling.panelId}`} className="text-primary hover:underline">
+                {t("importWizard.duplicates.openExisting")}
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Left: the original document */}
@@ -199,7 +258,7 @@ export function VerifyImport() {
                         <span />
                       )}
                       {reviewed ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-success">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-success-strong">
                           <Check className="size-3" /> {t("needsReview.reviewed")}
                         </span>
                       ) : (

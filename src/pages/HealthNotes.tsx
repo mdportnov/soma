@@ -2,9 +2,11 @@ import * as React from "react";
 import { ChevronDown, NotebookText, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
+import { useHighlight } from "@/hooks/useHighlight";
 import { createHealthNote, deleteHealthNote, listHealthNotes, updateHealthNote } from "@/db/repos";
 import type { HealthNote } from "@/db/schema";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { IconAction } from "@/components/app/IconAction";
@@ -19,7 +21,7 @@ import { ChipSelect } from "@/components/ui/chip-select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn, formatDate, uiLocale } from "@/lib/utils";
+import { cn, formatDate, formatDateObject, uiLocale } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 type Category = HealthNote["category"];
@@ -51,7 +53,7 @@ function noteDateLabel(note: HealthNote, unknownLabel: string): string {
     case "year":
       return String(parsed.getFullYear());
     case "month":
-      return parsed.toLocaleDateString(uiLocale(), { month: "short", year: "numeric" });
+      return formatDateObject(parsed, uiLocale(), { month: "short", year: "numeric" });
     case "approximate":
       return `≈ ${formatDate(note.date)}`;
     default:
@@ -69,6 +71,9 @@ export function HealthNotes() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
+  // ⌘K lands here as /notes?highlight=<id> — flash that note.
+  const highlight = useHighlight();
   const { data: notes, loading, reload } = useQuery(() => listHealthNotes(profileId), [profileId]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<HealthNote | null>(null);
@@ -98,16 +103,19 @@ export function HealthNotes() {
 
   const remove = async (note: HealthNote) => {
     const { id: _id, createdAt: _c, ...data } = note;
+    const ok = await confirmDelete({
+      entity: "note",
+      name: noteHeadline(note).slice(0, 60),
+      dateLabel: note.date || note.dateRaw ? noteDateLabel(note, "") : null,
+      undoable: true,
+    });
+    if (!ok) return;
     await deleteHealthNote(note.id);
     void reload();
-    toast.showAction(
-      t("toasts.deleted", { name: noteHeadline(note).slice(0, 40) }),
-      t("common.undo"),
-      async () => {
-        await createHealthNote(data);
-        void reload();
-      },
-    );
+    toast.showUndo(t("toasts.deleted", { name: noteHeadline(note).slice(0, 40) }), async () => {
+      await createHealthNote(data);
+      void reload();
+    });
   };
 
   return (
@@ -161,15 +169,22 @@ export function HealthNotes() {
           ) : (
             <div className="space-y-2">
               {visible.map((note) => (
-                <NoteCard
+                // The card is a shared component, so the ⌘K flash rides on a
+                // wrapper rather than threading ref/className through its API.
+                <div
                   key={note.id}
-                  note={note}
-                  onEdit={() => {
-                    setEditing(note);
-                    setFormOpen(true);
-                  }}
-                  onDelete={() => void remove(note)}
-                />
+                  ref={highlight.id === note.id ? highlight.ref : undefined}
+                  className={highlight.className(note.id)}
+                >
+                  <NoteCard
+                    note={note}
+                    onEdit={() => {
+                      setEditing(note);
+                      setFormOpen(true);
+                    }}
+                    onDelete={() => void remove(note)}
+                  />
+                </div>
               ))}
             </div>
           )}

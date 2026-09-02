@@ -23,8 +23,8 @@ export function HealthVerdict({
       className={cn(
         "flex items-center gap-3 rounded-xl border px-4 py-3",
         calm
-          ? "border-success/30 bg-success/8 text-success"
-          : "border-warning/40 bg-warning/10 text-warning",
+          ? "border-success/30 bg-success/8 text-success-strong"
+          : "border-warning/40 bg-warning/10 text-warning-strong",
         className,
       )}
     >

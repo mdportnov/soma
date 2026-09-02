@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Pencil, Plus, Sparkles, Syringe, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
+import { useHighlight } from "@/hooks/useHighlight";
 import {
   createVaccine,
   deleteVaccine,
@@ -10,6 +11,7 @@ import {
   getProfile,
   listVaccines,
   updateVaccine,
+  getLinkedAttachment,
 } from "@/db/repos";
 import type { Attachment, Vaccine } from "@/db/schema";
 import { SourceFileButton } from "@/components/app/SourceFile";
@@ -38,12 +40,17 @@ import {
 } from "@/components/ui/table";
 import { formatDate, todayISO } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
+import { undoToastCaveat, type UndoCaveat } from "@/lib/undo-scope";
 import { useI18n } from "@/lib/i18n";
 
 export function Vaccines() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
+  // ⌘K lands here as /vaccines?highlight=<id> — flash that dose in the table.
+  const highlight = useHighlight();
   const { data: vaccines, loading, reload } = useQuery(() => listVaccines(profileId), [profileId]);
   const { data: profile } = useQuery(() => getProfile(profileId), [profileId]);
   const { data: attachmentMap } = useQuery(async () => {
@@ -56,6 +63,7 @@ export function Vaccines() {
   }, [vaccines]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Vaccine | null>(null);
+  const [presetName, setPresetName] = React.useState<string | null>(null);
 
   if (loading || !vaccines) return <Loading />;
 
@@ -68,8 +76,15 @@ export function Vaccines() {
 
   const vaccineNames = Array.from(new Set(vaccines.map((v) => v.vaccineName)));
 
-  const openNew = () => {
+  const openNew = (name: string | null = null) => {
     setEditing(null);
+    setPresetName(name);
+    setFormOpen(true);
+  };
+
+  const openEdit = (v: Vaccine) => {
+    setEditing(v);
+    setPresetName(null);
     setFormOpen(true);
   };
 
@@ -87,7 +102,7 @@ export function Vaccines() {
                 <Sparkles /> {t("labs.aiImport")}
               </Button>
             </Link>
-            <Button onClick={openNew}>
+            <Button onClick={() => openNew()}>
               <Plus /> {t("common.add")}
             </Button>
           </>
@@ -95,7 +110,12 @@ export function Vaccines() {
       />
 
       <div className="space-y-6">
-        <VaccineCalendar birthDate={profile?.birthDate ?? null} records={vaccines} />
+        <VaccineCalendar
+          birthDate={profile?.birthDate ?? null}
+          records={vaccines}
+          onAddVaccine={openNew}
+          onEditRecord={openEdit}
+        />
 
         {vaccines.length === 0 ? (
           <EmptyState
@@ -104,7 +124,7 @@ export function Vaccines() {
             description={t("vaccines.emptyDescription")}
             action={
               <div className="flex gap-2">
-                <Button size="sm" onClick={openNew}>
+                <Button size="sm" onClick={() => openNew()}>
                   {t("vaccines.addFirst")}
                 </Button>
                 <Link to="/labs/import?type=vaccine">
@@ -120,21 +140,21 @@ export function Vaccines() {
             <VaccineTimeline
               vaccines={vaccines}
               storageKey="soma.timeline.vaccines"
-              onSelect={(v) => {
-                setEditing(v);
-                setFormOpen(true);
-              }}
+              onSelect={openEdit}
             />
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h2 className="pt-2 text-sm font-semibold tracking-tight">
               {t("vaccines.recordsTitle")}
             </h2>
             {Array.from(grouped.entries()).map(([name, rows]) => (
               <section key={name}>
-                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {name}
-                </h2>
                 <Card>
-                  <CardContent className="p-0">
+                  <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2.5">
+                    <h3 className="text-sm font-semibold selectable">{name}</h3>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {rows.length}
+                    </span>
+                  </div>
+                  <CardContent className="overflow-hidden rounded-b-xl p-0">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -151,7 +171,11 @@ export function Vaccines() {
                         {rows.map((v) => {
                           const isExpired = v.expiresAt != null && v.expiresAt < today;
                           return (
-                            <TableRow key={v.id}>
+                            <TableRow
+                              key={v.id}
+                              ref={highlight.id === v.id ? highlight.ref : undefined}
+                              className={highlight.className(v.id)}
+                            >
                               <TableCell>{formatDate(v.date)}</TableCell>
                               <TableCell>{v.dose ?? "—"}</TableCell>
                               <TableCell className="text-muted-foreground">
@@ -189,10 +213,7 @@ export function Vaccines() {
                                       variant="ghost"
                                       size="iconSm"
                                       aria-label={t("common.edit")}
-                                      onClick={() => {
-                                        setEditing(v);
-                                        setFormOpen(true);
-                                      }}
+                                      onClick={() => openEdit(v)}
                                     >
                                       <Pencil />
                                     </Button>
@@ -205,15 +226,30 @@ export function Vaccines() {
                                       className="text-destructive"
                                       onClick={async () => {
                                         const { id: _id, ...data } = v;
+                                        // An imported certificate is erased with
+                                        // its last dose; Undo brings the dose back
+                                        // without it, so the snapshot drops the id.
+                                        const attached =
+                                          v.attachmentId != null ||
+                                          (await getLinkedAttachment("vaccine", v.id)) != null;
+                                        const caveats: UndoCaveat[] = attached ? ["file"] : [];
+                                        const ok = await confirmDelete({
+                                          entity: "vaccine",
+                                          name: v.vaccineName,
+                                          dateLabel: formatDate(v.date),
+                                          undoable: true,
+                                          undoCaveats: caveats,
+                                        });
+                                        if (!ok) return;
                                         await deleteVaccine(v.id);
                                         void reload();
-                                        toast.showAction(
+                                        toast.showUndo(
                                           t("toasts.deleted", { name: v.vaccineName }),
-                                          t("common.undo"),
                                           async () => {
-                                            await createVaccine(data);
+                                            await createVaccine({ ...data, attachmentId: null });
                                             void reload();
                                           },
+                                          { caveat: undoToastCaveat(t, caveats) },
                                         );
                                       }}
                                     >
@@ -238,6 +274,7 @@ export function Vaccines() {
       <VaccineForm
         open={formOpen}
         editing={editing}
+        initialName={presetName}
         profileId={profileId}
         vaccineNames={vaccineNames}
         onClose={() => setFormOpen(false)}
@@ -253,6 +290,7 @@ export function Vaccines() {
 function VaccineForm({
   open,
   editing,
+  initialName = null,
   profileId,
   vaccineNames,
   onClose,
@@ -260,6 +298,7 @@ function VaccineForm({
 }: {
   open: boolean;
   editing: Vaccine | null;
+  initialName?: string | null;
   profileId: number;
   vaccineNames: string[];
   onClose: () => void;
@@ -280,7 +319,7 @@ function VaccineForm({
 
   React.useEffect(() => {
     if (!open) return;
-    setVaccineName(editing?.vaccineName ?? "");
+    setVaccineName(editing?.vaccineName ?? initialName ?? "");
     setDate(editing?.date ?? todayISO());
     setDose(editing?.dose != null ? String(editing.dose) : "");
     setManufacturer(editing?.manufacturer ?? "");
@@ -289,7 +328,7 @@ function VaccineForm({
     setCountry(editing?.country ?? "");
     setAdministeredBy(editing?.administeredBy ?? "");
     setNotes(editing?.notes ?? "");
-  }, [open, editing]);
+  }, [open, editing, initialName]);
 
   // Validity can't end before the shot was given (ISO strings sort lexically).
   const expiryBeforeDose = !!expiresAt && !!date && expiresAt < date;

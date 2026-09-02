@@ -84,7 +84,9 @@ export function GettingStarted({
               <span
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center rounded-full",
-                  s.done ? "bg-success/15 text-success" : "bg-secondary text-secondary-foreground",
+                  s.done
+                    ? "bg-success/15 text-success-strong"
+                    : "bg-secondary text-secondary-foreground",
                 )}
               >
                 {s.done ? <Check className="size-4" /> : <s.icon className="size-4" />}

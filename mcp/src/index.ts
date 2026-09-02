@@ -22,9 +22,16 @@ import {
   weightLog,
 } from "../../src/db/schema";
 import { computeFlag, convertToDefaultUnit } from "../../src/lib/units";
+import {
+  ATTACHMENT_ENTITY_TYPES,
+  medicationDeletePlan,
+  panelInsertPlan,
+} from "../../src/db/tx-plans";
 import { openDb, resolveDbPath } from "./db";
 import { describeCandidates, matchBiomarker } from "./mapping";
 import { WRITES_DISABLED_MESSAGE, writesAllowed } from "./guard";
+import { collectLinkedAttachments, removeDeletedAttachmentFiles } from "./attachments";
+import { runTransaction } from "./tx";
 
 const INSTRUCTIONS = `Soma is a local-first personal health database (labs, medications, visits, diagnoses, allergies, vaccines, symptoms, weight and blood pressure).
 Domain rules you must follow:
@@ -35,7 +42,7 @@ Domain rules you must follow:
 - Trends: get_symptom_trend (severity over time + overlapping meds), get_weight_trend (kg vs target), get_bp_trend (systolic/diastolic with normal/stage2/crisis flags), get_lifestyle_trend (sleep/training/stress/energy per day).
 - Browse existing records before writing: list_medications, list_diagnoses, list_visits, list_lab_panels + get_lab_panel, list_vaccines, list_health_notes, list_imaging_records, list_retest_schedules. Never claim a record does or does not exist without checking the matching list tool first.
 - Records link together via visitId: add_diagnosis, add_imaging_record and log_symptom accept the id of a visit from add_visit/list_visits — pass it whenever the user says a finding came from a specific appointment.
-- Medications are periods, not events: add_medication starts an intake period (endDate=null means currently taking; a future startDate plans a course that has not begun), stop_medication closes an open period, update_medication edits any field of an existing row (correct a dose, fix a date, re-open a course — pass endDate=null to clear it), and delete_medication removes a mistaken row (with its adherence logs). Never add a second active row for the same drug — stop/update the old one or record a dose change as stop + add.
+- Medications are periods, not events: add_medication starts an intake period (endDate=null means currently taking; a future startDate plans a course that has not begun), stop_medication closes an open period, update_medication edits any field of an existing row (correct a dose, fix a date, re-open a course — pass endDate=null to clear it), and delete_medication removes a mistaken row (with its adherence logs and its prescription document). Never add a second active row for the same drug — stop/update the old one or record a dose change as stop + add.
 - Writes are validated strictly: every add_*/log_*/update_*/set_*/stop_*/delete_* tool validates dates (future dates are refused except a planned medication startDate/endDate) and enums, refuses instead of guessing, and supports dryRun=true to preview the exact row. log_symptom reuses the existing spelling of a known symptom when it matches case-insensitively; log_lifestyle keeps one row per day and merges only the fields you pass. Write tools are disabled unless the user set SOMA_MCP_ALLOW_WRITES=1 for this server; if a write is refused for that reason, tell the user to enable it in their MCP client config rather than retrying.
 - Only record facts the user explicitly stated. Ask for missing required fields instead of inventing values; leave optional fields empty rather than guessing.
 - This is personal medical data. Be precise, never fabricate values, and do not write anything the user did not explicitly provide.`;
@@ -629,10 +636,13 @@ server.registerTool(
     }
     if (dryRun) return ok({ saved: false, dryRun: true, rows: review });
 
-    const panelId = db.orm.transaction((tx) => {
-      const inserted = tx
-        .insert(labPanel)
-        .values({
+    // Panel and its results as ONE transaction, through the app's own plan
+    // (src/db/tx-plans.ts): a crash between the two inserts would otherwise
+    // leave an empty panel that reads like a clean import.
+    const [panelInsert] = runTransaction(
+      db.sqlite,
+      panelInsertPlan(
+        {
           profileId: pid.id,
           date,
           labName: labName ?? null,
@@ -640,28 +650,22 @@ server.registerTool(
           country: country ?? null,
           sampleTypes: [panelType],
           importMethod: "mcp",
-        })
-        .returning({ id: labPanel.id })
-        .get();
-      for (const p of prepared) {
-        tx.insert(labResult)
-          .values({
-            panelId: inserted.id,
-            biomarkerId: p.bio.id,
-            value: p.raw.value,
-            unit: p.raw.unit,
-            valueNormalized: p.normalized.value,
-            unitNormalized: p.normalized.unit,
-            outOfRange: p.outOfRange,
-            flag: p.flag,
-            rawLabel: p.raw.label,
-          })
-          .run();
-      }
-      return inserted.id;
-    });
+        },
+        prepared.map((p) => ({
+          biomarkerId: p.bio.id,
+          value: p.raw.value,
+          unit: p.raw.unit,
+          valueNormalized: p.normalized.value,
+          unitNormalized: p.normalized.unit,
+          outOfRange: p.outOfRange,
+          flag: p.flag,
+          rawLabel: p.raw.label,
+        })),
+        [],
+      ),
+    );
 
-    return ok({ saved: true, panelId, date, rows: review });
+    return ok({ saved: true, panelId: panelInsert.lastInsertId, date, rows: review });
   },
 );
 
@@ -682,6 +686,20 @@ function beginWrite(
   const pid = resolveProfileId(profileId);
   if ("error" in pid) return { ok: false, result: fail(pid.error) };
   return { ok: true, pid: pid.id };
+}
+
+/**
+ * Runs a read-modify-write as one IMMEDIATE transaction.
+ *
+ * The upsert tools decide between INSERT and UPDATE from a row they just read.
+ * The Soma app writes the same file concurrently, so without a write lock held
+ * across both steps two writers can each see "no row" and both insert —
+ * duplicating a retest schedule, or failing the unique index on lifestyle_log
+ * after the decision was already made. bun:sqlite runs on a single connection,
+ * so the drizzle calls inside `run` are part of this transaction.
+ */
+function writeAtomically<T>(run: () => T): T {
+  return db.sqlite.transaction(run).immediate();
 }
 
 /** Validates that a visitId exists and belongs to the profile. */
@@ -1264,7 +1282,7 @@ server.registerTool(
   {
     title: "Delete medication",
     description:
-      "Permanently deletes a medication/supplement row identified by medicationId (from list_medications), along with any adherence logs attached to it. Use only to remove a mistaken entry — to end an ongoing course use stop_medication, to fix a value use update_medication. Set dryRun=true to preview what would be deleted.",
+      "Permanently deletes a medication/supplement row identified by medicationId (from list_medications), together with its adherence logs and the imported prescription document attached to it (the document is kept if another record still references it). Use only to remove a mistaken entry — to end an ongoing course use stop_medication, to fix a value use update_medication. Set dryRun=true to see exactly how many adherence logs and documents would go with it.",
     inputSchema: {
       profileId: z.number().int().optional(),
       medicationId: z.number().int().describe("Id from list_medications"),
@@ -1280,11 +1298,42 @@ server.registerTool(
       return fail(`Medication ${medicationId} not found — check list_medications.`);
     }
     const deleted = medicationSummary(target);
-    if (dryRun) return ok({ deleted: false, dryRun: true, row: deleted });
+    // Read the linked prescription document before the row is gone: the link is
+    // polymorphic (no FK), so nothing else will ever clean it up, and after the
+    // delete its file path is unrecoverable.
+    const files = collectLinkedAttachments(
+      db.sqlite,
+      ATTACHMENT_ENTITY_TYPES.medication,
+      target.id,
+    );
+    const adherenceLogs = Number(
+      (
+        db.sqlite
+          .prepare("SELECT count(*) AS n FROM medication_log WHERE medication_id = ?")
+          .get(target.id) as { n: number }
+      ).n,
+    );
+    if (dryRun) {
+      return ok({
+        deleted: false,
+        dryRun: true,
+        row: deleted,
+        adherenceLogs,
+        linkedDocuments: files.length,
+      });
+    }
 
-    // medication_log rows cascade on delete (foreign_keys pragma is ON).
-    db.orm.delete(medication).where(eq(medication.id, target.id)).run();
-    return ok({ deleted: true, row: deleted });
+    // The same child-first plan the app runs (medication_log → medication →
+    // source document), as one transaction — see src/db/tx-plans.ts.
+    runTransaction(db.sqlite, medicationDeletePlan(target.id));
+    const removedFiles = removeDeletedAttachmentFiles(db.sqlite, files);
+    return ok({
+      deleted: true,
+      row: deleted,
+      adherenceLogs,
+      linkedDocuments: files.length,
+      removedDocumentFiles: removedFiles,
+    });
   },
 );
 
@@ -1713,42 +1762,61 @@ server.registerTool(
       return fail(`Pass at least one field: ${LIFESTYLE_FIELDS.join(", ")}.`);
     }
 
-    const existing = db.orm
-      .select()
-      .from(lifestyleLog)
-      .where(and(eq(lifestyleLog.profileId, w.pid), eq(lifestyleLog.date, effectiveDate)))
-      .get();
+    const readDay = () =>
+      db.orm
+        .select()
+        .from(lifestyleLog)
+        .where(and(eq(lifestyleLog.profileId, w.pid), eq(lifestyleLog.date, effectiveDate)))
+        .get();
 
     const patch = Object.fromEntries(provided.map((f) => [f, input[f]]));
-    const row = existing
-      ? { ...existing, ...patch }
-      : {
-          profileId: w.pid,
-          date: effectiveDate,
-          sleepHours: input.sleepHours ?? null,
-          sleepQuality: input.sleepQuality ?? null,
-          trainingMinutes: input.trainingMinutes ?? null,
-          trainingIntensity: input.trainingIntensity ?? null,
-          steps: input.steps ?? null,
-          restingHeartRate: input.restingHeartRate ?? null,
-          stressLevel: input.stressLevel ?? null,
-          energyLevel: input.energyLevel ?? null,
-          notes: input.notes ?? null,
-          source: "manual" as const,
-        };
-    const action = existing ? "updated" : "created";
-    if (input.dryRun) return ok({ saved: false, dryRun: true, action, row });
+    const compose = (existing: typeof lifestyleLog.$inferSelect | undefined) =>
+      existing
+        ? { ...existing, ...patch }
+        : {
+            profileId: w.pid,
+            date: effectiveDate,
+            sleepHours: input.sleepHours ?? null,
+            sleepQuality: input.sleepQuality ?? null,
+            trainingMinutes: input.trainingMinutes ?? null,
+            trainingIntensity: input.trainingIntensity ?? null,
+            steps: input.steps ?? null,
+            restingHeartRate: input.restingHeartRate ?? null,
+            stressLevel: input.stressLevel ?? null,
+            energyLevel: input.energyLevel ?? null,
+            notes: input.notes ?? null,
+            source: "manual" as const,
+          };
 
-    if (existing) {
-      db.orm.update(lifestyleLog).set(patch).where(eq(lifestyleLog.id, existing.id)).run();
-      return ok({ saved: true, action, id: existing.id, row });
+    if (input.dryRun) {
+      const preview = readDay();
+      return ok({
+        saved: false,
+        dryRun: true,
+        action: preview ? "updated" : "created",
+        row: compose(preview),
+      });
     }
-    const inserted = db.orm
-      .insert(lifestyleLog)
-      .values(row)
-      .returning({ id: lifestyleLog.id })
-      .get();
-    return ok({ saved: true, action, id: inserted.id, row });
+
+    // `lifestyle_log` holds one row per (profile, date) behind a unique index:
+    // the read that decides between UPDATE and INSERT and the write itself have
+    // to be one transaction, or a concurrent write from the app turns the
+    // INSERT branch into a constraint failure.
+    const saved = writeAtomically(() => {
+      const existing = readDay();
+      const row = compose(existing);
+      if (existing) {
+        db.orm.update(lifestyleLog).set(patch).where(eq(lifestyleLog.id, existing.id)).run();
+        return { action: "updated" as const, id: existing.id, row };
+      }
+      const inserted = db.orm
+        .insert(lifestyleLog)
+        .values(row)
+        .returning({ id: lifestyleLog.id })
+        .get();
+      return { action: "created" as const, id: inserted.id, row };
+    });
+    return ok({ saved: true, ...saved });
   },
 );
 
@@ -2099,18 +2167,19 @@ server.registerTool(
       if (!bio) return fail(`Biomarker ${biomarkerId} not found — resolve via search_biomarkers.`);
     }
 
-    const existing = db.orm
-      .select()
-      .from(retestSchedule)
-      .where(
-        and(
-          eq(retestSchedule.profileId, w.pid),
-          sql`lower(${retestSchedule.label}) = lower(${label})`,
-        ),
-      )
-      .get();
+    const readByLabel = () =>
+      db.orm
+        .select()
+        .from(retestSchedule)
+        .where(
+          and(
+            eq(retestSchedule.profileId, w.pid),
+            sql`lower(${retestSchedule.label}) = lower(${label})`,
+          ),
+        )
+        .get();
 
-    const row = {
+    const compose = (existing: typeof retestSchedule.$inferSelect | undefined) => ({
       profileId: w.pid,
       label: existing?.label ?? label,
       intervalMonths,
@@ -2118,22 +2187,40 @@ server.registerTool(
       lastTestedDate: lastTestedDate ?? existing?.lastTestedDate ?? null,
       notes: notes ?? existing?.notes ?? null,
       active,
-    };
-    const nextDueDate =
+    });
+    const dueDateOf = (row: { lastTestedDate: string | null }) =>
       row.lastTestedDate != null ? addMonthsIso(row.lastTestedDate, intervalMonths) : null;
-    const action = existing ? "updated" : "created";
-    if (dryRun) return ok({ saved: false, dryRun: true, action, row, nextDueDate });
 
-    if (existing) {
-      db.orm.update(retestSchedule).set(row).where(eq(retestSchedule.id, existing.id)).run();
-      return ok({ saved: true, action, id: existing.id, row, nextDueDate });
+    if (dryRun) {
+      const preview = readByLabel();
+      const row = compose(preview);
+      return ok({
+        saved: false,
+        dryRun: true,
+        action: preview ? "updated" : "created",
+        row,
+        nextDueDate: dueDateOf(row),
+      });
     }
-    const inserted = db.orm
-      .insert(retestSchedule)
-      .values(row)
-      .returning({ id: retestSchedule.id })
-      .get();
-    return ok({ saved: true, action, id: inserted.id, row, nextDueDate });
+
+    // `retest_schedule` has no unique index on (profile, label), so nothing but
+    // this transaction stops a concurrent write from turning one schedule into
+    // two rows that the feed would then show twice.
+    const saved = writeAtomically(() => {
+      const existing = readByLabel();
+      const row = compose(existing);
+      if (existing) {
+        db.orm.update(retestSchedule).set(row).where(eq(retestSchedule.id, existing.id)).run();
+        return { action: "updated" as const, id: existing.id, row };
+      }
+      const inserted = db.orm
+        .insert(retestSchedule)
+        .values(row)
+        .returning({ id: retestSchedule.id })
+        .get();
+      return { action: "created" as const, id: inserted.id, row };
+    });
+    return ok({ saved: true, ...saved, nextDueDate: dueDateOf(saved.row) });
   },
 );
 

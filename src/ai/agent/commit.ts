@@ -1,4 +1,9 @@
-import { getChatChangeSet, getChatMessage, markChatChangeSetFailed } from "@/db/chat-repos";
+import {
+  getChatChangeSet,
+  getChatMessage,
+  markChatChangeSetFailed,
+  recordThreadRecords,
+} from "@/db/chat-repos";
 import {
   executeTransaction,
   type TransactionParam,
@@ -154,13 +159,21 @@ export async function commitHealthChangeSet(
   } catch (error) {
     console.error("Search index refresh failed after chat commit", error);
   }
-  return records.map((record) => ({
+  const committed = records.map((record) => ({
     entityType: record.entityType,
     entityId:
       typeof record.entityId === "number"
         ? record.entityId
         : results[record.entityId.statement].lastInsertId,
   }));
+  // The thread's footprint: which health records this conversation created or
+  // changed. Best-effort bookkeeping after the commit already succeeded.
+  try {
+    await recordThreadRecords(set.threadId, committed, "changed");
+  } catch (error) {
+    console.error("Failed to record thread changes", error);
+  }
+  return committed;
 }
 
 function appendDomainStatement(

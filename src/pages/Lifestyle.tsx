@@ -2,6 +2,7 @@ import * as React from "react";
 import { Activity, Gauge, HeartPulse, Moon, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
+import { useHighlight } from "@/hooks/useHighlight";
 import {
   deleteLifestyleLog,
   getRecentLifestyle,
@@ -31,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate, formatValue, todayISO } from "@/lib/utils";
 import { useToast } from "@/components/app/Toast";
+import { useConfirm } from "@/components/app/Confirm";
 import { useI18n } from "@/lib/i18n";
 
 const WINDOW_DAYS = 30;
@@ -49,6 +51,9 @@ export function Lifestyle() {
   const { profileId } = useApp();
   const { t } = useI18n();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
+  // ⌘K lands here as /lifestyle?highlight=<id> — flash that day's row.
+  const highlight = useHighlight();
 
   const { data, loading, reload } = useQuery(async () => {
     const [rows, recent] = await Promise.all([
@@ -64,7 +69,13 @@ export function Lifestyle() {
 
   if (loading || !data) return <Loading />;
   const { rows, summary } = data;
-  const visible = showAll ? rows : rows.slice(0, 20);
+  const collapsed = rows.slice(0, 20);
+  // A ⌘K jump can point past the collapsed window; expand rather than send the
+  // user to a page where the row they asked for isn't rendered at all.
+  const visible =
+    showAll || (highlight.id !== null && !collapsed.some((r) => r.id === highlight.id))
+      ? rows
+      : collapsed;
 
   const openToday = () => {
     setEditing(null);
@@ -165,7 +176,11 @@ export function Lifestyle() {
                 </TableHeader>
                 <TableBody>
                   {visible.map((r) => (
-                    <TableRow key={r.id}>
+                    <TableRow
+                      key={r.id}
+                      ref={highlight.id === r.id ? highlight.ref : undefined}
+                      className={highlight.className(r.id)}
+                    >
                       <TableCell>{formatDate(r.date)}</TableCell>
                       <TableCell className="tabular-nums">
                         {r.sleepHours == null
@@ -205,11 +220,16 @@ export function Lifestyle() {
                           }}
                           onDelete={async () => {
                             const { id: _id, createdAt: _c, ...data } = r;
+                            const ok = await confirmDelete({
+                              entity: "lifestyle",
+                              dateLabel: formatDate(r.date),
+                              undoable: true,
+                            });
+                            if (!ok) return;
                             await deleteLifestyleLog(r.id);
                             void reload();
-                            toast.showAction(
+                            toast.showUndo(
                               t("toasts.deleted", { name: formatDate(r.date) }),
-                              t("common.undo"),
                               async () => {
                                 await upsertLifestyleLog(data);
                                 void reload();

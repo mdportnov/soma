@@ -1,6 +1,23 @@
 import { and, asc, count, desc, eq, inArray, isNull, like, sql } from "drizzle-orm";
 import { db } from "./client";
-import { assertAllergyDeletable } from "./guards";
+import { assertAllergyDeletable, assertPrescriptionDeletable } from "./guards";
+import { executeTransaction } from "./transaction";
+import { markSearchIndexStale } from "./search-freshness";
+import {
+  ATTACHMENT_ENTITY_TYPES,
+  allergyDeletePlan,
+  findingsInsertPlan,
+  imagingRecordDeletePlan,
+  medicationDeletePlan,
+  panelDeletePlan,
+  panelInsertPlan,
+  panelRollbackPlan,
+  prescriptionDeletePlan,
+  unreferencedAttachmentDeleteStatement,
+  vaccineDeletePlan,
+  visitDeletePlan,
+  type AttachmentEntityType,
+} from "./tx-plans";
 import { deleteAttachmentFile } from "../lib/attachments";
 import {
   allergy,
@@ -72,6 +89,13 @@ import {
   type DemographicRange,
   type ProfileContext,
 } from "@/lib/units";
+import {
+  findDuplicatePanels,
+  findDuplicateRecords,
+  type IncomingPanel,
+  type PanelDuplicate,
+  type RecordDuplicate,
+} from "@/lib/import-duplicates";
 import {
   changeBetween,
   pointFromResult,
@@ -273,11 +297,13 @@ export async function getBiomarker(id: number): Promise<Biomarker | null> {
 }
 
 export async function createBiomarker(data: NewBiomarker): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(biomarker).values(data).returning({ id: biomarker.id });
   return row.id;
 }
 
 export async function updateBiomarker(id: number, data: Partial<NewBiomarker>) {
+  markSearchIndexStale();
   await db.update(biomarker).set(data).where(eq(biomarker.id, id));
 }
 
@@ -295,6 +321,7 @@ export type BiomarkerDictionaryEdit = {
  * overriding it — the edit then persists across launches, for seeded entries too.
  */
 export async function updateBiomarkerDictionary(id: number, data: BiomarkerDictionaryEdit) {
+  markSearchIndexStale();
   await db
     .update(biomarker)
     .set({ ...data, isUserModified: true })
@@ -400,71 +427,84 @@ export type ResultInput = {
   reviewedAt?: string | null;
 };
 
-/** Creates a panel with results; computes normalization + flags per result. */
+/**
+ * Turns review-screen rows into `lab_result` values: normalization, flags and
+ * the review state each row starts in. Split out of `createPanelWithResults`
+ * because the whole insert is now one transaction — the rows have to be fully
+ * computed before the first statement runs.
+ */
+async function buildResultRows(
+  panelData: NewLabPanel,
+  results: ResultInput[],
+  biomarkersById: Map<number, Biomarker>,
+): Promise<Omit<NewLabResult, "panelId">[]> {
+  // Flags are computed against the profile's sex/age-specific range when one
+  // exists — a single generic range mis-flags large populations.
+  const prof = await getProfile(panelData.profileId);
+  const ctx: ProfileContext = {
+    sex: prof?.sex ?? null,
+    ageYears: ageYearsFrom(prof?.birthDate, new Date(`${panelData.date.slice(0, 10)}T00:00:00Z`)),
+  };
+  const rangesByBiomarker = await getReferenceRangesByBiomarker();
+  // Only AI imports carry uncertainty — manual entries are author-trusted and
+  // never enter the "needs review" queue.
+  const isAi = panelData.importMethod === "ai";
+  const now = new Date().toISOString();
+  return results.map((r) => {
+    const bio = biomarkersById.get(r.biomarkerId);
+    const { unitNormalized, valueNormalized, outOfRange, flag, convertible } = bio
+      ? normalizeResultValue(r.value, r.unit, bio, rangesByBiomarker.get(r.biomarkerId), ctx)
+      : {
+          unitNormalized: null,
+          valueNormalized: null,
+          outOfRange: false,
+          flag: null,
+          convertible: false,
+        };
+    const confidence: ResultConfidence = r.confidence ?? (isAi ? "ai" : "manual");
+    const uncertain = confidence === "translated" || confidence === "fuzzy" || confidence === "ai";
+    // A row needs review when its mapping is uncertain or its unit couldn't be
+    // normalized (so no flag/trend) — but the caller may override explicitly.
+    const needsReview = isAi && (uncertain || (bio != null && !convertible));
+    const reviewedAt = r.reviewedAt !== undefined ? r.reviewedAt : needsReview ? null : now;
+    return {
+      biomarkerId: r.biomarkerId,
+      value: r.value,
+      unit: r.unit,
+      unitNormalized,
+      valueNormalized,
+      outOfRange,
+      flag,
+      rawLabel: r.rawLabel ?? null,
+      sourcePage: r.sourcePage ?? null,
+      confidence,
+      reviewedAt,
+    };
+  });
+}
+
+/**
+ * Creates a panel with its results (and, optionally, its findings) in ONE
+ * transaction; computes normalization + flags per result.
+ *
+ * The panel, its results and its findings are a single unit of meaning: a panel
+ * without its values is not a smaller import, it is a record that lies. The
+ * previous version inserted them step by step over the pooled connection and
+ * compensated on failure by deleting the panel and trusting the cascade to take
+ * the results with it — the very cascade the rest of the code distrusts.
+ * Callers that already know their findings should pass them here instead of
+ * following up with `createPanelFindings`, so no window exists at all.
+ */
 export async function createPanelWithResults(
   panelData: NewLabPanel,
   results: ResultInput[],
   biomarkersById: Map<number, Biomarker>,
+  findings: Omit<NewLabFinding, "panelId" | "createdAt">[] = [],
 ): Promise<number> {
-  const [panelRow] = await db.insert(labPanel).values(panelData).returning({ id: labPanel.id });
-  if (results.length) {
-    // Flags are computed against the profile's sex/age-specific range when one
-    // exists — a single generic range mis-flags large populations.
-    const prof = await getProfile(panelData.profileId);
-    const ctx: ProfileContext = {
-      sex: prof?.sex ?? null,
-      ageYears: ageYearsFrom(prof?.birthDate, new Date(`${panelData.date.slice(0, 10)}T00:00:00Z`)),
-    };
-    const rangesByBiomarker = await getReferenceRangesByBiomarker();
-    // Only AI imports carry uncertainty — manual entries are author-trusted and
-    // never enter the "needs review" queue.
-    const isAi = panelData.importMethod === "ai";
-    const now = new Date().toISOString();
-    const values: NewLabResult[] = results.map((r) => {
-      const bio = biomarkersById.get(r.biomarkerId);
-      const { unitNormalized, valueNormalized, outOfRange, flag, convertible } = bio
-        ? normalizeResultValue(r.value, r.unit, bio, rangesByBiomarker.get(r.biomarkerId), ctx)
-        : {
-            unitNormalized: null,
-            valueNormalized: null,
-            outOfRange: false,
-            flag: null,
-            convertible: false,
-          };
-      const confidence: ResultConfidence = r.confidence ?? (isAi ? "ai" : "manual");
-      const uncertain =
-        confidence === "translated" || confidence === "fuzzy" || confidence === "ai";
-      // A row needs review when its mapping is uncertain or its unit couldn't be
-      // normalized (so no flag/trend) — but the caller may override explicitly.
-      const needsReview = isAi && (uncertain || (bio != null && !convertible));
-      const reviewedAt = r.reviewedAt !== undefined ? r.reviewedAt : needsReview ? null : now;
-      return {
-        panelId: panelRow.id,
-        biomarkerId: r.biomarkerId,
-        value: r.value,
-        unit: r.unit,
-        unitNormalized,
-        valueNormalized,
-        outOfRange,
-        flag,
-        rawLabel: r.rawLabel ?? null,
-        sourcePage: r.sourcePage ?? null,
-        confidence,
-        reviewedAt,
-      };
-    });
-    // The sqlite-proxy driver runs each statement on a pooled connection, so a
-    // cross-statement BEGIN/COMMIT isn't reliable. Instead, compensate: if the
-    // results insert fails, roll back the just-created panel so we never leave an
-    // orphaned empty panel that looks like a successful (but data-less) import.
-    try {
-      await db.insert(labResult).values(values);
-    } catch (e) {
-      await db.delete(labPanel).where(eq(labPanel.id, panelRow.id));
-      throw e;
-    }
-  }
-  return panelRow.id;
+  markSearchIndexStale();
+  const values = results.length ? await buildResultRows(panelData, results, biomarkersById) : [];
+  const [panelInsert] = await executeTransaction(panelInsertPlan(panelData, values, findings));
+  return panelInsert.lastInsertId;
 }
 
 /** Panel metadata the user may correct after the fact (the results themselves
@@ -491,6 +531,7 @@ export type PanelMetaPatch = Partial<
  * recomputed for every result of the panel whenever the date moves.
  */
 export async function updatePanel(panelId: number, patch: PanelMetaPatch): Promise<void> {
+  markSearchIndexStale();
   const current = await getPanel(panelId);
   if (!current) return;
   await db.update(labPanel).set(patch).where(eq(labPanel.id, panelId));
@@ -524,6 +565,7 @@ export async function updateResultValue(
   resultId: number,
   patch: { value: number; unit: string },
 ): Promise<void> {
+  markSearchIndexStale();
   const rows = await db
     .select({
       biomarkerId: labResult.biomarkerId,
@@ -573,22 +615,109 @@ export async function updateResultValue(
     .where(eq(labResult.id, resultId));
 }
 
+// ── duplicate detection (re-import guard) ──────────────────────────────────
+
+/**
+ * Panels of this profile drawn on the same day that the incoming import looks
+ * like a re-import of. Returns the evidence (shared biomarkers, matching lab)
+ * rather than a yes/no, so the wizard can tell the user WHY a record looks
+ * familiar and let them decide — two draws in one day are legitimate, and the
+ * data layer must never drop an import on suspicion alone.
+ */
+export async function findDuplicatePanelsForImport(
+  profileId: number,
+  incoming: IncomingPanel,
+): Promise<PanelDuplicate[]> {
+  const day = incoming.date.slice(0, 10);
+  const panels = await db
+    .select({ id: labPanel.id, date: labPanel.date, labName: labPanel.labName })
+    .from(labPanel)
+    .where(and(eq(labPanel.profileId, profileId), like(labPanel.date, `${day}%`)));
+  if (!panels.length) return [];
+  const results = await db
+    .select({ panelId: labResult.panelId, biomarkerId: labResult.biomarkerId })
+    .from(labResult)
+    .where(
+      inArray(
+        labResult.panelId,
+        panels.map((p) => p.id),
+      ),
+    );
+  const byPanel = new Map<number, number[]>();
+  for (const r of results) {
+    const list = byPanel.get(r.panelId);
+    if (list) list.push(r.biomarkerId);
+    else byPanel.set(r.panelId, [r.biomarkerId]);
+  }
+  return findDuplicatePanels(
+    incoming,
+    panels.map((p) => ({ ...p, biomarkerIds: byPanel.get(p.id) ?? [] })),
+  );
+}
+
+/** Vaccine doses already recorded for the same antigen on the same day. */
+export async function findDuplicateVaccinesForImport(
+  profileId: number,
+  incoming: { date: string | null; vaccineName: string },
+): Promise<RecordDuplicate[]> {
+  if (!incoming.date) return [];
+  const rows = await db
+    .select({ id: vaccine.id, date: vaccine.date, name: vaccine.vaccineName })
+    .from(vaccine)
+    .where(
+      and(eq(vaccine.profileId, profileId), like(vaccine.date, `${incoming.date.slice(0, 10)}%`)),
+    );
+  return findDuplicateRecords({ date: incoming.date, name: incoming.vaccineName }, rows);
+}
+
+/** Imaging studies of the same modality + body area already stored for that day. */
+export async function findDuplicateImagingForImport(
+  profileId: number,
+  incoming: { date: string | null; modality: string; bodyArea: string },
+): Promise<RecordDuplicate[]> {
+  if (!incoming.date) return [];
+  const rows = await db
+    .select({
+      id: imagingRecord.id,
+      date: imagingRecord.date,
+      modality: imagingRecord.modalityType,
+      bodyArea: imagingRecord.bodyArea,
+    })
+    .from(imagingRecord)
+    .where(
+      and(
+        eq(imagingRecord.profileId, profileId),
+        like(imagingRecord.date, `${incoming.date.slice(0, 10)}%`),
+      ),
+    );
+  return findDuplicateRecords(
+    { date: incoming.date, name: `${incoming.modality} ${incoming.bodyArea}` },
+    rows.map((r) => ({ id: r.id, date: r.date, name: `${r.modality} ${r.bodyArea}` })),
+  );
+}
+
 // ── lab_finding ──────────────────────────────────────────────────────────────
 
 /**
- * Insert a panel's additional findings. Same compensate-on-failure pattern as
- * createPanelWithResults: a failed findings insert must not leave a panel that
- * looks like a clean import.
+ * Insert a panel's additional findings into an already-stored panel, in one
+ * transaction. Same compensate-on-failure intent as before, but the
+ * compensation no longer leans on the cascade: the panel is torn down
+ * child-first (results → findings → panel), so a failed import can never leave
+ * results hanging off a panel_id that has been deleted.
+ *
+ * Prefer passing findings straight to `createPanelWithResults` — that writes
+ * everything in a single transaction and needs no compensation at all.
  */
 export async function createPanelFindings(
   panelId: number,
   findings: Omit<NewLabFinding, "panelId" | "createdAt">[],
 ): Promise<void> {
+  markSearchIndexStale();
   if (!findings.length) return;
   try {
-    await db.insert(labFinding).values(findings.map((f) => ({ ...f, panelId })));
+    await executeTransaction(findingsInsertPlan(panelId, findings));
   } catch (e) {
-    await db.delete(labPanel).where(eq(labPanel.id, panelId));
+    await executeTransaction(panelRollbackPlan(panelId));
     throw e;
   }
 }
@@ -644,42 +773,90 @@ export async function updateFinding(
   id: number,
   patch: Partial<Pick<LabFinding, "rawLabel" | "nameEn" | "valueText" | "unit" | "refRangeText">>,
 ): Promise<void> {
+  markSearchIndexStale();
   await db.update(labFinding).set(patch).where(eq(labFinding.id, id));
 }
 
 export async function deleteFinding(id: number): Promise<void> {
+  markSearchIndexStale();
   await db.delete(labFinding).where(eq(labFinding.id, id));
 }
 
 /**
- * Removes attachment rows polymorphically linked to a now-deleted entity, and
- * deletes their backing files from disk. The file paths are read before the
- * rows are dropped; file removal is best-effort (a leaked file is only wasted
- * disk space, whereas a dangling row would keep pointing at a stale document).
+ * Reads the attachments polymorphically linked to an entity BEFORE it is
+ * deleted — once the rows are gone their file paths are unrecoverable, so the
+ * list has to be taken first and the files removed afterwards.
  */
-async function deleteLinkedAttachments(entityType: string, entityId: number) {
-  const rows = await db
-    .select({ filePath: attachment.filePath })
+async function collectLinkedAttachments(
+  entityType: AttachmentEntityType,
+  entityId: number,
+): Promise<{ id: number; filePath: string }[]> {
+  return db
+    .select({ id: attachment.id, filePath: attachment.filePath })
     .from(attachment)
     .where(
       and(eq(attachment.linkedEntityType, entityType), eq(attachment.linkedEntityId, entityId)),
     );
-  await db
-    .delete(attachment)
+}
+
+/**
+ * Deletes the files of attachment rows that the transaction actually removed.
+ *
+ * Row first, file second — deliberately: a leaked file is wasted disk space,
+ * a dangling row is a broken link into a document that no longer exists. The
+ * survivors are re-read rather than assumed, because the delete is guarded (a
+ * certificate still referenced by another vaccine keeps its row) and erasing a
+ * file that is still in use would be exactly the unrecoverable loss all of this
+ * is meant to prevent.
+ */
+async function removeDeletedAttachmentFiles(
+  candidates: { id: number; filePath: string }[],
+): Promise<void> {
+  if (!candidates.length) return;
+  const survivors = await db
+    .select({ id: attachment.id })
+    .from(attachment)
     .where(
-      and(eq(attachment.linkedEntityType, entityType), eq(attachment.linkedEntityId, entityId)),
+      inArray(
+        attachment.id,
+        candidates.map((c) => c.id),
+      ),
     );
-  for (const row of rows) {
-    if (row.filePath) await deleteAttachmentFile(row.filePath);
+  const stillLinked = new Set(survivors.map((s) => s.id));
+  for (const row of candidates) {
+    if (!stillLinked.has(row.id) && row.filePath) await deleteAttachmentFile(row.filePath);
   }
 }
 
+/**
+ * Removes an attachment created by an import that then failed — but only when
+ * nothing references it any more, so records already written by that same
+ * import keep their source document. Returns true when the row (and its file)
+ * were actually removed.
+ */
+export async function deleteAttachmentIfUnreferenced(attachmentId: number): Promise<boolean> {
+  markSearchIndexStale();
+  const rows = await db
+    .select({ id: attachment.id, filePath: attachment.filePath })
+    .from(attachment)
+    .where(eq(attachment.id, attachmentId));
+  if (!rows.length) return false;
+  const [result] = await executeTransaction([unreferencedAttachmentDeleteStatement(attachmentId)]);
+  if (result.rowsAffected === 0) return false;
+  if (rows[0].filePath) await deleteAttachmentFile(rows[0].filePath);
+  return true;
+}
+
+/**
+ * Deletes a panel with its results, findings and source document in one
+ * transaction, child-first — see `panelDeletePlan` for why the cascade is not
+ * trusted to do it.
+ */
 export async function deletePanel(panelId: number) {
-  await db.delete(labResult).where(eq(labResult.panelId, panelId));
-  await db.delete(labFinding).where(eq(labFinding.panelId, panelId));
-  await db.delete(labPanel).where(eq(labPanel.id, panelId));
-  // Panel (and its FK to source_file_id) is gone — clear the orphaned attachment.
-  await deleteLinkedAttachments("lab_panel", panelId);
+  markSearchIndexStale();
+  const files = await collectLinkedAttachments(ATTACHMENT_ENTITY_TYPES.labPanel, panelId);
+  await executeTransaction(panelDeletePlan(panelId));
+  await removeDeletedAttachmentFiles(files);
 }
 
 export type SeriesPoint = {
@@ -887,16 +1064,27 @@ export async function getMedication(id: number): Promise<Medication | null> {
 }
 
 export async function createMedication(data: NewMedication): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(medication).values(data).returning({ id: medication.id });
   return row.id;
 }
 
 export async function updateMedication(id: number, data: Partial<NewMedication>) {
+  markSearchIndexStale();
   await db.update(medication).set(data).where(eq(medication.id, id));
 }
 
+/**
+ * Deletes a medication with its adherence log and the prescription document
+ * imported with it, in one transaction. `medication_log` cascades in the
+ * schema, but is spelled out anyway — the plan must be correct on its own, not
+ * conditional on FK enforcement being on for whichever connection ran it.
+ */
 export async function deleteMedication(id: number) {
-  await db.delete(medication).where(eq(medication.id, id));
+  markSearchIndexStale();
+  const files = await collectLinkedAttachments(ATTACHMENT_ENTITY_TYPES.medication, id);
+  await executeTransaction(medicationDeletePlan(id));
+  await removeDeletedAttachmentFiles(files);
 }
 
 // ── medication adherence log ───────────────────────────────────────────────
@@ -907,6 +1095,19 @@ export async function listMedicationLog(medicationId: number): Promise<Medicatio
     .from(medicationLog)
     .where(eq(medicationLog.medicationId, medicationId))
     .orderBy(desc(medicationLog.takenAt));
+}
+
+/**
+ * How many adherence rows hang off a medication. The medication_log FK is
+ * ON DELETE CASCADE, so this is exactly what a "delete medication" would take
+ * with it — read before asking for confirmation so the prompt can say so.
+ */
+export async function countMedicationLogEntries(medicationId: number): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(medicationLog)
+    .where(eq(medicationLog.medicationId, medicationId));
+  return row?.n ?? 0;
 }
 
 /**
@@ -943,22 +1144,27 @@ export async function getVisit(id: number): Promise<Visit | null> {
 }
 
 export async function createVisit(data: NewVisit): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(visit).values(data).returning({ id: visit.id });
   return row.id;
 }
 
 export async function updateVisit(id: number, data: Partial<NewVisit>) {
+  markSearchIndexStale();
   await db.update(visit).set(data).where(eq(visit.id, id));
 }
 
+/**
+ * Deletes a visit in one transaction. What came out of the visit survives it —
+ * prescriptions, diagnoses, symptoms and imaging are detached, not deleted — so
+ * the detach and the delete must commit together: half of it would either strand
+ * records on a visit that no longer exists or fail the delete outright.
+ */
 export async function deleteVisit(id: number) {
-  // Prescriptions survive visit deletion (medication rows reference them).
-  await db.update(prescription).set({ visitId: null }).where(eq(prescription.visitId, id));
-  await db.update(diagnosis).set({ visitId: null }).where(eq(diagnosis.visitId, id));
-  await db.update(symptomLog).set({ visitId: null }).where(eq(symptomLog.visitId, id));
-  await db.update(imagingRecord).set({ visitId: null }).where(eq(imagingRecord.visitId, id));
-  await db.delete(visit).where(eq(visit.id, id));
-  await deleteLinkedAttachments("visit", id);
+  markSearchIndexStale();
+  const files = await collectLinkedAttachments(ATTACHMENT_ENTITY_TYPES.visit, id);
+  await executeTransaction(visitDeletePlan(id));
+  await removeDeletedAttachmentFiles(files);
 }
 
 export async function listDiagnoses(profileId: number): Promise<Diagnosis[]> {
@@ -975,15 +1181,18 @@ export async function getDiagnosis(id: number): Promise<Diagnosis | null> {
 }
 
 export async function createDiagnosis(data: NewDiagnosis): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(diagnosis).values(data).returning({ id: diagnosis.id });
   return row.id;
 }
 
 export async function updateDiagnosis(id: number, data: Partial<NewDiagnosis>) {
+  markSearchIndexStale();
   await db.update(diagnosis).set(data).where(eq(diagnosis.id, id));
 }
 
 export async function deleteDiagnosis(id: number) {
+  markSearchIndexStale();
   await db.delete(diagnosis).where(eq(diagnosis.id, id));
 }
 
@@ -992,12 +1201,58 @@ export async function listPrescriptionsForVisit(visitId: number) {
 }
 
 export async function createPrescription(data: NewPrescription): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(prescription).values(data).returning({ id: prescription.id });
   return row.id;
 }
 
-export async function deletePrescription(id: number) {
-  await db.delete(prescription).where(eq(prescription.id, id));
+/** A medication still pointing at a prescription the user is about to delete. */
+export type LinkedMedication = {
+  id: number;
+  name: string;
+  startDate: string;
+  endDate: string | null;
+};
+
+/**
+ * What deleting a prescription would take with it. `medication.prescription_id`
+ * is a `NO ACTION` FK, so the linked medications are neither cascaded nor
+ * nulled by the database — the caller has to see them and decide. Read this
+ * before asking for confirmation, the way `countMedicationLogEntries` is read
+ * before deleting a medication.
+ */
+export async function getPrescriptionDeleteImpact(id: number): Promise<{
+  prescriptionId: number;
+  linkedMedications: LinkedMedication[];
+}> {
+  const linkedMedications = await db
+    .select({
+      id: medication.id,
+      name: medication.name,
+      startDate: medication.startDate,
+      endDate: medication.endDate,
+    })
+    .from(medication)
+    .where(eq(medication.prescriptionId, id))
+    .orderBy(asc(medication.name));
+  return { prescriptionId: id, linkedMedications };
+}
+
+/**
+ * Deletes a prescription. With medications still linked the delete is REFUSED
+ * unless the caller explicitly opted to detach them: silently breaking the link
+ * between a drug the user takes and the paper that prescribed it is a loss the
+ * user never asked for. When detaching is confirmed, the update and the delete
+ * commit as one transaction.
+ */
+export async function deletePrescription(
+  id: number,
+  options: { detachMedications?: boolean } = {},
+) {
+  markSearchIndexStale();
+  const { linkedMedications } = await getPrescriptionDeleteImpact(id);
+  assertPrescriptionDeletable(linkedMedications.length, options.detachMedications ?? false);
+  await executeTransaction(prescriptionDeletePlan(id));
 }
 
 export async function listDiagnosesForVisit(visitId: number) {
@@ -1112,11 +1367,13 @@ export async function listAllergies(profileId: number): Promise<Allergy[]> {
 }
 
 export async function createAllergy(data: NewAllergy): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(allergy).values(data).returning({ id: allergy.id });
   return row.id;
 }
 
 export async function updateAllergy(id: number, data: Partial<NewAllergy>) {
+  markSearchIndexStale();
   await db.update(allergy).set(data).where(eq(allergy.id, id));
 }
 
@@ -1125,12 +1382,15 @@ export async function updateAllergy(id: number, data: Partial<NewAllergy>) {
  * critical safety data must be resolved, never silently removed.
  */
 export async function deleteAllergy(id: number) {
+  markSearchIndexStale();
   const rows = await db
     .select({ severity: allergy.severity })
     .from(allergy)
     .where(eq(allergy.id, id));
   assertAllergyDeletable(rows[0]?.severity);
-  await db.delete(allergy).where(eq(allergy.id, id));
+  const files = await collectLinkedAttachments(ATTACHMENT_ENTITY_TYPES.allergy, id);
+  await executeTransaction(allergyDeletePlan(id));
+  await removeDeletedAttachmentFiles(files);
 }
 
 // ── vaccines ───────────────────────────────────────────────────────────────
@@ -1145,16 +1405,26 @@ export async function listVaccines(profileId: number): Promise<Vaccine[]> {
 }
 
 export async function createVaccine(data: NewVaccine): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(vaccine).values(data).returning({ id: vaccine.id });
   return row.id;
 }
 
 export async function updateVaccine(id: number, data: Partial<NewVaccine>) {
+  markSearchIndexStale();
   await db.update(vaccine).set(data).where(eq(vaccine.id, id));
 }
 
+/**
+ * Deletes a vaccine row together with the certificate imported for it. The
+ * certificate is only removed when no other vaccine row still references it —
+ * one scanned card commonly carries a whole series of doses.
+ */
 export async function deleteVaccine(id: number) {
-  await db.delete(vaccine).where(eq(vaccine.id, id));
+  markSearchIndexStale();
+  const files = await collectLinkedAttachments(ATTACHMENT_ENTITY_TYPES.vaccine, id);
+  await executeTransaction(vaccineDeletePlan(id));
+  await removeDeletedAttachmentFiles(files);
 }
 
 // ── symptom log ────────────────────────────────────────────────────────────
@@ -1213,15 +1483,18 @@ export async function listSymptomNames(profileId: number): Promise<string[]> {
 }
 
 export async function createSymptomEntry(data: NewSymptomLog): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(symptomLog).values(data).returning({ id: symptomLog.id });
   return row.id;
 }
 
 export async function updateSymptomEntry(id: number, data: Partial<NewSymptomLog>) {
+  markSearchIndexStale();
   await db.update(symptomLog).set(data).where(eq(symptomLog.id, id));
 }
 
 export async function deleteSymptomEntry(id: number) {
+  markSearchIndexStale();
   await db.delete(symptomLog).where(eq(symptomLog.id, id));
 }
 
@@ -1241,16 +1514,25 @@ export async function getImagingRecord(id: number): Promise<ImagingRecord | null
 }
 
 export async function createImagingRecord(data: NewImagingRecord): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(imagingRecord).values(data).returning({ id: imagingRecord.id });
   return row.id;
 }
 
 export async function updateImagingRecord(id: number, data: Partial<NewImagingRecord>) {
+  markSearchIndexStale();
   await db.update(imagingRecord).set(data).where(eq(imagingRecord.id, id));
 }
 
+/**
+ * Deletes an imaging record with the report imported for it; as with vaccines,
+ * a report shared by several records is kept until the last of them is gone.
+ */
 export async function deleteImagingRecord(id: number) {
-  await db.delete(imagingRecord).where(eq(imagingRecord.id, id));
+  markSearchIndexStale();
+  const files = await collectLinkedAttachments(ATTACHMENT_ENTITY_TYPES.imagingRecord, id);
+  await executeTransaction(imagingRecordDeletePlan(id));
+  await removeDeletedAttachmentFiles(files);
 }
 
 // ── weight / blood-pressure logs ───────────────────────────────────────────
@@ -1264,15 +1546,18 @@ export async function listWeightLog(profileId: number): Promise<WeightLog[]> {
 }
 
 export async function createWeightEntry(data: NewWeightLog): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(weightLog).values(data).returning({ id: weightLog.id });
   return row.id;
 }
 
 export async function updateWeightEntry(id: number, data: Partial<NewWeightLog>) {
+  markSearchIndexStale();
   await db.update(weightLog).set(data).where(eq(weightLog.id, id));
 }
 
 export async function deleteWeightEntry(id: number) {
+  markSearchIndexStale();
   await db.delete(weightLog).where(eq(weightLog.id, id));
 }
 
@@ -1285,15 +1570,18 @@ export async function listBpLog(profileId: number): Promise<BpLog[]> {
 }
 
 export async function createBpEntry(data: NewBpLog): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(bpLog).values(data).returning({ id: bpLog.id });
   return row.id;
 }
 
 export async function updateBpEntry(id: number, data: Partial<NewBpLog>) {
+  markSearchIndexStale();
   await db.update(bpLog).set(data).where(eq(bpLog.id, id));
 }
 
 export async function deleteBpEntry(id: number) {
+  markSearchIndexStale();
   await db.delete(bpLog).where(eq(bpLog.id, id));
 }
 
@@ -1327,6 +1615,7 @@ export async function getLifestyleByDate(
  * rather than stacking duplicate rows. Returns the row id.
  */
 export async function upsertLifestyleLog(data: NewLifestyleLog): Promise<number> {
+  markSearchIndexStale();
   const existing = await getLifestyleByDate(data.profileId, data.date);
   if (existing) {
     const { id: _id, profileId: _p, date: _d, createdAt: _c, ...patch } = data;
@@ -1338,6 +1627,7 @@ export async function upsertLifestyleLog(data: NewLifestyleLog): Promise<number>
 }
 
 export async function deleteLifestyleLog(id: number): Promise<void> {
+  markSearchIndexStale();
   await db.delete(lifestyleLog).where(eq(lifestyleLog.id, id));
 }
 
@@ -1355,15 +1645,18 @@ export async function getHealthNote(id: number): Promise<HealthNote | null> {
 }
 
 export async function createHealthNote(data: NewHealthNote): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(healthNote).values(data).returning({ id: healthNote.id });
   return row.id;
 }
 
 export async function updateHealthNote(id: number, data: Partial<NewHealthNote>): Promise<void> {
+  markSearchIndexStale();
   await db.update(healthNote).set(data).where(eq(healthNote.id, id));
 }
 
 export async function deleteHealthNote(id: number): Promise<void> {
+  markSearchIndexStale();
   await db.delete(healthNote).where(eq(healthNote.id, id));
 }
 
@@ -1389,15 +1682,18 @@ export async function listRetestSchedules(profileId: number): Promise<RetestSche
 }
 
 export async function createRetestSchedule(data: NewRetestSchedule): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(retestSchedule).values(data).returning({ id: retestSchedule.id });
   return row.id;
 }
 
 export async function updateRetestSchedule(id: number, data: Partial<NewRetestSchedule>) {
+  markSearchIndexStale();
   await db.update(retestSchedule).set(data).where(eq(retestSchedule.id, id));
 }
 
 export async function deleteRetestSchedule(id: number) {
+  markSearchIndexStale();
   await db.delete(retestSchedule).where(eq(retestSchedule.id, id));
 }
 
@@ -1639,11 +1935,13 @@ export async function getDoctorReportData(
 // ── attachments ────────────────────────────────────────────────────────────
 
 export async function createAttachment(data: NewAttachment): Promise<number> {
+  markSearchIndexStale();
   const [row] = await db.insert(attachment).values(data).returning({ id: attachment.id });
   return row.id;
 }
 
 export async function updateAttachment(id: number, data: Partial<NewAttachment>) {
+  markSearchIndexStale();
   await db.update(attachment).set(data).where(eq(attachment.id, id));
 }
 

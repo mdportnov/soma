@@ -12,7 +12,7 @@
 import { Syringe } from "lucide-react";
 import { VACCINE_EXTRACTION_PROMPT } from "../../prompts";
 import type { RawVaccineExtraction } from "../../types";
-import type { DocTypeModule, ReviewProps } from "../registry";
+import type { DocTypeModule, ImportContext, ReviewProps } from "../registry";
 import { asArray, asObject, intOrNull, isoDateOrNull, nullableStr } from "../validate";
 import {
   resolveVaccine,
@@ -21,8 +21,9 @@ import {
   type VaccineMatch,
 } from "../vaccine-vocab";
 import { ReviewBanner } from "../ReviewBanner";
-import { storeSourceAttachment } from "../save-helpers";
-import { createVaccine } from "@/db/repos";
+import { withSourceAttachment, type SourceAttachment } from "../save-helpers";
+import { createVaccine, findDuplicateVaccinesForImport } from "@/db/repos";
+import type { RecordDuplicate } from "@/lib/import-duplicates";
 import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,9 @@ type VaccineRow = RawVaccineExtraction & {
   key: number;
   /** Library antigen this dose resolved to, or null when nothing matched. */
   match: VaccineMatch | null;
+  /** Doses of the same antigen already stored for that day — a re-imported
+   *  certificate would otherwise silently double the vaccination history. */
+  duplicates: RecordDuplicate[];
 };
 
 export type VaccineDraft = { rows: VaccineRow[] };
@@ -78,14 +82,23 @@ export const vaccineModule: DocTypeModule<VaccineDraft> = {
     const parsed = await ctx.provider.extractStructured(doc, VACCINE_EXTRACTION_PROMPT, 8192);
     const vaccines = validateVaccines(parsed);
     return {
-      rows: vaccines.map((v, i) => {
-        const match = resolveVaccine(v.vaccineName, v.disease);
-        // Pre-select rows we're confident about (named antigen + a date); leave
-        // fuzzy / unmatched / undated rows for the user to confirm.
-        const include =
-          !!v.date && (match?.confidence === "exact" || match?.confidence === "alias");
-        return { ...v, match, include, key: i };
-      }),
+      rows: await Promise.all(
+        vaccines.map(async (v, i) => {
+          const match = resolveVaccine(v.vaccineName, v.disease);
+          const duplicates = await findDuplicateVaccinesForImport(ctx.profileId, {
+            date: v.date,
+            vaccineName: match ? match.name : v.vaccineName,
+          });
+          // Pre-select rows we're confident about (named antigen + a date); leave
+          // fuzzy / unmatched / undated rows — and anything already recorded for
+          // that day — for the user to confirm.
+          const include =
+            !!v.date &&
+            !duplicates.length &&
+            (match?.confidence === "exact" || match?.confidence === "alias");
+          return { ...v, match, include, key: i, duplicates };
+        }),
+      ),
     };
   },
 
@@ -94,32 +107,53 @@ export const vaccineModule: DocTypeModule<VaccineDraft> = {
   Review: VaccineReview,
 
   async save(draft, ctx): Promise<string> {
-    const attachmentId = await storeSourceAttachment(ctx, "vaccination_cert", "vaccine");
-    const included = draft.rows.filter((r) => r.include && r.vaccineName.trim() && r.date);
-    for (const r of included) {
-      // Store the canonical antigen name when matched, so the calendar recognises
-      // the dose; preserve the printed original in notes so nothing is lost.
-      const printed = r.vaccineName.trim();
-      const storedName = r.match ? r.match.name : printed;
-      const note =
-        r.match && r.match.name.toLowerCase() !== printed.toLowerCase()
-          ? `Imported as «${printed}»`
-          : null;
-      await createVaccine({
-        profileId: ctx.profileId,
-        vaccineName: storedName,
-        date: r.date!,
-        manufacturer: r.manufacturer?.trim() || null,
-        batchNumber: r.batchNumber?.trim() || null,
-        dose: r.doseNumber ?? null,
-        expiresAt: r.expiresAt || null,
-        notes: note,
-        attachmentId,
-      });
-    }
-    return "/vaccines";
+    return withSourceAttachment(ctx, "vaccination_cert", "vaccine", async (source) => {
+      return saveVaccines(draft, ctx, source);
+    });
   },
 };
+
+/**
+ * One certificate usually carries a whole series of doses, so every created row
+ * points at the same attachment. The polymorphic `linked_entity_id` can only
+ * name one of them: the first dose owns the document, and `deleteVaccine` keeps
+ * the file until the last row referencing it is gone.
+ */
+async function saveVaccines(
+  draft: VaccineDraft,
+  ctx: ImportContext,
+  source: SourceAttachment,
+): Promise<string> {
+  const attachmentId = source.id;
+  const included = draft.rows.filter((r) => r.include && r.vaccineName.trim() && r.date);
+  let linked = false;
+  for (const r of included) {
+    // Store the canonical antigen name when matched, so the calendar recognises
+    // the dose; preserve the printed original in notes so nothing is lost.
+    const printed = r.vaccineName.trim();
+    const storedName = r.match ? r.match.name : printed;
+    const note =
+      r.match && r.match.name.toLowerCase() !== printed.toLowerCase()
+        ? `Imported as «${printed}»`
+        : null;
+    const vaccineId = await createVaccine({
+      profileId: ctx.profileId,
+      vaccineName: storedName,
+      date: r.date!,
+      manufacturer: r.manufacturer?.trim() || null,
+      batchNumber: r.batchNumber?.trim() || null,
+      dose: r.doseNumber ?? null,
+      expiresAt: r.expiresAt || null,
+      notes: note,
+      attachmentId,
+    });
+    if (!linked) {
+      await source.link(vaccineId);
+      linked = true;
+    }
+  }
+  return "/vaccines";
+}
 
 function VaccineReview({ draft, setDraft, onSave }: ReviewProps<VaccineDraft>) {
   const { t } = useI18n();

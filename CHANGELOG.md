@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Biomarkers can be sorted and filtered.** The list had a search box and one
+  toggle; ordering was fixed in code. There are now five orderings — including
+  "not measured in a long time", which this domain needs and the interface never
+  offered — and filters by status and category, remembered between visits. An
+  empty result names the filter responsible and offers to clear it.
+- **Trends answer the pointer.** Hovering a card's sparkline shows the date, the
+  value with its unit, the change against the previous reading in both absolute
+  and percentage terms, and a flag when the point sits outside the range.
 - **The assistant keeps separate chats.** There was one conversation and a
   button that wiped it. Chats are now a list with rename, archive, restore and
   delete, each carrying its own metadata: the models that answered, the records
@@ -50,6 +58,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Back went to the wrong place.** The hierarchy registry was never consulted:
+  `resolveParent()` had no callers and every page hardcoded its back target as a
+  literal string, so a biomarker opened from a lab panel always returned to the
+  biomarker list. Back was also a link, which pushed a new history entry instead
+  of unwinding one — and because scroll is restored only on a real back, the page
+  returned to always landed at the top. Navigation now keeps a session journal of
+  the path actually taken, falling back to the hierarchy only for a deep link or
+  a reload. Spent import wizards are skipped on the way back, a highlight from
+  search is not replayed, and switching chat threads no longer fills the history.
+- **Breadcrumbs and back are allowed to disagree.** A trail extends only across
+  links that are real containment, so opening a record from search shows where it
+  sits in the structure while back still returns where you came from.
+- **Card grids were ragged.** A card with no data drew two rows against three,
+  the date-and-trend row collapsed when a trend had fewer than two points, and
+  the status, the tag and the edit button each claimed the right edge with no
+  rule between them. Cards now share one anatomy: status beside the name, the
+  value row always reserved, a single action pinned bottom-right and outside the
+  link. Tables had the same problem in column form — the actions column was three
+  different widths across the app and numbers were left-aligned.
+- **Three strings were still English in a Russian interface** — the biomarker
+  flag badge, "no dose set" and "Onset:".
 - **Search returned no records at all.** `db.all()` on raw SQL carries no
   drizzle field map, so rows arrived as positional arrays and the reader took
   `entity_type` off them, which was always undefined. Every record query failed
@@ -97,6 +126,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Motion is a system rather than an effect.** Three durations, two curves, and
+  a written rule for what does not move. Opening a lab result was abrupt because
+  the page returned nothing behind its delayed spinner and discarded everything
+  the list already knew; the title, ranges and metadata now carry across the
+  navigation and paint in the same frame, so what was clicked survives the
+  transition and the query only fills in the rest. Direction comes from the
+  navigation journal — drilling in and stepping back read differently. Lists
+  reorder in place when sorted, stagger in when filtered, and a deleted row fades
+  before the delete is written. Five different popup characters were reduced to
+  two, and reduced-motion now degrades every one of them.
 - **Navigation stopped jerking.** The page wrapper animated while it was still
   empty: the route remounted, the animation played on a container holding only a
   spinner, and the content then appeared in one hard frame. A local database

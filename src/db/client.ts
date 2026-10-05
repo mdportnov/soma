@@ -102,6 +102,11 @@ export function initDatabase(): Promise<void> {
         const profiles = await conn.select<{ id: number }[]>("SELECT id FROM profile");
         for (const p of profiles) await recomputeFlagsForProfile(p.id);
       });
+      await runOnceTask(conn, "normalize-ascii-micro-molar-scale-2026-10", async () => {
+        const { recomputeFlagsForProfile } = await import("./repos");
+        const profiles = await conn.select<{ id: number }[]>("SELECT id FROM profile");
+        for (const p of profiles) await recomputeFlagsForProfile(p.id);
+      });
     })();
   }
   return initPromise;

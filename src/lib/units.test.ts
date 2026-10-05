@@ -486,3 +486,32 @@ describe("unit catalog helpers", () => {
     expect(out).not.toContain("IU/L");
   });
 });
+
+describe("printed micro units and molar scales", () => {
+  it("recognizes ASCII micro prefixes without treating enzyme units as micro units", () => {
+    expect(unitsEquivalent("ug/L", "µg/L")).toBe(true);
+    expect(unitsEquivalent("ug/L", "ng/mL")).toBe(true);
+    expect(unitsEquivalent("umol/L", "μmol/L")).toBe(true);
+    expect(unitsEquivalent("10^3/uL", "10^9/L")).toBe(true);
+    expect(normalizeUnit("U/L")).toBe("u/l");
+    expect(unitsEquivalent("U/L", "µU/L")).toBe(false);
+  });
+
+  it("converts mmol/L and µmol/L in either direction without needing an analyte code", () => {
+    expect(convertToDefaultUnit(0.47, "mmol/L", bio(null, "µmol/L"))).toEqual({
+      ok: true,
+      value: 470,
+      unit: "µmol/L",
+    });
+    expect(convertToDefaultUnit(470, "umol/L", bio(null, "mmol/L"))).toEqual({
+      ok: true,
+      value: 0.47,
+      unit: "mmol/L",
+    });
+    expect(convertToDefaultUnit(44.8, "ug/L", bio(null, "µg/L"))).toEqual({
+      ok: true,
+      value: 44.8,
+      unit: "µg/L",
+    });
+  });
+});

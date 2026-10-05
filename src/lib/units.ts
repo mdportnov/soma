@@ -62,6 +62,7 @@ export function normalizeUnit(u: string): string {
       .replace(/л/g, "l")
       .replace(/м/g, "m")
       .replace(/\s+/g, "")
+      .replace(/(^|\/)u(?=g(?:\/|$)|mol(?:\/|$))/g, "$1µ")
       // Squared/cubed meters lose the caret ("m^2" → "m2") so the eGFR
       // "/1.73m2", "/1.73 m²" and "/1.73m^2" spellings all normalize alike.
       .replace(/m\^([23])/g, "m$1")
@@ -108,6 +109,8 @@ export function unitsEquivalent(a: string, b: string): boolean {
 
 /** Generic scale factors between unit pairs (same analyte mass basis). */
 const GENERIC_FACTORS: Record<string, number> = {
+  "mmol/l->µmol/l": 1000,
+  "µmol/l->mmol/l": 0.001,
   "g/dl->g/l": 10,
   "g/l->g/dl": 0.1,
   "mg/dl->mg/l": 10,

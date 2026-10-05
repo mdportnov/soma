@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Vaccine reminders can be hidden.** Each due or overdue booster, late dose
+  and lapsed certificate on the Vaccines page has a Hide button. A hidden
+  reminder disappears from the page, the dashboard count, the notification bell
+  and the assistant, and stays listed under "Hidden reminders" to be shown
+  again. The choice is stored on the profile, so it survives a backup and the
+  MCP server sees it too. It covers that occurrence only: once a newer dose
+  lapses, the reminder comes back.
+- **Vaccines in the notification feed.** Overdue boosters, the next dose of a
+  started course and lapsed certificates appear in the bell, with their own
+  mute switch. Dismissing one there hides it everywhere.
+- **Courses started in adulthood are tracked to completion.** HPV (0, 2, 6
+  months), rabies pre-exposure (day 0 and 7) and adult hepatitis B (0, 1, 6
+  months) time the remaining doses from the first recorded one, so a started
+  course shows what is next and flags a late dose.
+
+### Fixed
+
+- **A fresh Td booster still showed DTP as overdue.** The booster clock ran on
+  birthday cycles (18 → 28 → 38 years) instead of from the last shot, so a Td
+  given in July 2026 left the booster "due since May 2019"; the assistant
+  quoted that date back. Boosters are now timed from the most recent shot.
+- Every old dose with a past expiry was listed as "Expired" even after a later
+  dose renewed it. Superseded doses are marked "Renewed" and no longer count as
+  something to act on, on the page, the timeline, the emergency card and in
+  the MCP server.
+- Vaccine names were matched by substring: "Ltd" in a manufacturer made
+  typhoid, yellow fever and HPV shots count as tetanus, "mRNA" counted as
+  rubella and Japanese encephalitis as tick-borne. Matching is by whole word
+  now.
+- The assistant could not find a Td dose when asked about Tdap or DTP, and
+  asked for dates already on record. Vaccine lookups match by antigen, every
+  record carries the diseases it covers, its country and the printed product
+  name, and the context lists the latest shot per antigen.
+- An annual flu shot got a one-year "certificate" expiry that later showed up
+  as a lapse on top of the reminder.
+- Importing a combination vaccine (MMR, Pentaxim) stored it as a single
+  antigen, losing the others it protects against.
+
 ## [0.10.0] — 2026-10-05
 
 ### Added

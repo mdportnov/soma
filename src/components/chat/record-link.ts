@@ -11,6 +11,9 @@ const ALIASES: Record<string, EntityType> = {
   retest_schedule: "retest",
   imaging_record: "imaging",
   symptom_log: "symptom",
+  weight: "weight_log",
+  blood_pressure: "bp_log",
+  lifestyle: "lifestyle_log",
 };
 
 /** The palette's entity type for an agent ref — drives the `search.types.*` label. */

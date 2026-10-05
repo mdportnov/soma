@@ -110,6 +110,7 @@ export const INDEX_TOUCHING_WRITERS = [
   "deleteChatThread",
   "addChatMessage",
   "deleteChatMessage",
+  "deleteChatTurn",
 ] as const;
 
 export type IndexTouchingWriter = (typeof INDEX_TOUCHING_WRITERS)[number];
@@ -132,6 +133,8 @@ export const INDEX_NEUTRAL_WRITERS: Record<string, string> = {
   recordThreadRecords: "chat_thread_record is the citation footprint, not indexed",
   updateChatMessageStatus: "turn status only; the message text is unchanged",
   addChatToolEvent: "chat_tool_event is transcript plumbing, not indexed",
+  clearChatToolEvents: "chat_tool_event is transcript plumbing, not indexed",
+  supersedeOpenChangeSets: "chat_change_set is a draft, not an indexed record",
   createChatChangeSet: "change sets and their items are proposals, not records",
   setChangeItemSelected: "selection state of a proposed change",
   discardChatChangeSet: "change-set status only",

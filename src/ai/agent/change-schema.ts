@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DELETABLE_ENTITY_TYPES } from "./record-edits";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const optionalText = z.string().trim().min(1).nullable().optional();
@@ -246,6 +247,161 @@ const profileFacts = z.object({
   assertionType,
 });
 
+// Edits of existing rows: every field is optional (omitted = unchanged) and a
+// nullable one can be cleared with null. Fields map onto columns through
+// UPDATE_SPECS in record-edits.ts.
+const recordId = z.number().int().positive();
+const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+const updateMedication = z.object({
+  kind: z.literal("update_medication"),
+  medicationId: recordId,
+  name: z.string().trim().min(1).optional(),
+  medicationType: z.enum(["drug", "supplement"]).optional(),
+  doseAmount: z.number().finite().positive().nullable().optional(),
+  doseUnit: optionalText,
+  asNeeded: z.boolean().optional(),
+  startDate: isoDate.optional(),
+  endDate: isoDate.nullable().optional(),
+  purpose: optionalText,
+  assertionType,
+});
+
+const updateDiagnosis = z.object({
+  kind: z.literal("update_diagnosis"),
+  diagnosisId: recordId,
+  name: z.string().trim().min(1).optional(),
+  icdCode: optionalText,
+  date: isoDate.optional(),
+  status: z.enum(["active", "remission", "resolved"]).optional(),
+  resolvedDate: isoDate.nullable().optional(),
+  notes: optionalText,
+  assertionType,
+});
+
+const updateAllergy = z.object({
+  kind: z.literal("update_allergy"),
+  allergyId: recordId,
+  allergen: z.string().trim().min(1).optional(),
+  category: z.enum(["drug", "food", "environmental", "other"]).optional(),
+  severity: z.enum(["mild", "moderate", "severe", "anaphylactic"]).optional(),
+  reaction: optionalText,
+  onsetDate: isoDate.nullable().optional(),
+  status: z.enum(["active", "resolved"]).optional(),
+  notes: optionalText,
+  assertionType,
+});
+
+const updateVaccine = z.object({
+  kind: z.literal("update_vaccine"),
+  vaccineId: recordId,
+  vaccineName: z.string().trim().min(1).optional(),
+  date: isoDate.optional(),
+  doseNumber: z.number().int().positive().nullable().optional(),
+  manufacturer: optionalText,
+  batchNumber: optionalText,
+  expiresAt: isoDate.nullable().optional(),
+  administeredBy: optionalText,
+  country: optionalText,
+  notes: optionalText,
+  assertionType,
+});
+
+const updateVisit = z.object({
+  kind: z.literal("update_visit"),
+  visitId: recordId,
+  date: isoDate.optional(),
+  doctorName: optionalText,
+  clinic: optionalText,
+  city: optionalText,
+  country: optionalText,
+  specialty: optionalText,
+  notes: optionalText,
+  assertionType,
+});
+
+const updateImaging = z.object({
+  kind: z.literal("update_imaging_record"),
+  imagingId: recordId,
+  date: isoDate.optional(),
+  modalityType: z.enum(["xray", "ct", "mri", "ultrasound", "pet", "other"]).optional(),
+  bodyArea: z.string().trim().min(1).optional(),
+  findings: optionalText,
+  radiologistName: optionalText,
+  clinic: optionalText,
+  city: optionalText,
+  country: optionalText,
+  assertionType,
+});
+
+const updateHealthNote = z.object({
+  kind: z.literal("update_health_note"),
+  healthNoteId: recordId,
+  category: z
+    .enum(["general", "concern", "symptom_pattern", "treatment", "history", "other"])
+    .optional(),
+  title: optionalText,
+  summary: optionalText,
+  originalText: z.string().trim().min(1).optional(),
+  date: isoDate.nullable().optional(),
+  datePrecision: z.enum(["day", "month", "year", "approximate", "range", "unknown"]).optional(),
+  dateRaw: optionalText,
+  tags: z.array(z.string().trim().min(1)).max(12).optional(),
+  assertionType,
+});
+
+const updateSymptom = z.object({
+  kind: z.literal("update_symptom"),
+  symptomId: recordId,
+  symptomName: z.string().trim().min(1).optional(),
+  severity: z.number().int().min(1).max(10).optional(),
+  date: isoDate.optional(),
+  time: clockTime.nullable().optional(),
+  notes: optionalText,
+  assertionType,
+});
+
+const updateWeight = z.object({
+  kind: z.literal("update_weight"),
+  weightId: recordId,
+  weightKg: z.number().finite().positive().optional(),
+  date: isoDate.optional(),
+  notes: optionalText,
+  assertionType,
+});
+
+const updateBloodPressure = z.object({
+  kind: z.literal("update_blood_pressure"),
+  bloodPressureId: recordId,
+  systolic: z.number().int().min(40).max(300).optional(),
+  diastolic: z.number().int().min(20).max(200).optional(),
+  heartRateBpm: z.number().int().min(20).max(260).nullable().optional(),
+  date: isoDate.optional(),
+  time: clockTime.nullable().optional(),
+  position: z.enum(["sitting", "standing", "supine"]).nullable().optional(),
+  armSide: z.enum(["left", "right"]).nullable().optional(),
+  notes: optionalText,
+  assertionType,
+});
+
+const updateRetestSchedule = z.object({
+  kind: z.literal("update_retest_schedule"),
+  retestScheduleId: recordId,
+  label: z.string().trim().min(1).optional(),
+  intervalMonths: z.number().int().min(1).max(120).optional(),
+  lastTestedDate: isoDate.nullable().optional(),
+  notes: optionalText,
+  active: z.boolean().optional(),
+  assertionType,
+});
+
+const deleteRecord = z.object({
+  kind: z.literal("delete_record"),
+  entityType: z.enum(DELETABLE_ENTITY_TYPES),
+  entityId: recordId,
+  reason: z.string().trim().min(1),
+});
+
 export const healthChangeSchema = z.discriminatedUnion("kind", [
   medication,
   endMedication,
@@ -265,6 +421,18 @@ export const healthChangeSchema = z.discriminatedUnion("kind", [
   vaccine,
   retestSchedule,
   profileFacts,
+  updateMedication,
+  updateDiagnosis,
+  updateAllergy,
+  updateVaccine,
+  updateVisit,
+  updateImaging,
+  updateHealthNote,
+  updateSymptom,
+  updateWeight,
+  updateBloodPressure,
+  updateRetestSchedule,
+  deleteRecord,
 ]);
 
 export const healthChangeSetSchema = z.object({

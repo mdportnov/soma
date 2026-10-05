@@ -20,9 +20,13 @@ import {
   listHealthNotes,
   listLifestyleLog,
   listMedications,
+  listImagingRecords,
+  listPanels,
+  listRetestSchedules,
   listSymptomNames,
   listSymptomLog,
   listVaccines,
+  listVisits,
   listWeightLog,
 } from "@/db/repos";
 import { ensureSearchIndex, searchRecords } from "@/db/search";
@@ -32,6 +36,7 @@ import { localIsoDate } from "@/lib/clinical-date";
 import { buildChangesSince, buildHealthReview, medicationsCovering } from "./review";
 import { loadReviewInput } from "./review-data";
 import { buildVaccinationStatus } from "./vaccination";
+import { DELETABLE_ENTITY_TYPES, type DeletableEntityType } from "./record-edits";
 
 const objectSchema = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: "object",
@@ -67,6 +72,22 @@ export const agentToolDefinitions: AIToolDefinition[] = [
         entityId: { type: "integer", minimum: 1 },
       },
       ["entityType", "entityId"],
+    ),
+  },
+  {
+    name: "list_records",
+    description:
+      "Lists stored records of one type, newest first, each with its id and ref. Use it to find the exact record (and its id) before drafting an update or delete, e.g. the last weight entry, a vaccine dose, a visit or a lab panel.",
+    inputSchema: objectSchema(
+      {
+        entityType: { type: "string", enum: [...DELETABLE_ENTITY_TYPES] },
+        query: {
+          type: "string",
+          description: "Optional name filter (medication, diagnosis, allergen, vaccine, …).",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 100 },
+      },
+      ["entityType"],
     ),
   },
   {
@@ -151,7 +172,7 @@ export const agentToolDefinitions: AIToolDefinition[] = [
   {
     name: "draft_health_changes",
     description:
-      "Drafts explicit health facts for user review. This never writes medical records. Use only when the user provided or corrected persistent data. Do not infer missing dates, types, severity, status, units or diagnoses; use create_health_note when a fact cannot safely fit a typed record.",
+      "The only way to change the record: adds, edits (update_* kinds, by record id) and deletes (delete_record) records. The user sees the draft as a card with a one-click Save; nothing is written before that. Use it whenever the user provides, corrects or asks to remove persistent data. Read the target record first to get its id. Do not infer missing dates, types, severity, status, units or diagnoses; use create_health_note when a fact cannot safely fit a typed record.",
     inputSchema: healthChangeSetJsonSchema(),
   },
 ];
@@ -176,6 +197,20 @@ export async function executeReadTool(
   }
   if (name === "get_record") {
     return getRecord(profileId, textArg(args.entityType, "entityType"), intArg(args.entityId));
+  }
+  if (name === "list_records") {
+    const entityType = textArg(args.entityType, "entityType");
+    if (!(DELETABLE_ENTITY_TYPES as readonly string[]).includes(entityType)) {
+      throw new Error(`Unsupported record type: ${entityType}`);
+    }
+    const query = optionalTextArg(args.query);
+    const limit = intArg(args.limit, 30, 1, 100);
+    const rows = await listRecordsOfType(profileId, entityType as DeletableEntityType);
+    return {
+      records: filterNamed(rows, (row) => recordName(row), query)
+        .slice(0, limit)
+        .map((row) => ({ ...row, ref: `${entityType}:${row.id}` })),
+    };
   }
   if (name === "get_medication_history") {
     const query = optionalTextArg(args.query);
@@ -293,6 +328,49 @@ export async function executeReadTool(
     return { records: (await listLifestyleLog(profileId)).slice(0, limit) };
   }
   throw new Error(`Unsupported tool: ${name}`);
+}
+
+async function listRecordsOfType(
+  profileId: number,
+  entityType: DeletableEntityType,
+): Promise<Array<Record<string, unknown> & { id: number }>> {
+  switch (entityType) {
+    case "medication":
+      return listMedications(profileId);
+    case "diagnosis":
+      return listDiagnoses(profileId);
+    case "allergy":
+      return listAllergies(profileId);
+    case "vaccine":
+      return (await listVaccines(profileId)).sort((a, b) => b.date.localeCompare(a.date));
+    case "visit":
+      return listVisits(profileId);
+    case "imaging":
+      return listImagingRecords(profileId);
+    case "health_note":
+      return listHealthNotes(profileId);
+    case "symptom":
+      return listSymptomLog(profileId);
+    case "weight":
+      return listWeightLog(profileId);
+    case "blood_pressure":
+      return listBpLog(profileId);
+    case "lifestyle":
+      return listLifestyleLog(profileId);
+    case "retest_schedule":
+      return listRetestSchedules(profileId);
+    case "lab_panel":
+      return listPanels(profileId);
+  }
+}
+
+function recordName(row: Record<string, unknown>): string {
+  for (const key of ["name", "vaccineName", "allergen", "symptomName", "label", "title"]) {
+    if (typeof row[key] === "string") return row[key];
+  }
+  return [row.doctorName, row.clinic, row.labName, row.bodyArea]
+    .filter((value) => typeof value === "string")
+    .join(" ");
 }
 
 async function getRecord(

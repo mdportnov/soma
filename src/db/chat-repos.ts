@@ -14,6 +14,7 @@ import {
   type ChatMessageRecord,
   type ChatThread,
   type ChatThreadRecord,
+  type ChatToolEvent,
 } from "./schema";
 import { deriveThreadTitle, escapeLike, messagePreview, type RecordRef } from "./chat-threads";
 
@@ -332,7 +333,8 @@ export async function getChatThreadMeta(threadId: number): Promise<ChatThreadMet
     const n = Number(row.count);
     if (row.status === "committed") changeSets.committed += n;
     else if (row.status === "ready" || row.status === "draft") changeSets.pending += n;
-    else if (row.status === "discarded" || row.status === "superseded") changeSets.discarded += n;
+    else if (row.status === "discarded" || row.status === "superseded" || row.status === "reverted")
+      changeSets.discarded += n;
     else if (row.status === "failed") changeSets.failed += n;
   }
   return {
@@ -511,6 +513,71 @@ export async function addChatToolEvent(data: {
   await db.insert(chatToolEvent).values(data);
 }
 
+/**
+ * Removes the last turn of a thread — the question and everything after it —
+ * so it can be asked again in other words. Drafts it left are dropped with it;
+ * a turn whose changes were saved is history and stays (`false` is returned).
+ */
+export async function deleteChatTurn(threadId: number, userMessageId: number): Promise<boolean> {
+  const saved = await db
+    .select({ id: chatChangeSet.id })
+    .from(chatChangeSet)
+    .where(
+      and(
+        eq(chatChangeSet.threadId, threadId),
+        sql`${chatChangeSet.sourceMessageId} >= ${userMessageId}`,
+        eq(chatChangeSet.status, "committed"),
+      ),
+    );
+  if (saved.length) return false;
+  markSearchIndexStale();
+  await executeTransaction([
+    {
+      sql: "DELETE FROM chat_change_item WHERE change_set_id IN (SELECT id FROM chat_change_set WHERE thread_id = ? AND source_message_id >= ?)",
+      params: [threadId, userMessageId],
+    },
+    {
+      sql: "DELETE FROM chat_change_set WHERE thread_id = ? AND source_message_id >= ?",
+      params: [threadId, userMessageId],
+    },
+    {
+      sql: "DELETE FROM chat_tool_event WHERE message_id IN (SELECT id FROM chat_message WHERE thread_id = ? AND id >= ?)",
+      params: [threadId, userMessageId],
+    },
+    {
+      sql: "DELETE FROM chat_message WHERE thread_id = ? AND id >= ?",
+      params: [threadId, userMessageId],
+    },
+  ]);
+  return true;
+}
+
+/**
+ * A turn's tool calls hang off the user message that started it. A retry or a
+ * regenerate re-runs that same turn, so the previous attempt's calls are
+ * cleared first — the transcript shows what produced the answer on screen.
+ */
+export async function clearChatToolEvents(messageId: number): Promise<void> {
+  await db.delete(chatToolEvent).where(eq(chatToolEvent.messageId, messageId));
+}
+
+/** Every tool call of a thread in call order. No join: see getPanelResults on positional mapping. */
+export async function listThreadToolEvents(threadId: number): Promise<ChatToolEvent[]> {
+  return db
+    .select()
+    .from(chatToolEvent)
+    .where(
+      inArray(
+        chatToolEvent.messageId,
+        db
+          .select({ id: chatMessage.id })
+          .from(chatMessage)
+          .where(eq(chatMessage.threadId, threadId)),
+      ),
+    )
+    .orderBy(asc(chatToolEvent.id));
+}
+
 // ── change sets ────────────────────────────────────────────────────────────
 
 export async function createChatChangeSet(data: {
@@ -605,6 +672,23 @@ export async function getChatChangeSet(id: number): Promise<ChangeSetWithItems |
 
 export async function setChangeItemSelected(id: number, selected: boolean): Promise<void> {
   await db.update(chatChangeItem).set({ selected }).where(eq(chatChangeItem.id, id));
+}
+
+/**
+ * Retires the drafts a turn left open when that turn produces a newer one — a
+ * corrected draft in the same turn, or a retry/regenerate of the question.
+ * Saved sets are history and are never touched.
+ */
+export async function supersedeOpenChangeSets(sourceMessageId: number): Promise<void> {
+  await db
+    .update(chatChangeSet)
+    .set({ status: "superseded" })
+    .where(
+      and(
+        eq(chatChangeSet.sourceMessageId, sourceMessageId),
+        inArray(chatChangeSet.status, ["draft", "ready", "failed"]),
+      ),
+    );
 }
 
 export async function discardChatChangeSet(id: number): Promise<void> {

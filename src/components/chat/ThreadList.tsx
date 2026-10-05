@@ -187,18 +187,6 @@ export function ThreadList(props: ThreadListProps) {
     const blocked = props.busy && !current;
     const renaming = renamingId === thread.id;
     const badges: React.ReactNode[] = [];
-    if (thread.lastModelId) {
-      badges.push(
-        <Badge
-          key="model"
-          variant="secondary"
-          className="max-w-32 truncate"
-          title={thread.lastModelId}
-        >
-          {thread.lastModelId}
-        </Badge>,
-      );
-    }
     const records = thread.citedRecords + thread.changedRecords;
     if (records > 0) {
       badges.push(

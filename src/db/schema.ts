@@ -214,7 +214,7 @@ export const chatChangeSet = sqliteTable(
     summary: text("summary").notNull(),
     revision: integer("revision").notNull().default(1),
     status: text("status", {
-      enum: ["draft", "ready", "committed", "failed", "discarded", "superseded"],
+      enum: ["draft", "ready", "committed", "failed", "discarded", "superseded", "reverted"],
     })
       .notNull()
       .default("draft"),

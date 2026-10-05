@@ -784,7 +784,7 @@ export async function deleteFinding(id: number): Promise<void> {
  * deleted — once the rows are gone their file paths are unrecoverable, so the
  * list has to be taken first and the files removed afterwards.
  */
-async function collectLinkedAttachments(
+export async function collectLinkedAttachments(
   entityType: AttachmentEntityType,
   entityId: number,
 ): Promise<{ id: number; filePath: string }[]> {
@@ -806,7 +806,7 @@ async function collectLinkedAttachments(
  * file that is still in use would be exactly the unrecoverable loss all of this
  * is meant to prevent.
  */
-async function removeDeletedAttachmentFiles(
+export async function removeDeletedAttachmentFiles(
   candidates: { id: number; filePath: string }[],
 ): Promise<void> {
   if (!candidates.length) return;

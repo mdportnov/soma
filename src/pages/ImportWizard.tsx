@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   FileText,
@@ -74,6 +74,8 @@ export function ImportWizard() {
   const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // A file dropped onto the chat arrives already chosen; the type is still picked here.
+  const droppedPath = (useLocation().state as { filePath?: string } | null)?.filePath ?? null;
 
   // A `?type=` query param preselects the document type and skips the picker,
   // so a section page (e.g. Vaccines) can deep-link straight into its own import.
@@ -100,7 +102,7 @@ export function ImportWizard() {
   }, [profileId]);
 
   const [docType, setDocType] = React.useState<DocType | null>(preselect);
-  const [filePath, setFilePath] = React.useState<string | null>(null);
+  const [filePath, setFilePath] = React.useState<string | null>(droppedPath);
   const [step, setStep] = React.useState<Step>(
     preselect ? { name: "pick" } : { name: "selectType" },
   );

@@ -197,7 +197,9 @@ describe("agentToolDefinitions", () => {
           key === "entityId"
             ? 1
             : key === "entityType"
-              ? "biomarker"
+              ? tool.name === "list_records"
+                ? "weight"
+                : "biomarker"
               : key === "kind"
                 ? "weight"
                 : "ferritin";

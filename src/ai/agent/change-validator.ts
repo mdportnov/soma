@@ -4,9 +4,14 @@ import {
   type HealthChangeSetDraft,
 } from "./change-schema";
 import {
+  countMedicationLogEntries,
+  getHealthNote,
   getLifestyleByDate,
   getMedication,
+  getPanel,
+  getPanelResults,
   getProfile,
+  listLifestyleLog,
   listMedicationLog,
   listAllergies,
   listBpLog,
@@ -21,6 +26,14 @@ import {
 } from "@/db/repos";
 import { normalizeLabel } from "@/lib/fuzzy";
 import { localIsoDate } from "@/lib/clinical-date";
+import {
+  UPDATE_SPECS,
+  changedFields,
+  isUpdateKind,
+  mergedRow,
+  type DeletableEntityType,
+  type UpdateKind,
+} from "./record-edits";
 
 export type ValidatedChangeItem = {
   operation: "create" | "update" | "end" | "merge" | "delete";
@@ -71,6 +84,29 @@ export async function validateHealthChangeSet(
     listRetestSchedules(profileId),
     getProfile(profileId),
   ]);
+  const loadRow = async (
+    entityType: string,
+    id: number,
+  ): Promise<Record<string, unknown> | null> => {
+    const fromList = <T extends { id: number }>(rows: T[]) =>
+      rows.find((row) => row.id === id) ?? null;
+    const owned = <T extends { profileId: number }>(row: T | null) =>
+      row && row.profileId === profileId ? row : null;
+    if (entityType === "medication") return owned(await getMedication(id));
+    if (entityType === "diagnosis") return fromList(diagnoses);
+    if (entityType === "allergy") return fromList(allergies);
+    if (entityType === "vaccine") return fromList(vaccines);
+    if (entityType === "visit") return fromList(visits);
+    if (entityType === "imaging") return fromList(imaging);
+    if (entityType === "health_note") return owned(await getHealthNote(id));
+    if (entityType === "symptom") return fromList(symptoms);
+    if (entityType === "weight") return fromList(weights);
+    if (entityType === "blood_pressure") return fromList(bloodPressures);
+    if (entityType === "retest_schedule") return fromList(retestSchedules);
+    if (entityType === "lifestyle") return fromList(await listLifestyleLog(profileId));
+    if (entityType === "lab_panel") return owned(await getPanel(id));
+    return null;
+  };
   const items: ValidatedChangeItem[] = [];
   for (const change of parsed.items) {
     const base = baseItem(change);
@@ -355,6 +391,20 @@ export async function validateHealthChangeSet(
       }
       if (!currentProfile) base.errorsJson.push("The active profile was not found.");
     }
+    if (isUpdateKind(change.kind)) {
+      await validateUpdate(change.kind, change as Record<string, unknown>, base, loadRow);
+    }
+    if (change.kind === "delete_record") {
+      base.entityType = change.entityType;
+      base.entityId = change.entityId;
+      const existing = await loadRow(change.entityType, change.entityId);
+      if (!existing) {
+        base.errorsJson.push("The record to delete was not found in this profile.");
+      } else {
+        base.beforeJson = { ...existing };
+        await describeDeleteImpact(change.entityType, existing, base);
+      }
+    }
     base.status = base.errorsJson.length ? "blocked" : "ready";
     items.push(base);
   }
@@ -384,14 +434,28 @@ export async function validateHealthChangeSet(
       items[index].errorsJson.push(`Referenced visit ${visitRef} must appear before this item.`);
     }
   }
+  // Two items aimed at one stored record would be checked against the same
+  // "before" and could neither be validated nor undone as a pair.
+  const targeted = new Map<string, number>();
+  items.forEach((item, index) => {
+    if (item.operation === "create" || item.entityId == null) return;
+    const key = `${item.entityType}:${item.entityId}`;
+    if (targeted.has(key)) {
+      item.errorsJson.push("This record is already changed by another item of this draft.");
+    } else {
+      targeted.set(key, index);
+    }
+  });
   for (const item of items) item.status = item.errorsJson.length ? "blocked" : "ready";
   return {
     summary: parsed.summary,
-    riskLevel: items.some((item) =>
-      ["medication", "diagnosis", "allergy", "vaccine", "profile"].includes(item.entityType),
-    )
-      ? "elevated"
-      : "standard",
+    riskLevel: items.some((item) => item.operation === "delete")
+      ? "destructive"
+      : items.some((item) =>
+            ["medication", "diagnosis", "allergy", "vaccine", "profile"].includes(item.entityType),
+          )
+        ? "elevated"
+        : "standard",
     items,
   };
 }
@@ -419,6 +483,18 @@ function baseItem(change: HealthChange): ValidatedChangeItem {
     create_vaccine: { operation: "create", entityType: "vaccine" },
     create_retest_schedule: { operation: "create", entityType: "retest_schedule" },
     update_profile_fact: { operation: "update", entityType: "profile" },
+    update_medication: { operation: "update", entityType: "medication" },
+    update_diagnosis: { operation: "update", entityType: "diagnosis" },
+    update_allergy: { operation: "update", entityType: "allergy" },
+    update_vaccine: { operation: "update", entityType: "vaccine" },
+    update_visit: { operation: "update", entityType: "visit" },
+    update_imaging_record: { operation: "update", entityType: "imaging" },
+    update_health_note: { operation: "update", entityType: "health_note" },
+    update_symptom: { operation: "update", entityType: "symptom" },
+    update_weight: { operation: "update", entityType: "weight" },
+    update_blood_pressure: { operation: "update", entityType: "blood_pressure" },
+    update_retest_schedule: { operation: "update", entityType: "retest_schedule" },
+    delete_record: { operation: "delete", entityType: "record" },
   };
   return {
     ...map[change.kind],
@@ -429,6 +505,92 @@ function baseItem(change: HealthChange): ValidatedChangeItem {
     errorsJson: [],
     candidateMatchesJson: [],
   };
+}
+
+/**
+ * An edit is checked on the row it would produce, not on the patch alone: a
+ * new end date is only wrong relative to the start date already stored.
+ */
+async function validateUpdate(
+  kind: UpdateKind,
+  change: Record<string, unknown>,
+  base: ValidatedChangeItem,
+  loadRow: (entityType: string, id: number) => Promise<Record<string, unknown> | null>,
+): Promise<void> {
+  const spec = UPDATE_SPECS[kind];
+  const existing = await loadRow(spec.entityType, change[spec.idKey] as number);
+  if (!existing) {
+    base.errorsJson.push("The record to update was not found in this profile.");
+    return;
+  }
+  base.entityId = existing.id as number;
+  base.beforeJson = { ...existing };
+  if (!changedFields(kind, existing, change).length) {
+    base.errorsJson.push("No changes: the record already has these values.");
+    return;
+  }
+  const after = mergedRow(kind, existing, change);
+  const before = (key: string, a: unknown, b: unknown) =>
+    typeof a === "string" && typeof b === "string" && a < b ? key : null;
+  if (kind === "update_medication") {
+    if ((after.doseAmount == null) !== (after.doseUnit == null)) {
+      base.errorsJson.push("Medication dose amount and unit must be provided together.");
+    }
+    if (before("endDate", after.endDate, after.startDate)) {
+      base.errorsJson.push("Medication end date is before its start date.");
+    }
+  }
+  if (kind === "update_diagnosis") {
+    if (after.status !== "active" && !after.resolvedDate) {
+      base.errorsJson.push("A remission or resolution date is required for an inactive diagnosis.");
+    }
+    if (after.status === "active" && after.resolvedDate) {
+      base.errorsJson.push("An active diagnosis cannot keep a resolution date; set it to null.");
+    }
+    if (before("resolvedDate", after.resolvedDate, after.date)) {
+      base.errorsJson.push("Diagnosis resolution date is before the diagnosis date.");
+    }
+  }
+  if (kind === "update_allergy" && existing.severity === "anaphylactic") {
+    if (after.severity !== "anaphylactic") {
+      base.warningsJson.push("This lowers the severity of an anaphylactic allergy.");
+    }
+  }
+  if (kind === "update_vaccine" && before("expiresAt", after.expiresAt, after.date)) {
+    base.errorsJson.push("Vaccine expiry is before the administration date.");
+  }
+  if (kind === "update_blood_pressure") {
+    if ((after.systolic as number) <= (after.diastolic as number)) {
+      base.errorsJson.push("Systolic pressure must be higher than diastolic pressure.");
+    }
+  }
+}
+
+async function describeDeleteImpact(
+  entityType: DeletableEntityType,
+  existing: Record<string, unknown>,
+  base: ValidatedChangeItem,
+): Promise<void> {
+  const id = existing.id as number;
+  if (entityType === "allergy" && existing.severity === "anaphylactic") {
+    base.errorsJson.push(
+      "An anaphylactic allergy cannot be deleted; mark it resolved instead (update_allergy).",
+    );
+  }
+  if (entityType === "medication") {
+    const logs = await countMedicationLogEntries(id);
+    if (logs) base.warningsJson.push(`Its ${logs} intake log entries are deleted with it.`);
+  }
+  if (entityType === "visit") {
+    base.warningsJson.push(
+      "Diagnoses, prescriptions, symptoms and imaging linked to this visit are kept but unlinked.",
+    );
+  }
+  if (entityType === "lab_panel") {
+    const results = await getPanelResults(id);
+    base.warningsJson.push(`All ${results.length} results of this lab panel are deleted with it.`);
+  }
+  base.warningsJson.push("Deleting cannot be undone from the chat.");
 }
 
 function validateDates(change: HealthChange, errors: string[]): void {

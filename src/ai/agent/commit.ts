@@ -10,9 +10,20 @@ import {
   type TransactionStatement,
 } from "@/db/transaction";
 import { rebuildSearchIndex } from "@/db/search";
-import { recomputeFlagsForProfile } from "@/db/repos";
+import {
+  collectLinkedAttachments,
+  recomputeFlagsForProfile,
+  removeDeletedAttachmentFiles,
+} from "@/db/repos";
+import type { AttachmentEntityType } from "@/db/tx-plans";
 import { validateHealthChangeSet, type ValidatedChangeItem } from "./change-validator";
 import type { HealthChange } from "./change-schema";
+import {
+  DELETE_ATTACHMENT_TYPES,
+  deleteStatements,
+  isUpdateKind,
+  updateStatement,
+} from "./record-edits";
 
 export type CommittedRecord = { entityType: string; entityId: number };
 
@@ -45,6 +56,19 @@ export async function commitHealthChangeSet(
       throw new Error("A source record changed after this draft was created. Review it again.");
     }
   }
+  // Document files of deleted records are listed before the rows go and
+  // removed only after the commit, exactly like the screens' own deletes.
+  const attachmentFiles: { id: number; filePath: string }[] = [];
+  for (const item of revalidated.items) {
+    const change = item.payloadJson as HealthChange;
+    if (change.kind !== "delete_record") continue;
+    const type = DELETE_ATTACHMENT_TYPES[change.entityType];
+    if (type) {
+      attachmentFiles.push(
+        ...(await collectLinkedAttachments(type as AttachmentEntityType, change.entityId)),
+      );
+    }
+  }
   const statements: TransactionStatement[] = [];
   const records: Array<{ entityType: string; entityId: number | { statement: number } }> = [];
   const draftRefs = new Map<string, TransactionParam>();
@@ -58,14 +82,16 @@ export async function commitHealthChangeSet(
     if (change.kind === "create_visit" && change.draftRef) {
       draftRefs.set(change.draftRef, entityParam);
     }
-    appendProvenance(statements, {
-      profileId,
-      entityType: item.entityType,
-      entityId: entityParam,
-      sourceMessageId: sourceMessage.id,
-      sourceText: sourceMessage.content,
-      assertionType: assertion(change),
-    });
+    if (change.kind !== "delete_record") {
+      appendProvenance(statements, {
+        profileId,
+        entityType: item.entityType,
+        entityId: entityParam,
+        sourceMessageId: sourceMessage.id,
+        sourceText: sourceMessage.content,
+        assertionType: assertion(change),
+      });
+    }
     if (change.kind === "change_medication_regimen") {
       appendProvenance(statements, {
         profileId,
@@ -142,6 +168,11 @@ export async function commitHealthChangeSet(
   } catch (error) {
     await markChatChangeSetFailed(set.id);
     throw error;
+  }
+  try {
+    await removeDeletedAttachmentFiles(attachmentFiles);
+  } catch (error) {
+    console.error("Failed to remove documents of deleted records", error);
   }
   try {
     if (
@@ -463,6 +494,15 @@ function appendDomainStatement(
       ],
     });
   }
+  if (isUpdateKind(change.kind)) {
+    const update = updateStatement(change.kind, profileId, change as Record<string, unknown>);
+    statements.push(update.statement);
+    return update.entityId;
+  }
+  if (change.kind === "delete_record") {
+    statements.push(...deleteStatements(change.entityType, change.entityId, profileId));
+    return change.entityId;
+  }
   if (change.kind === "update_profile_fact") {
     const fields = profileFields(change.fields);
     statements.push({
@@ -475,7 +515,7 @@ function appendDomainStatement(
   throw new Error("Unsupported health change");
 }
 
-function lifestyleFields(
+export function lifestyleFields(
   change: Extract<HealthChange, { kind: "merge_lifestyle_day" }>,
 ): [string, TransactionParam][] {
   const mapping: Array<[keyof typeof change, string]> = [
@@ -494,7 +534,7 @@ function lifestyleFields(
   );
 }
 
-function profileFields(
+export function profileFields(
   fields: Extract<HealthChange, { kind: "update_profile_fact" }>["fields"],
 ): [string, TransactionParam][] {
   const mapping: Array<[keyof typeof fields, string]> = [
@@ -608,7 +648,7 @@ function lastId(statement: number): { $lastInsertId: number } {
   return { $lastInsertId: statement };
 }
 
-function dayBefore(date: string): string {
+export function dayBefore(date: string): string {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() - 1);
   return value.toISOString().slice(0, 10);

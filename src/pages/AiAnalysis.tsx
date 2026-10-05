@@ -1,5 +1,6 @@
 import * as React from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   AlertTriangle,
   ArrowDown,
@@ -10,17 +11,29 @@ import {
   Info,
   Loader2,
   PanelLeft,
+  Pencil,
   Plus,
   RefreshCw,
   Send,
   Settings as SettingsIcon,
   Sparkles,
   Square,
+  X,
 } from "lucide-react";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { staggerDelay } from "@/lib/motion";
-import { effectiveModelId, getConfiguredProvider, loadAiSettings } from "@/ai";
+import {
+  buildProvider,
+  effectiveModelId,
+  getConfiguredProvider,
+  loadAiSettings,
+  modelRegistry,
+  saveAiSettings,
+} from "@/ai";
+import { getApiKey } from "@/ai/keystore";
+import type { AIProvider } from "@/ai/types";
+import { revertHealthChangeSet } from "@/ai/agent/revert";
 import { buildHealthContext } from "@/ai/context";
 import { runHealthAgentTurn } from "@/ai/agent/engine";
 import { commitHealthChangeSet } from "@/ai/agent/commit";
@@ -30,25 +43,34 @@ import {
   countChatMessages,
   createChatThread,
   deleteChatMessage,
+  deleteChatTurn,
   discardChatChangeSet,
   getChatThread,
   getOrCreateChatThread,
   listChatMessages,
   listChatThreads,
   listThreadChangeSets,
+  listThreadToolEvents,
   setChangeItemSelected,
   type ChangeSetWithItems,
 } from "@/db/chat-repos";
-import type { ChatMessageRecord, ChatThread } from "@/db/schema";
+import type { ChatMessageRecord, ChatThread, ChatToolEvent } from "@/db/schema";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { useToast } from "@/components/app/Toast";
-import { AiDisclaimer } from "@/components/app/AiDisclaimer";
 import { aiErrorMessage } from "@/components/app/AiInterpretation";
 import { ChangeSetPanel } from "@/components/chat/ChangeSetPanel";
-import { AssistantContent } from "@/components/chat/AssistantContent";
+import {
+  AssistantContent,
+  contentAsText,
+  parseContentRefs,
+  type RecordTitles,
+} from "@/components/chat/AssistantContent";
+import { recordKey, resolveRecordTitles } from "@/components/chat/record-title";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { ThreadList } from "@/components/chat/ThreadList";
 import { ThreadDetails } from "@/components/chat/ThreadDetails";
+import { ToolCallList, toolCallFromEvent, type ToolCallView } from "@/components/chat/ToolCallList";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -66,6 +88,8 @@ const PANEL_PREF_KEY = "soma.assistant.threadPanel";
 /** Below this window width the thread panel starts collapsed (nav w-52 + panel w-64 + transcript). */
 const PANEL_AUTO_OPEN_WIDTH = 1200;
 const THREAD_PARAM = "thread";
+/** What the document importer reads; anything else dropped on the chat is ignored. */
+const IMPORTABLE = /\.(pdf|jpe?g|png|webp)$/i;
 
 function loadPanelPref(): boolean {
   try {
@@ -90,6 +114,7 @@ type ThreadView = {
   thread: ChatThread;
   messages: ChatMessageRecord[];
   changeSets: ChangeSetWithItems[];
+  toolEvents: ChatToolEvent[];
   total: number;
 };
 
@@ -118,6 +143,16 @@ export function AiAnalysis() {
   const [messages, setMessages] = React.useState<ChatMessageRecord[]>([]);
   const [totalMessages, setTotalMessages] = React.useState(0);
   const [changeSets, setChangeSets] = React.useState<ChangeSetWithItems[]>([]);
+  const [toolEvents, setToolEvents] = React.useState<ChatToolEvent[]>([]);
+  const [liveCalls, setLiveCalls] = React.useState<ToolCallView[]>([]);
+  const [streamText, setStreamText] = React.useState("");
+  const [titles, setTitles] = React.useState<RecordTitles>(() => new Map());
+  const [revertingSetId, setRevertingSetId] = React.useState<number | null>(null);
+  const [editingId, setEditingId] = React.useState<number | null>(null);
+  const [dragging, setDragging] = React.useState(false);
+  const [providerOverride, setProviderOverride] = React.useState<AIProvider | null>(null);
+  const [modelId, setModelId] = React.useState(() => effectiveModelId(loadAiSettings()));
+  const navigate = useNavigate();
   const [context, setContext] = React.useState("");
   const [input, setInput] = React.useState("");
   const [pending, setPending] = React.useState(false);
@@ -151,6 +186,11 @@ export function AiAnalysis() {
     if (boot) setContext(boot.context);
   }, [boot]);
 
+  // Ids are per database, names change on edit: re-resolve from scratch.
+  React.useEffect(() => {
+    setTitles(new Map());
+  }, [profileId]);
+
   const refreshList = () => setListVersion((n) => n + 1);
 
   /** Loads one thread's newest page and makes it current. */
@@ -161,13 +201,20 @@ export function AiAnalysis() {
       // A stale or foreign id in the URL falls back to the usual default thread.
       if (!thread || thread.profileId !== profileId)
         thread = await getOrCreateChatThread(profileId);
-      const [page, sets, total] = await Promise.all([
+      const [page, sets, events, total] = await Promise.all([
         listChatMessages(thread.id, MESSAGE_PAGE),
         listThreadChangeSets(thread.id),
+        listThreadToolEvents(thread.id),
         countChatMessages(thread.id),
       ]);
       if (run !== loadRun.current) return;
-      const view: ThreadView = { thread, messages: page, changeSets: sets, total };
+      const view: ThreadView = {
+        thread,
+        messages: page,
+        changeSets: sets,
+        toolEvents: events,
+        total,
+      };
       setThreadId(view.thread.id);
       setThreadTitle(
         view.thread.title ??
@@ -178,6 +225,8 @@ export function AiAnalysis() {
       setMessages(view.messages);
       setTotalMessages(view.total);
       setChangeSets(view.changeSets);
+      setToolEvents(view.toolEvents);
+      setEditingId(null);
       setError(null);
       atBottomRef.current = true;
       setShowJump(false);
@@ -202,7 +251,7 @@ export function AiAnalysis() {
   React.useEffect(() => {
     if (!atBottomRef.current) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, changeSets, pending]);
+  }, [messages, changeSets, pending, liveCalls]);
 
   // The composer grows with the draft up to the CSS max height, then scrolls —
   // a fixed two-row box hides everything a longer question says.
@@ -214,6 +263,55 @@ export function AiAnalysis() {
   }, [input]);
 
   React.useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Record names for the reference chips, resolved once per record and kept
+  // across turns; a freshly cited record is looked up when its answer lands.
+  React.useEffect(() => {
+    const refs = messages
+      .filter((message) => message.role === "assistant")
+      .flatMap((message) => parseContentRefs(message.content))
+      .filter((ref) => !titles.has(recordKey(ref)));
+    if (!refs.length) return;
+    let cancelled = false;
+    void resolveRecordTitles(refs, profileId, t).then((resolved) => {
+      if (cancelled) return;
+      setTitles((current) => new Map([...current, ...resolved]));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, titles, profileId, t]);
+
+  // A document dropped anywhere on the window opens the importer with it. The
+  // webview owns file drops (HTML drop events carry no paths in Tauri).
+  React.useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const payload = event.payload;
+        if (payload.type === "enter") {
+          setDragging(payload.paths.some((path) => IMPORTABLE.test(path)));
+        } else if (payload.type === "leave") {
+          setDragging(false);
+        } else if (payload.type === "drop") {
+          setDragging(false);
+          const path = payload.paths.find((candidate) => IMPORTABLE.test(candidate));
+          if (path && !pendingRef.current) navigate("/labs/import", { state: { filePath: path } });
+        }
+      })
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {
+        // Outside the Tauri shell (tests, plain browser) there is no webview to listen to.
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [navigate]);
 
   // Header popover: any click outside or Escape closes it.
   React.useEffect(() => {
@@ -320,11 +418,42 @@ export function AiAnalysis() {
     );
   }
 
-  const provider = boot.provider;
+  const provider = providerOverride ?? boot.provider;
+
+  const modelOptions = (() => {
+    const settings = loadAiSettings();
+    const entry = modelRegistry.find((item) => item.id === settings.providerId);
+    const options = (entry?.models ?? []).map((model) => ({ value: model.id, label: model.label }));
+    if (modelId && !options.some((option) => option.value === modelId)) {
+      options.unshift({ value: modelId, label: modelId });
+    }
+    return options;
+  })();
+
+  // Switching the model here is the same setting as in Settings → AI, applied
+  // to the next question without leaving the chat.
+  const changeModel = async (next: string) => {
+    if (next === modelId || pending) return;
+    const settings = loadAiSettings();
+    try {
+      const key = await getApiKey(settings.providerId);
+      if (!key) throw new Error("missing key");
+      saveAiSettings({ ...settings, modelId: next, customModel: "" });
+      setProviderOverride(buildProvider(settings.providerId, key, next));
+      setModelId(next);
+      toast.show(t("aiAnalysis.modelChanged", { model: next }));
+    } catch {
+      toast.error(t("errors.actionFailed"));
+    }
+  };
 
   const complete = async (history: ChatMessageRecord[], sourceMessage: ChatMessageRecord) => {
     setPending(true);
     setError(null);
+    setLiveCalls([]);
+    setStreamText("");
+    // The turn re-runs from this question: its earlier calls are replaced.
+    setToolEvents((current) => current.filter((event) => event.messageId !== sourceMessage.id));
     const controller = new AbortController();
     abortRef.current = controller;
     try {
@@ -336,6 +465,15 @@ export function AiAnalysis() {
         messages: history.slice(-MAX_AGENT_MESSAGES),
         language: lang,
         signal: controller.signal,
+        onText: setStreamText,
+        onToolActivity: (activity) =>
+          setLiveCalls((current) => {
+            const index = current.findIndex((call) => call.id === activity.id);
+            if (index === -1) return [...current, activity];
+            const next = [...current];
+            next[index] = activity;
+            return next;
+          }),
       });
       const settings = loadAiSettings();
       const assistant = await addChatMessage({
@@ -347,12 +485,24 @@ export function AiAnalysis() {
       });
       setMessages([...history, assistant]);
       setTotalMessages((n) => n + 1);
-      if (result.changeSet) setChangeSets((current) => [...current, result.changeSet!]);
     } catch (caught) {
       if (caught instanceof AIProviderError && caught.kind === "cancelled") return;
       setError(aiErrorMessage(caught, t));
     } finally {
       abortRef.current = null;
+      // A stopped or failed turn may already have drafted changes: show them.
+      try {
+        const [events, sets] = await Promise.all([
+          listThreadToolEvents(threadId),
+          listThreadChangeSets(threadId),
+        ]);
+        setToolEvents(events);
+        setChangeSets(sets);
+      } catch (caught) {
+        console.error("Failed to reload the turn's tool calls and drafts", caught);
+      }
+      setLiveCalls([]);
+      setStreamText("");
       setPending(false);
       refreshList();
     }
@@ -364,8 +514,22 @@ export function AiAnalysis() {
     // Sending is an explicit "I want to see what happens next".
     atBottomRef.current = true;
     setShowJump(false);
+    let base = messages;
+    if (editingId != null) {
+      // An edited question replaces its turn: the old question, its answer and
+      // any unsaved draft go, and the new wording is asked fresh.
+      if (!(await deleteChatTurn(threadId, editingId))) {
+        toast.error(t("aiAnalysis.editBlocked"));
+        return;
+      }
+      base = messages.filter((message) => message.id < editingId);
+      setTotalMessages((n) => n - (messages.length - base.length));
+      setChangeSets((current) => current.filter((set) => set.sourceMessageId < editingId));
+      setToolEvents((current) => current.filter((event) => event.messageId < editingId));
+      setEditingId(null);
+    }
     const user = await addChatMessage({ threadId, role: "user", content: trimmed });
-    const history = [...messages, user];
+    const history = [...base, user];
     setMessages(history);
     setTotalMessages((n) => n + 1);
     if (!threadTitle) setThreadTitle(deriveThreadTitle(trimmed));
@@ -375,6 +539,33 @@ export function AiAnalysis() {
   };
 
   const stop = () => abortRef.current?.abort();
+
+  const lastUser = [...messages].reverse().find((message) => message.role === "user");
+  const lastUserEditable =
+    lastUser != null &&
+    !changeSets.some((set) => set.sourceMessageId >= lastUser.id && set.status === "committed");
+
+  // Edit-and-resend works on the last question only: an earlier one has later
+  // turns built on its answer.
+  const startEdit = () => {
+    if (pending || !lastUser) return;
+    if (!lastUserEditable) {
+      toast.error(t("aiAnalysis.editBlocked"));
+      return;
+    }
+    setEditingId(lastUser.id);
+    setInput(lastUser.content);
+    window.setTimeout(() => {
+      const el = inputRef.current;
+      el?.focus();
+      el?.setSelectionRange(el.value.length, el.value.length);
+    }, 0);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setInput("");
+  };
 
   const retry = () => {
     if (pending) return;
@@ -386,7 +577,7 @@ export function AiAnalysis() {
   // Re-ask the question that produced this answer. The old answer is dropped
   // from the view first, so the thread never shows two replies to one question.
   const regenerate = (assistantId: number) => {
-    if (pending) return;
+    if (pending || assistantId !== lastAssistantId) return;
     const index = messages.findIndex((message) => message.id === assistantId);
     if (index < 1) return;
     const question = messages[index - 1];
@@ -403,7 +594,7 @@ export function AiAnalysis() {
 
   const copyMessage = async (message: ChatMessageRecord) => {
     try {
-      await navigator.clipboard.writeText(message.content);
+      await navigator.clipboard.writeText(contentAsText(message.content, titles, t));
       setCopiedId(message.id);
       window.setTimeout(() => setCopiedId((id) => (id === message.id ? null : id)), 1500);
       toast.show(t("aiAnalysis.copied"));
@@ -452,12 +643,34 @@ export function AiAnalysis() {
       ]);
       setChangeSets(sets);
       setContext(freshContext);
+      setTitles(new Map());
       refreshList();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setChangeSets(await listThreadChangeSets(threadId));
     } finally {
       setSavingSetId(null);
+    }
+  };
+
+  const revertChangeSet = async (setId: number) => {
+    setRevertingSetId(setId);
+    setError(null);
+    try {
+      await revertHealthChangeSet(profileId, setId);
+      const [sets, freshContext] = await Promise.all([
+        listThreadChangeSets(threadId),
+        buildHealthContext(profileId),
+      ]);
+      setChangeSets(sets);
+      setContext(freshContext);
+      setTitles(new Map());
+      toast.show(t("aiAnalysis.changes.revertedToast"));
+      refreshList();
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setRevertingSetId(null);
     }
   };
 
@@ -469,7 +682,12 @@ export function AiAnalysis() {
     refreshList();
   };
 
-  const starters = [t("aiAnalysis.starter1"), t("aiAnalysis.starter2"), t("aiAnalysis.starter3")];
+  const starters = [
+    t("aiAnalysis.starter1"),
+    t("aiAnalysis.starter2"),
+    t("aiAnalysis.starterLog"),
+    t("aiAnalysis.starterFix"),
+  ];
 
   // A change set belongs to the turn that produced it, not to the end of the
   // transcript: anchor it to that turn's assistant reply (its own user message
@@ -478,6 +696,7 @@ export function AiAnalysis() {
   const setsByAnchor = new Map<number, ChangeSetWithItems[]>();
   const orphanSets: ChangeSetWithItems[] = [];
   for (const set of changeSets) {
+    if (set.status === "superseded") continue;
     const sourceIndex = messages.findIndex((message) => message.id === set.sourceMessageId);
     if (sourceIndex === -1) {
       orphanSets.push(set);
@@ -496,8 +715,18 @@ export function AiAnalysis() {
       onSelect={(itemId, selected) => void selectChange(set.id, itemId, selected)}
       onSave={() => void saveChangeSet(set.id)}
       onDiscard={() => void discardChangeSet(set.id)}
+      reverting={revertingSetId === set.id}
+      onRevert={() => void revertChangeSet(set.id)}
     />
   );
+
+  const callsByMessage = new Map<number, ToolCallView[]>();
+  for (const event of toolEvents) {
+    callsByMessage.set(event.messageId, [
+      ...(callsByMessage.get(event.messageId) ?? []),
+      toolCallFromEvent(event),
+    ]);
+  }
 
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
   const currentTitle = threadTitle ?? t("aiAnalysis.threads.newUntitled");
@@ -526,14 +755,21 @@ export function AiAnalysis() {
 
   return (
     <>
-      <PageHeader title={t("aiAnalysis.title")} description={t("aiAnalysis.description")} />
+      <PageHeader title={t("aiAnalysis.title")} />
       <div className="flex min-h-0 flex-1 gap-4">
         {panelOpen && (
           <aside className="hidden w-64 shrink-0 flex-col border-r pr-3 md:flex">
             <ThreadList {...threadListProps} className="min-h-0 flex-1" />
           </aside>
         )}
-        <div className="mx-auto flex w-full max-w-3xl min-w-0 min-h-0 flex-1 flex-col">
+        <div className="relative mx-auto flex w-full max-w-3xl min-w-0 min-h-0 flex-1 flex-col">
+          {dragging && (
+            <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/90 text-sm">
+              <FileUp className="size-6 text-primary" />
+              <p className="font-medium">{t("aiAnalysis.dropTitle")}</p>
+              <p className="text-xs text-muted-foreground">{t("aiAnalysis.dropHint")}</p>
+            </div>
+          )}
           <div className="mb-2 flex items-center gap-1.5">
             <Tooltip
               content={`${t(panelOpen ? "aiAnalysis.threads.hidePanel" : "aiAnalysis.threads.showPanel")} (⌘⇧H)`}
@@ -579,6 +815,19 @@ export function AiAnalysis() {
                 </div>
               )}
             </div>
+            {modelOptions.length > 0 && (
+              <Tooltip content={t("aiAnalysis.model")}>
+                <div className="w-44 shrink-0">
+                  <SelectMenu
+                    value={modelId}
+                    onChange={(value) => void changeModel(value)}
+                    options={modelOptions}
+                    disabled={pending}
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </Tooltip>
+            )}
             <Tooltip content={t("aiAnalysis.threads.details")}>
               <Button
                 variant="ghost"
@@ -678,18 +927,18 @@ export function AiAnalysis() {
                 >
                   <div
                     className={cn(
-                      "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed",
+                      "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
                       message.role === "user"
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-primary whitespace-pre-wrap text-primary-foreground"
                         : "border bg-card text-foreground",
+                      message.id === editingId && "opacity-50",
                     )}
                   >
                     {message.role === "assistant" ? (
-                      <AssistantContent content={message.content} />
+                      <AssistantContent content={message.content} titles={titles} />
                     ) : (
                       message.content
                     )}
-                    {message.role === "assistant" && <AiDisclaimer />}
                     <div
                       className={cn(
                         "mt-1.5 flex items-center gap-1 text-[10px]",
@@ -698,6 +947,22 @@ export function AiAnalysis() {
                           : "text-muted-foreground",
                       )}
                     >
+                      {message.role === "user" &&
+                        message.id === lastUser?.id &&
+                        lastUserEditable &&
+                        !pending &&
+                        editingId == null && (
+                          <Tooltip content={`${t("aiAnalysis.editMessage")} (↑)`}>
+                            <button
+                              type="button"
+                              onClick={startEdit}
+                              aria-label={t("aiAnalysis.editMessage")}
+                              className="mr-1 inline-flex size-6 items-center justify-center rounded-md opacity-0 transition-opacity outline-none group-hover:opacity-100 hover:bg-primary-foreground/15 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary-foreground/50"
+                            >
+                              <Pencil className="size-3" />
+                            </button>
+                          </Tooltip>
+                        )}
                       <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
                       {message.role === "assistant" && (
                         // Icon-only actions: the tooltip carries the meaning, the
@@ -725,37 +990,55 @@ export function AiAnalysis() {
                               )}
                             </button>
                           </Tooltip>
-                          <Tooltip
-                            content={t(
-                              pending
-                                ? "aiAnalysis.regenerateBlocked"
-                                : "aiAnalysis.regenerateAnswer",
-                            )}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => regenerate(message.id)}
-                              disabled={pending}
-                              aria-label={t("aiAnalysis.regenerateAnswer")}
-                              className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 outline-none disabled:opacity-50"
+                          {/* Only the latest answer: later turns were built on an older one. */}
+                          {message.id === lastAssistantId && (
+                            <Tooltip
+                              content={t(
+                                pending
+                                  ? "aiAnalysis.regenerateBlocked"
+                                  : "aiAnalysis.regenerateAnswer",
+                              )}
                             >
-                              <RefreshCw className="size-3.5" />
-                            </button>
-                          </Tooltip>
+                              <button
+                                type="button"
+                                onClick={() => regenerate(message.id)}
+                                disabled={pending}
+                                aria-label={t("aiAnalysis.regenerateAnswer")}
+                                className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 outline-none disabled:opacity-50"
+                              >
+                                <RefreshCw className="size-3.5" />
+                              </button>
+                            </Tooltip>
+                          )}
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
+                {message.role === "user" && callsByMessage.has(message.id) && (
+                  <ToolCallList calls={callsByMessage.get(message.id)!} />
+                )}
                 {setsByAnchor.get(message.id)?.map(renderChangeSet)}
               </React.Fragment>
             ))}
             {orphanSets.map(renderChangeSet)}
+            {pending && <ToolCallList calls={liveCalls} live />}
+            {pending && streamText && (
+              // The answer as it is written; replaced by the saved message once
+              // the turn ends. Citations resolve when that message lands.
+              <div className="flex justify-start" aria-live="polite">
+                <div className="max-w-[85%] rounded-2xl border bg-card px-4 py-2.5 text-sm leading-relaxed text-foreground">
+                  <AssistantContent content={streamText} titles={titles} />
+                  <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-muted-foreground/60 align-middle" />
+                </div>
+              </div>
+            )}
             {pending && (
               <div className="flex animate-reveal justify-start" role="status" aria-live="polite">
                 <div className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-2.5 text-sm text-muted-foreground">
                   <span className="flex items-center gap-2">
-                    <Loader2 className="size-4 animate-spin" /> {t("aiAnalysis.thinking")}
+                    <Loader2 className="size-4 animate-spin" />{" "}
+                    {streamText ? t("aiAnalysis.writing") : t("aiAnalysis.thinking")}
                   </span>
                   <button
                     type="button"
@@ -785,6 +1068,19 @@ export function AiAnalysis() {
             )}
           </div>
           <div className="relative mt-3 border-t pt-3">
+            {editingId != null && (
+              <div className="mb-2 flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
+                <Pencil className="size-3.5 shrink-0" />
+                <span className="flex-1">{t("aiAnalysis.editing")}</span>
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-background hover:text-foreground"
+                >
+                  <X className="size-3" /> {t("common.cancel")} (Esc)
+                </button>
+              </div>
+            )}
             {showJump && (
               <button
                 type="button"
@@ -824,6 +1120,12 @@ export function AiAnalysis() {
                   if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
                     void send(input);
+                  } else if (event.key === "ArrowUp" && !input && editingId == null) {
+                    event.preventDefault();
+                    startEdit();
+                  } else if (event.key === "Escape" && editingId != null) {
+                    event.preventDefault();
+                    cancelEdit();
                   }
                 }}
                 placeholder={t("aiAnalysis.placeholder")}

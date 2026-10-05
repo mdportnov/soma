@@ -1,6 +1,16 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, ChevronDown, Database, ExternalLink, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  Database,
+  ExternalLink,
+  Undo2,
+  X,
+} from "lucide-react";
+import { revertBlocker } from "@/ai/agent/revert";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { ChangeSetWithItems } from "@/db/chat-repos";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +23,17 @@ export function ChangeSetPanel(props: {
   onSelect: (itemId: number, selected: boolean) => void;
   onSave: () => void;
   onDiscard: () => void;
+  reverting: boolean;
+  onRevert: () => void;
 }) {
   const { t } = useI18n();
   const { changeSet } = props;
   const selected = changeSet.items.filter((item) => item.selected);
   const blocked = selected.some((item) => item.status === "blocked");
   const committed = changeSet.status === "committed";
-  const closed = committed || changeSet.status === "discarded";
+  const reverted = changeSet.status === "reverted";
+  const closed = committed || reverted || changeSet.status === "discarded";
+  const undoBlocked = committed ? revertBlocker(changeSet) : null;
   // A set awaiting review is the whole point of the turn and stays open; once it
   // is saved or discarded there is nothing left to do with it, so it collapses
   // to its one-line receipt and the transcript stays readable. The details are
@@ -30,7 +44,7 @@ export function ChangeSetPanel(props: {
     <div
       className={cn(
         "mt-2 w-full max-w-2xl rounded-xl border bg-card p-3 text-sm",
-        changeSet.status === "discarded" && "opacity-70",
+        (changeSet.status === "discarded" || reverted) && "opacity-70",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -46,14 +60,34 @@ export function ChangeSetPanel(props: {
           <p className="mt-0.5 text-xs text-muted-foreground">
             {committed
               ? t("aiAnalysis.changes.saved")
-              : changeSet.status === "discarded"
-                ? t("aiAnalysis.changes.discarded")
-                : t("aiAnalysis.changes.review")}
+              : reverted
+                ? t("aiAnalysis.changes.reverted")
+                : changeSet.status === "discarded"
+                  ? t("aiAnalysis.changes.discarded")
+                  : t("aiAnalysis.changes.review")}
             {closed &&
               ` · ${t("aiAnalysis.changes.itemCount", { count: String(changeSet.items.length) })}`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {committed && (
+            <Tooltip
+              content={t(
+                undoBlocked ? "aiAnalysis.changes.undoBlocked" : "aiAnalysis.changes.undoHint",
+              )}
+            >
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={props.onRevert}
+                disabled={props.reverting || undoBlocked != null}
+                className="h-7 px-2 text-xs"
+              >
+                <Undo2 className="size-3.5" />
+                {props.reverting ? t("aiAnalysis.changes.undoing") : t("aiAnalysis.changes.undo")}
+              </Button>
+            </Tooltip>
+          )}
           {closed && (
             <button
               type="button"
@@ -79,8 +113,7 @@ export function ChangeSetPanel(props: {
             className={cn(
               "block rounded-lg border p-3",
               !item.selected && "opacity-50",
-              item.status === "blocked" &&
-                item.selected &&
+              (item.operation === "delete" || (item.status === "blocked" && item.selected)) &&
                 "border-destructive/40 bg-destructive/5",
             )}
           >
@@ -99,7 +132,7 @@ export function ChangeSetPanel(props: {
                     {t(`aiAnalysis.changes.operation.${item.operation}`)} ·{" "}
                     {t(`aiAnalysis.changes.entity.${item.entityType}`)}
                   </p>
-                  {committed && item.entityId != null && (
+                  {committed && item.entityId != null && item.operation !== "delete" && (
                     <Link
                       to={recordHref(item.entityType, item.entityId)}
                       className="text-primary"
@@ -110,16 +143,28 @@ export function ChangeSetPanel(props: {
                   )}
                 </div>
                 <dl className="mt-2 grid gap-x-3 gap-y-1 text-xs sm:grid-cols-2">
-                  {Object.entries(item.payloadJson)
-                    .filter(([key, value]) => !HIDDEN_FIELDS.has(key) && hasValue(value))
-                    .map(([key, value]) => (
-                      <div key={key} className="flex min-w-0 gap-1">
-                        <dt className="text-muted-foreground">{fieldLabel(key, t)}:</dt>
-                        <dd className="truncate" title={displayValue(value)}>
-                          {displayValue(value)}
-                        </dd>
-                      </div>
-                    ))}
+                  {itemFields(item).map(({ key, value, before }) => (
+                    <div key={key} className="flex min-w-0 gap-1">
+                      <dt className="shrink-0 text-muted-foreground">{fieldLabel(key, t)}:</dt>
+                      <dd
+                        className={cn(
+                          "truncate",
+                          item.operation === "delete" &&
+                            key !== "reason" &&
+                            "text-muted-foreground line-through",
+                        )}
+                        title={displayValue(value)}
+                      >
+                        {before !== undefined && (
+                          <span className="text-muted-foreground line-through">
+                            {hasValue(before) ? displayValue(before) : "—"}
+                          </span>
+                        )}
+                        {before !== undefined && " → "}
+                        {hasValue(value) ? displayValue(value) : "—"}
+                      </dd>
+                    </div>
+                  ))}
                 </dl>
                 {item.candidateMatchesJson.length > 0 && (
                   <p className="mt-2 text-xs text-warning-strong">
@@ -173,6 +218,8 @@ export function ChangeSetPanel(props: {
  */
 const HIDDEN_FIELDS = new Set([
   "kind",
+  "entityType",
+  "reason",
   "assertionType",
   "draftRef",
   "visitDraftRef",
@@ -184,6 +231,39 @@ const HIDDEN_FIELDS = new Set([
   "panelId",
   "profileId",
 ]);
+
+/** Payload fields whose names differ from the stored row's keys. */
+const ROW_KEYS: Record<string, string> = { medicationType: "type", doseNumber: "dose" };
+
+/**
+ * What a card lists for one item: a new record's fields; an edit's changed
+ * fields with the stored value before the arrow; a deletion's stored record,
+ * struck through, plus the reason.
+ */
+function itemFields(item: ChangeSetWithItems["items"][number]) {
+  const visible = (key: string) =>
+    !HIDDEN_FIELDS.has(key) && !/Id$/.test(key) && key !== "id" && key !== "createdAt";
+  if (item.operation === "delete") {
+    const before = item.beforeJson ?? {};
+    return [
+      ...Object.entries(before)
+        .filter(([key, value]) => visible(key) && hasValue(value))
+        .slice(0, 8)
+        .map(([key, value]) => ({ key, value, before: undefined })),
+      ...(typeof item.payloadJson.reason === "string"
+        ? [{ key: "reason", value: item.payloadJson.reason, before: undefined }]
+        : []),
+    ];
+  }
+  const before = item.operation === "update" ? item.beforeJson : null;
+  return Object.entries(item.payloadJson)
+    .filter(([key, value]) => visible(key) && (before ? value !== undefined : hasValue(value)))
+    .map(([key, value]) => ({
+      key,
+      value,
+      before: before && (ROW_KEYS[key] ?? key) in before ? before[ROW_KEYS[key] ?? key] : undefined,
+    }));
+}
 
 /** An empty string, list or object says nothing — do not render a bare label. */
 function hasValue(value: unknown): boolean {

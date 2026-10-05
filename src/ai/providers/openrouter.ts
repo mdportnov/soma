@@ -32,27 +32,27 @@ export class OpenRouterProvider extends BaseProvider {
       }
       return { role: "user", content: message.content };
     });
-    const data = await this.postJson(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        Authorization: `Bearer ${this.apiKey}`,
-        "X-Title": "Soma Health Dashboard",
-      },
-      {
-        model: this.model,
-        max_tokens: 4096,
-        messages: [{ role: "system", content: request.systemPrompt }, ...messages],
-        tools: request.tools.map((tool) => ({
-          type: "function",
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema,
-          },
-        })),
-      },
-      request.signal,
-    );
+    const headers = {
+      Authorization: `Bearer ${this.apiKey}`,
+      "X-Title": "Soma Health Dashboard",
+    };
+    const body = {
+      model: this.model,
+      max_tokens: 4096,
+      messages: [{ role: "system", content: request.systemPrompt }, ...messages],
+      tools: request.tools.map((tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        },
+      })),
+    };
+    const url = "https://openrouter.ai/api/v1/chat/completions";
+    const data = request.onTextDelta
+      ? await this.streamCompletion(url, headers, { ...body, stream: true }, request)
+      : await this.postJson(url, headers, body, request.signal);
     const message = data.choices?.[0]?.message;
     const calls = (message?.tool_calls ?? []).map((call: any) => ({
       id: String(call.id),
@@ -64,6 +64,45 @@ export class OpenRouterProvider extends BaseProvider {
     if (!content)
       throw new AIProviderError("Empty response from OpenRouter", undefined, "bad_response");
     return { kind: "message", content };
+  }
+
+  /** Accumulates chat-completion deltas (text and indexed tool-call fragments) into one message. */
+  private async streamCompletion(
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+    request: AgentTurnRequest,
+  ): Promise<any> {
+    let content = "";
+    const calls: Array<{ id: string; function: { name: string; arguments: string } }> = [];
+    await this.postStream(url, headers, body, request.signal, (data) => {
+      const chunk = JSON.parse(data);
+      if (chunk.error) {
+        throw new AIProviderError(
+          `openrouter stream error: ${chunk.error.message ?? "unknown"}`,
+          undefined,
+          "unknown",
+        );
+      }
+      const delta = chunk.choices?.[0]?.delta;
+      if (!delta) return;
+      if (typeof delta.content === "string" && delta.content) {
+        content += delta.content;
+        request.onTextDelta?.(delta.content);
+      }
+      for (const part of delta.tool_calls ?? []) {
+        const index = typeof part.index === "number" ? part.index : calls.length;
+        const call = (calls[index] ??= { id: "", function: { name: "", arguments: "" } });
+        if (part.id) call.id = part.id;
+        if (part.function?.name) call.function.name += part.function.name;
+        const args = part.function?.arguments;
+        if (typeof args === "string") call.function.arguments += args;
+        else if (args && typeof args === "object") call.function.arguments = JSON.stringify(args);
+      }
+    });
+    return {
+      choices: [{ message: { content, tool_calls: calls.filter(Boolean) } }],
+    };
   }
 
   protected async complete(req: CompletionRequest): Promise<string> {

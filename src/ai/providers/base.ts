@@ -136,6 +136,27 @@ export abstract class BaseProvider implements AIProvider {
     body: unknown,
     externalSignal?: AbortSignal,
   ): Promise<any> {
+    const { res, release } = await this.openRequest(url, headers, body, externalSignal);
+    try {
+      return await res.json();
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Sends the request and resolves once the status is known (non-ok statuses
+   * are thrown, classified). The timeout covers the time to the response
+   * headers; `release` detaches the caller's signal once the body is consumed.
+   * `abort` cancels the underlying request — the streaming reader uses it for
+   * its idle timeout.
+   */
+  private async openRequest(
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+    externalSignal?: AbortSignal,
+  ): Promise<{ res: Response; release: () => void; abort: () => void }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.transport.timeoutMs);
     // Forward a caller cancellation (chat "Stop") onto the fetch controller.
@@ -144,6 +165,9 @@ export abstract class BaseProvider implements AIProvider {
       if (externalSignal.aborted) controller.abort();
       else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
     }
+    const release = () => {
+      if (externalSignal) externalSignal.removeEventListener("abort", onExternalAbort);
+    };
     let res: Response;
     try {
       res = await fetch(url, {
@@ -153,6 +177,7 @@ export abstract class BaseProvider implements AIProvider {
         signal: controller.signal,
       });
     } catch (e) {
+      release();
       // A caller-initiated cancel is not an error to report or retry.
       if (externalSignal?.aborted) {
         throw new AIProviderError("Request cancelled", undefined, "cancelled");
@@ -173,10 +198,10 @@ export abstract class BaseProvider implements AIProvider {
       );
     } finally {
       clearTimeout(timer);
-      if (externalSignal) externalSignal.removeEventListener("abort", onExternalAbort);
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
+      release();
       throw new AIProviderError(
         `${this.id} API error ${res.status}: ${detail.slice(0, 500)}`,
         res.status,
@@ -184,7 +209,83 @@ export abstract class BaseProvider implements AIProvider {
         parseRetryAfter(res.headers.get("retry-after")),
       );
     }
-    return res.json();
+    return { res, release, abort: () => controller.abort() };
+  }
+
+  /**
+   * Streams a server-sent-events response, calling `onEvent` with each event's
+   * data. Opening the stream is retried like `postJson`; once bytes have
+   * arrived nothing is retried — the caller has already shown them. A stream
+   * that goes silent for `transport.timeoutMs` is aborted as a network error.
+   */
+  protected async postStream(
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+    signal: AbortSignal | undefined,
+    onEvent: (data: string, event: string | null) => void,
+  ): Promise<void> {
+    const opened = await this.withRetry(() => this.openRequest(url, headers, body, signal));
+    const reader = opened.res.body?.getReader();
+    if (!reader) {
+      opened.release();
+      throw new AIProviderError(`${this.id} returned an empty stream`, undefined, "bad_response");
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    // A provider's own error event is already classified; anything else thrown
+    // while reading an event is an unreadable chunk.
+    const handle = (data: string, event: string | null) => {
+      try {
+        onEvent(data, event);
+      } catch (e) {
+        if (e instanceof AIProviderError) throw e;
+        throw new AIProviderError(
+          `Unreadable ${this.id} stream event: ${e instanceof Error ? e.message : String(e)}`,
+          undefined,
+          "bad_response",
+        );
+      }
+    };
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    const armIdle = () => {
+      clearTimeout(idle);
+      idle = setTimeout(() => {
+        timedOut = true;
+        opened.abort();
+      }, this.transport.timeoutMs);
+    };
+    try {
+      for (;;) {
+        armIdle();
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+          chunk = await reader.read();
+        } catch (e) {
+          if (signal?.aborted)
+            throw new AIProviderError("Request cancelled", undefined, "cancelled");
+          throw new AIProviderError(
+            timedOut
+              ? `Stream stalled for ${this.transport.timeoutMs}ms`
+              : `Stream error: ${e instanceof Error ? e.message : String(e)}`,
+            undefined,
+            "network",
+          );
+        }
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        buffer = drainSseEvents(buffer, handle);
+      }
+      buffer += decoder.decode();
+      drainSseEvents(`${buffer}\n\n`, handle);
+    } catch (e) {
+      this.logFailure(e);
+      throw e;
+    } finally {
+      clearTimeout(idle);
+      opened.release();
+    }
   }
 
   /**
@@ -200,10 +301,14 @@ export abstract class BaseProvider implements AIProvider {
     body: unknown,
     signal?: AbortSignal,
   ): Promise<any> {
+    return this.withRetry(() => this.postJsonOnce(url, headers, body, signal));
+  }
+
+  private async withRetry<T>(attemptOnce: () => Promise<T>): Promise<T> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.transport.retryDelaysMs.length; attempt++) {
       try {
-        return await this.postJsonOnce(url, headers, body, signal);
+        return await attemptOnce();
       } catch (e) {
         lastError = e;
         const delay = this.nextDelayMs(e, attempt);
@@ -298,6 +403,31 @@ function parseModelJson(text: string): unknown {
       "bad_response",
     );
   }
+}
+
+/**
+ * Hands every complete SSE event in `buffer` to `onEvent` and returns the
+ * unfinished tail. Events are separated by a blank line; multi-line `data:`
+ * fields are joined with newlines; the OpenAI-style `[DONE]` sentinel is dropped.
+ */
+export function drainSseEvents(
+  buffer: string,
+  onEvent: (data: string, event: string | null) => void,
+): string {
+  const normalized = buffer.replace(/\r\n?/g, "\n");
+  const blocks = normalized.split("\n\n");
+  const tail = blocks.pop() ?? "";
+  for (const block of blocks) {
+    let event: string | null = null;
+    const data: string[] = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
+    }
+    const payload = data.join("\n");
+    if (payload && payload !== "[DONE]") onEvent(payload, event);
+  }
+  return tail;
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));

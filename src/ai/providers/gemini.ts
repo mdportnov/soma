@@ -23,7 +23,10 @@ export class GeminiProvider extends BaseProvider {
       if (message.role === "assistant") {
         const parts: any[] = message.content ? [{ text: message.content }] : [];
         for (const call of message.toolCalls ?? []) {
-          parts.push({ functionCall: { name: call.name, args: call.arguments } });
+          parts.push({
+            functionCall: { name: call.name, args: call.arguments },
+            ...(call.thoughtSignature ? { thoughtSignature: call.thoughtSignature } : {}),
+          });
         }
         // Gemini rejects a content entry with an empty parts list.
         if (parts.length) contents.push({ role: "model", parts });
@@ -31,31 +34,31 @@ export class GeminiProvider extends BaseProvider {
         contents.push({ role: "user", parts: [{ text: message.content }] });
       }
     }
-    const data = await this.postJson(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`,
-      { "x-goog-api-key": this.apiKey },
-      {
-        contents: contents.map(({ role, parts }) => ({ role, parts })),
-        systemInstruction: { parts: [{ text: request.systemPrompt }] },
-        generationConfig: { maxOutputTokens: 4096 },
-        tools: [
-          {
-            functionDeclarations: request.tools.map((tool) => {
-              // Gemini takes an OpenAPI Schema subset, not full JSON Schema;
-              // unknown keywords are a hard 400. `toGeminiParameters` lowers the
-              // schema and omits `parameters` for no-argument tools.
-              const parameters = toGeminiParameters(tool.inputSchema);
-              return {
-                name: tool.name,
-                description: tool.description,
-                ...(parameters ? { parameters } : {}),
-              };
-            }),
-          },
-        ],
-      },
-      request.signal,
-    );
+    const body = {
+      contents: contents.map(({ role, parts }) => ({ role, parts })),
+      systemInstruction: { parts: [{ text: request.systemPrompt }] },
+      generationConfig: { maxOutputTokens: 4096 },
+      tools: [
+        {
+          functionDeclarations: request.tools.map((tool) => {
+            // Gemini takes an OpenAPI Schema subset, not full JSON Schema;
+            // unknown keywords are a hard 400. `toGeminiParameters` lowers the
+            // schema and omits `parameters` for no-argument tools.
+            const parameters = toGeminiParameters(tool.inputSchema);
+            return {
+              name: tool.name,
+              description: tool.description,
+              ...(parameters ? { parameters } : {}),
+            };
+          }),
+        },
+      ],
+    };
+    const base = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}`;
+    const headers = { "x-goog-api-key": this.apiKey };
+    const data = request.onTextDelta
+      ? await this.streamContent(`${base}:streamGenerateContent?alt=sse`, headers, body, request)
+      : await this.postJson(`${base}:generateContent`, headers, body, request.signal);
     const parts = data.candidates?.[0]?.content?.parts ?? [];
     const calls = parts
       .filter((part: any) => part.functionCall)
@@ -66,12 +69,38 @@ export class GeminiProvider extends BaseProvider {
           part.functionCall.args && typeof part.functionCall.args === "object"
             ? (part.functionCall.args as Record<string, unknown>)
             : {},
+        ...(typeof part.thoughtSignature === "string"
+          ? { thoughtSignature: part.thoughtSignature }
+          : {}),
       }));
     const content = parts.map((part: any) => part.text ?? "").join("");
     if (calls.length) return { kind: "tool_calls", content, calls };
     if (!content)
       throw new AIProviderError("Empty response from Gemini", undefined, "bad_response");
     return { kind: "message", content };
+  }
+
+  /** Folds the stream's chunks back into one generateContent-shaped response. */
+  private async streamContent(
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+    request: AgentTurnRequest,
+  ): Promise<any> {
+    const parts: any[] = [];
+    let text = "";
+    await this.postStream(url, headers, body, request.signal, (data) => {
+      const chunk = JSON.parse(data);
+      for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+        if (typeof part.text === "string" && !part.thought) {
+          text += part.text;
+          request.onTextDelta?.(part.text);
+        } else if (part.functionCall) {
+          parts.push(part);
+        }
+      }
+    });
+    return { candidates: [{ content: { parts: [...(text ? [{ text }] : []), ...parts] } }] };
   }
 
   protected async complete(req: CompletionRequest): Promise<string> {

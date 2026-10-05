@@ -137,6 +137,8 @@ export type AIToolCall = {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+  /** Gemini 3 rejects a follow-up round unless each call's signature is sent back. */
+  thoughtSignature?: string;
 };
 
 export type AgentMessage =
@@ -153,6 +155,8 @@ export type AgentTurnRequest = {
   systemPrompt: string;
   tools: AIToolDefinition[];
   signal?: AbortSignal;
+  /** When set, the answer is streamed and each text fragment is reported as it arrives. */
+  onTextDelta?: (delta: string) => void;
 };
 
 /**

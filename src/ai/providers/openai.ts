@@ -46,23 +46,23 @@ export class OpenAIProvider extends BaseProvider {
       }
       return items;
     });
-    const data = await this.postJson(
-      "https://api.openai.com/v1/responses",
-      { Authorization: `Bearer ${this.apiKey}` },
-      {
-        model: this.model,
-        max_output_tokens: 4096,
-        instructions: request.systemPrompt,
-        input,
-        tools: request.tools.map((tool) => ({
-          type: "function",
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.inputSchema,
-        })),
-      },
-      request.signal,
-    );
+    const body = {
+      model: this.model,
+      max_output_tokens: 4096,
+      instructions: request.systemPrompt,
+      input,
+      tools: request.tools.map((tool) => ({
+        type: "function",
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      })),
+    };
+    const url = "https://api.openai.com/v1/responses";
+    const headers = { Authorization: `Bearer ${this.apiKey}` };
+    const data = request.onTextDelta
+      ? await this.streamResponse(url, headers, { ...body, stream: true }, request)
+      : await this.postJson(url, headers, body, request.signal);
     const calls = (data.output ?? [])
       .filter((item: any) => item.type === "function_call")
       .map((item: any) => ({
@@ -80,6 +80,32 @@ export class OpenAIProvider extends BaseProvider {
     if (!content)
       throw new AIProviderError("Empty response from OpenAI", undefined, "bad_response");
     return { kind: "message", content };
+  }
+
+  /** Streams text deltas; the final `response.completed` event carries the whole response. */
+  private async streamResponse(
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+    request: AgentTurnRequest,
+  ): Promise<any> {
+    let final: any = null;
+    await this.postStream(url, headers, body, request.signal, (data) => {
+      const event = JSON.parse(data);
+      if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+        request.onTextDelta?.(event.delta);
+      } else if (event.type === "response.completed" || event.type === "response.incomplete") {
+        final = event.response;
+      } else if (event.type === "response.failed" || event.type === "error") {
+        throw new AIProviderError(
+          `openai stream error: ${event.response?.error?.message ?? event.message ?? "unknown"}`,
+          undefined,
+          "unknown",
+        );
+      }
+    });
+    if (!final) throw new AIProviderError("OpenAI stream ended early", undefined, "bad_response");
+    return final;
   }
 
   protected async complete(req: CompletionRequest): Promise<string> {

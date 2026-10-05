@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The assistant edits and deletes records, not only adds them.** Asked to
+  fix a wrong vaccine date, it used to send the user to "an administrator".
+  Every record type can now be corrected field by field, and records can be
+  removed. The model locates the exact record first, the draft is checked on
+  the row it would produce, and it is shown as a card with the old value next
+  to the new one; nothing is written before Save. Anaphylactic allergies still
+  cannot be deleted, only resolved.
+- **Saved changes can be undone.** The card of a saved change has an Undo
+  button that puts the records back exactly as they were, in one transaction.
+  It refuses when the record has been edited since, and is unavailable for
+  deletions that took linked data with them (a medication's intake log, a
+  visit's links, a panel's results).
+- **Tool calls are visible.** Each lookup and draft appears as it runs, with
+  its arguments, result and duration, and stays with its turn afterwards.
+- **Answers stream and read like documents.** Text appears as it is written
+  for every provider, Markdown is rendered, and cited records show their name
+  ("DTP, 10 May 2019") instead of a type and an id.
+- **The last question can be edited and resent** (pencil or ↑), a document
+  dropped on the chat opens the importer with it, and the model can be
+  switched from the chat header.
+- **Import review goes result by result.** Each flagged row says why it needs
+  checking, the biomarker can be re-mapped in place, and progress is shown. A
+  panel with unverified results links straight to the review. Additional
+  findings have their own view with search, sorting and earlier results.
+
+### Fixed
+
+- Units written in ASCII ("umol/L", "ug") are recognised as µmol/L and µg, and
+  mmol/L converts to µmol/L; affected results are re-evaluated once.
+- Gemini 3 models failed on the assistant's second tool round because the
+  thought signature of each call was not sent back.
+- A draft created before the user pressed Stop, or before the turn failed,
+  stayed hidden until the chat was reopened.
+- Regenerating an older answer hid the later conversation without deleting it;
+  only the latest answer can be regenerated now.
+- References the model wrote in a stray format (`[vaccine:29]`,
+  `[history:1, vaccine:29]`) reached the reader as raw brackets.
+
+### Changed
+
+- The "not medical advice" notice is shown once, under the message field,
+  instead of under every answer; the model list badge is gone from the chat
+  list.
+
 ## [0.9.0] — 2026-09-02
 
 ### Added

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-10-05
+
 ### Added
 
 - **Vaccine reminders can be hidden.** Each due or overdue booster, late dose

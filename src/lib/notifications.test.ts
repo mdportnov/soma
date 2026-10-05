@@ -9,7 +9,12 @@ import {
   type NotificationPrefs,
 } from "./notifications";
 
-const ALL_ON: NotificationPrefs = { medication: true, retest: true, retestUpcoming: true };
+const ALL_ON: NotificationPrefs = {
+  medication: true,
+  retest: true,
+  retestUpcoming: true,
+  vaccines: true,
+};
 
 function med(over: Partial<Medication> = {}): Medication {
   return {
@@ -50,6 +55,9 @@ function data(over: Partial<NotificationFeedData> = {}): NotificationFeedData {
     medications: [],
     loggedTodayMedIds: [],
     retestSchedules: [],
+    birthDate: null,
+    vaccines: [],
+    vaccineHidden: [],
     ...over,
   };
 }
@@ -200,5 +208,40 @@ describe("filterByPrefs", () => {
       data({ retestSchedules: [schedule({ lastTestedDate: null })] }),
     );
     expect(filterByPrefs(items, { ...ALL_ON, retestUpcoming: false })).toHaveLength(1);
+  });
+});
+
+describe("vaccine reminders in the feed", () => {
+  const td = {
+    id: 5,
+    profileId: 1,
+    vaccineName: "Td",
+    date: "2010-03-01",
+    manufacturer: null,
+    batchNumber: null,
+    dose: null,
+    expiresAt: null,
+    administeredBy: null,
+    country: null,
+    notes: null,
+    attachmentId: null,
+  };
+
+  it("surfaces an overdue booster and treats a hidden one as dismissed", () => {
+    const feed = buildNotificationFeed(data({ birthDate: "1990-01-01", vaccines: [td] }));
+    const item = feed.find((i) => i.kind === "vaccine");
+    expect(item).toMatchObject({ status: "overdue", date: "2020-03-01", hidden: false });
+    expect(visibleNotifications(feed, new Set())).toContain(item);
+
+    const key = item!.kind === "vaccine" ? item!.reminderKey : "";
+    const hidden = buildNotificationFeed(
+      data({ birthDate: "1990-01-01", vaccines: [td], vaccineHidden: [key] }),
+    );
+    expect(visibleNotifications(hidden, new Set()).some((i) => i.kind === "vaccine")).toBe(false);
+  });
+
+  it("respects the vaccines mute", () => {
+    const feed = buildNotificationFeed(data({ birthDate: "1990-01-01", vaccines: [td] }));
+    expect(filterByPrefs(feed, { ...ALL_ON, vaccines: false })).toEqual([]);
   });
 });

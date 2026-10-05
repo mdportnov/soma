@@ -9,7 +9,9 @@ import {
   deleteVaccine,
   getAttachment,
   getProfile,
+  hiddenVaccineReminders,
   listVaccines,
+  setVaccineReminderHidden,
   updateVaccine,
   getLinkedAttachment,
 } from "@/db/repos";
@@ -23,7 +25,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { Field } from "@/components/app/Field";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { suggestVaccineExpiry } from "@/lib/vaccine-schedule";
+import { certificateReminderKey, isSuperseded, suggestVaccineExpiry } from "@/lib/vaccine-schedule";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +54,11 @@ export function Vaccines() {
   // ⌘K lands here as /vaccines?highlight=<id> — flash that dose in the table.
   const highlight = useHighlight();
   const { data: vaccines, loading, reload } = useQuery(() => listVaccines(profileId), [profileId]);
-  const { data: profile } = useQuery(() => getProfile(profileId), [profileId]);
+  const { data: profile, reload: reloadProfile } = useQuery(
+    () => getProfile(profileId),
+    [profileId],
+  );
+  const hiddenKeys = React.useMemo(() => hiddenVaccineReminders(profile), [profile]);
   const { data: attachmentMap } = useQuery(async () => {
     if (!vaccines) return new Map<number, Attachment>();
     const ids = [
@@ -113,8 +119,18 @@ export function Vaccines() {
         <VaccineCalendar
           birthDate={profile?.birthDate ?? null}
           records={vaccines}
+          hiddenKeys={hiddenKeys}
           onAddVaccine={openNew}
           onEditRecord={openEdit}
+          onSetHidden={async (key, hide) => {
+            await setVaccineReminderHidden(profileId, key, hide);
+            await reloadProfile();
+            if (hide)
+              toast.showAction(t("vaccines.reminders.hiddenToast"), t("common.undo"), async () => {
+                await setVaccineReminderHidden(profileId, key, false);
+                await reloadProfile();
+              });
+          }}
         />
 
         {vaccines.length === 0 ? (
@@ -140,6 +156,7 @@ export function Vaccines() {
             <VaccineTimeline
               vaccines={vaccines}
               storageKey="soma.timeline.vaccines"
+              hiddenKeys={hiddenKeys}
               onSelect={openEdit}
             />
             <h2 className="pt-2 text-sm font-semibold tracking-tight">
@@ -170,6 +187,8 @@ export function Vaccines() {
                       <TableBody>
                         {rows.map((v) => {
                           const isExpired = v.expiresAt != null && v.expiresAt < today;
+                          const renewed = isExpired && isSuperseded(v, vaccines);
+                          const muted = hiddenKeys.includes(certificateReminderKey(v));
                           return (
                             <TableRow
                               key={v.id}
@@ -191,8 +210,18 @@ export function Vaccines() {
                                 {v.expiresAt ? (
                                   <span className="flex items-center gap-1.5">
                                     {formatDate(v.expiresAt)}
-                                    {isExpired && (
-                                      <Badge variant="warning">{t("vaccines.expired")}</Badge>
+                                    {renewed ? (
+                                      <Tooltip content={t("vaccines.supersededHint")}>
+                                        <Badge variant="secondary">
+                                          {t("vaccines.superseded")}
+                                        </Badge>
+                                      </Tooltip>
+                                    ) : (
+                                      isExpired && (
+                                        <Badge variant={muted ? "secondary" : "warning"}>
+                                          {t("vaccines.expired")}
+                                        </Badge>
+                                      )
                                     )}
                                   </span>
                                 ) : (

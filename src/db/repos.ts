@@ -155,6 +155,29 @@ export async function updateProfile(id: number, data: ProfileUpdate) {
   }
 }
 
+/** Fired after a vaccine reminder is hidden or restored, so the bell re-counts. */
+export const VACCINE_REMINDERS_EVENT = "soma:vaccine-reminders";
+
+export function hiddenVaccineReminders(p: Pick<Profile, "uiPrefs"> | null | undefined): string[] {
+  return p?.uiPrefs?.vaccineRemindersHidden ?? [];
+}
+
+/** Hide (or bring back) one vaccine reminder everywhere it would surface. */
+export async function setVaccineReminderHidden(
+  profileId: number,
+  key: string,
+  hidden: boolean,
+): Promise<void> {
+  const current = await getProfile(profileId);
+  const keys = new Set(hiddenVaccineReminders(current));
+  if (hidden) keys.add(key);
+  else keys.delete(key);
+  await updateProfile(profileId, {
+    uiPrefs: { ...(current?.uiPrefs ?? {}), vaccineRemindersHidden: [...keys] },
+  });
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(VACCINE_REMINDERS_EVENT));
+}
+
 type NormalizedResult = {
   unitNormalized: string | null;
   valueNormalized: number | null;
@@ -1707,11 +1730,16 @@ export type NotificationFeedData = {
   loggedTodayMedIds: number[];
   /** Active re-test schedules. */
   retestSchedules: RetestSchedule[];
+  /** Profile birth date — grades the vaccine calendar. */
+  birthDate: string | null;
+  vaccines: Vaccine[];
+  /** Vaccine reminder keys the user hid. */
+  vaccineHidden: string[];
 };
 
 export async function getNotificationFeedData(profileId: number): Promise<NotificationFeedData> {
   const today = new Date().toISOString().slice(0, 10);
-  const [meds, schedules, todayLogs] = await Promise.all([
+  const [meds, schedules, todayLogs, prof, vaccines] = await Promise.all([
     listMedications(profileId),
     db
       .select()
@@ -1723,6 +1751,8 @@ export async function getNotificationFeedData(profileId: number): Promise<Notifi
       .from(medicationLog)
       .innerJoin(medication, eq(medicationLog.medicationId, medication.id))
       .where(and(eq(medication.profileId, profileId), like(medicationLog.takenAt, `${today}%`))),
+    getProfile(profileId),
+    listVaccines(profileId),
   ]);
   const standing = meds.filter(
     (m) => !m.asNeeded && (m.endDate == null || m.endDate >= today) && m.startDate <= today,
@@ -1732,6 +1762,9 @@ export async function getNotificationFeedData(profileId: number): Promise<Notifi
     medications: standing,
     loggedTodayMedIds: [...new Set(todayLogs.map((r) => r.medicationId))],
     retestSchedules: schedules,
+    birthDate: prof?.birthDate ?? null,
+    vaccines,
+    vaccineHidden: hiddenVaccineReminders(prof),
   };
 }
 

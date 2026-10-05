@@ -1,15 +1,24 @@
 import type { NotificationFeedData } from "@/db/repos";
+import {
+  VACCINE_SCHEDULE,
+  computeAntigen,
+  isGradedTier,
+  vaccineReminders,
+} from "@/lib/vaccine-schedule";
 
 /**
  * Notifications feed — derived, never stored, never an OS notification.
  *
  * Folds already-fetched data (`getNotificationFeedData`) into a prioritized list
  * of in-app feed items: medication-intake nudges (standing meds not yet logged
- * today) and re-test reminders (due / overdue from a `retest_schedule` cadence).
+ * today), re-test reminders (due / overdue from a `retest_schedule` cadence) and
+ * vaccine reminders (the same list the Vaccines page shows).
  *
  * Pure and deterministic over its inputs — no DB, no `Date.now()` (the caller
  * passes `today`) — so the whole feed is unit-testable. Dismiss state lives in
  * localStorage and is applied by the UI, keeping `buildNotificationFeed` pure.
+ * A vaccine item is the exception: dismissing it hides the reminder on the
+ * profile, everywhere, so its dismissal comes in with the data (`hidden`).
  */
 
 export type NotificationSeverity = "info" | "watch" | "alert";
@@ -39,10 +48,26 @@ export type NotificationItem =
       overdueDays: number;
       /** True when the schedule has no `lastTestedDate` anchor yet. */
       noAnchor: boolean;
+    }
+  | {
+      id: string;
+      kind: "vaccine";
+      severity: NotificationSeverity;
+      route: string;
+      /** `VaccineReminder.key` — what dismissing hides on the profile. */
+      reminderKey: string;
+      reminderKind: "booster" | "dose" | "certificate";
+      status: "overdue" | "due";
+      name: string;
+      nameRu: string;
+      date: string | null;
+      lastDate: string | null;
+      /** Hidden by the user — counts as dismissed. */
+      hidden: boolean;
     };
 
 const SEVERITY_RANK: Record<NotificationSeverity, number> = { info: 0, watch: 1, alert: 2 };
-const KIND_RANK = { retest: 0, medication: 1 } as const;
+const KIND_RANK = { retest: 0, vaccine: 1, medication: 2 } as const;
 
 /** A re-test entering the feed when it is due within this many days. */
 const RETEST_DUE_SOON_DAYS = 14;
@@ -109,15 +134,40 @@ export function buildNotificationFeed(data: NotificationFeedData): NotificationI
     });
   }
 
+  // ── Vaccine reminders ──────────────────────────────────────────────────────
+  if (data.vaccines.length > 0) {
+    const views = VACCINE_SCHEDULE.map((entry) =>
+      computeAntigen(entry, data.birthDate, data.vaccines, today, isGradedTier(entry.tier)),
+    );
+    for (const r of vaccineReminders(views, data.vaccines, today, data.vaccineHidden)) {
+      items.push({
+        id: `vaccine:${r.key}`,
+        kind: "vaccine",
+        severity: r.status === "overdue" ? "watch" : "info",
+        route: "/vaccines",
+        reminderKey: r.key,
+        reminderKind: r.kind,
+        status: r.status,
+        name: r.name,
+        nameRu: r.nameRu,
+        date: r.date,
+        lastDate: r.lastDate,
+        hidden: r.hidden,
+      });
+    }
+  }
+
   return items.sort((a, b) => {
     const bySeverity = SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity];
     if (bySeverity !== 0) return bySeverity;
     const byKind = KIND_RANK[a.kind] - KIND_RANK[b.kind];
     if (byKind !== 0) return byKind;
-    return (a.kind === "retest" ? a.label : a.medName).localeCompare(
-      b.kind === "retest" ? b.label : b.medName,
-    );
+    return itemName(a).localeCompare(itemName(b));
   });
+}
+
+function itemName(i: NotificationItem): string {
+  return i.kind === "retest" ? i.label : i.kind === "vaccine" ? i.name : i.medName;
 }
 
 // ── dismiss state (localStorage; applied by the UI, keeps build pure) ────────
@@ -161,7 +211,12 @@ export function visibleNotifications(
   items: NotificationItem[],
   dismissed: Set<string>,
 ): NotificationItem[] {
-  return items.filter((i) => !dismissed.has(i.id));
+  return items.filter((i) => !isDismissed(i, dismissed));
+}
+
+/** Dismissed locally, or (a vaccine reminder) hidden on the profile. */
+export function isDismissed(item: NotificationItem, dismissed: Set<string>): boolean {
+  return dismissed.has(item.id) || (item.kind === "vaccine" && item.hidden);
 }
 
 // ── per-category preferences (localStorage; applied by the UI) ───────────────
@@ -181,12 +236,15 @@ export type NotificationPrefs = {
   retest: boolean;
   /** Include re-tests that are merely due soon (not yet due / overdue). */
   retestUpcoming: boolean;
+  /** Vaccine boosters due/overdue and lapsed certificates. */
+  vaccines: boolean;
 };
 
 const DEFAULT_PREFS: NotificationPrefs = {
   medication: true,
   retest: true,
   retestUpcoming: true,
+  vaccines: true,
 };
 
 const PREFS_KEY = "soma.notifications.prefs";
@@ -220,6 +278,7 @@ export function filterByPrefs(
 ): NotificationItem[] {
   return items.filter((i) => {
     if (i.kind === "medication") return prefs.medication;
+    if (i.kind === "vaccine") return prefs.vaccines;
     if (i.kind === "retest") {
       if (!prefs.retest) return false;
       // "Upcoming" = anchored but not yet due. Overdue/due-today always pass.

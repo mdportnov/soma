@@ -39,7 +39,12 @@ describe("collectPersonalization", () => {
   it("captures hidden complements and notification mutes", () => {
     saveInterests(new Set(SECTION_GROUPS.filter((g) => g !== "ai")));
     saveDashboardWidgets(new Set(DASHBOARD_WIDGETS.filter((w) => w !== "safetyBanner")));
-    saveNotificationPrefs({ medication: false, retest: true, retestUpcoming: true });
+    saveNotificationPrefs({
+      medication: false,
+      retest: true,
+      retestUpcoming: true,
+      vaccines: true,
+    });
 
     const bundle = collectPersonalization();
     expect(bundle.sectionsHidden).toEqual(["ai"]);
@@ -58,7 +63,12 @@ describe("applyPersonalization", () => {
   it("round-trips a collected bundle onto a fresh store", () => {
     saveInterests(new Set(SECTION_GROUPS.filter((g) => g !== "vaccines")));
     saveDashboardWidgets(new Set(DASHBOARD_WIDGETS.filter((w) => w !== "activity")));
-    saveNotificationPrefs({ medication: true, retest: false, retestUpcoming: false });
+    saveNotificationPrefs({
+      medication: true,
+      retest: false,
+      retestUpcoming: false,
+      vaccines: false,
+    });
     const bundle = collectPersonalization();
 
     // Simulate a fresh device.

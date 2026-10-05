@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatDateIn, todayISO } from "@/lib/utils";
 import { settingsPath } from "@/lib/settings-navigation";
+import { isSuperseded } from "@/lib/vaccine-schedule";
 
 function ageFromBirthDate(iso: string | null | undefined): number | null {
   if (!iso) return null;
@@ -326,7 +327,10 @@ function Body({ data, locale }: { data: EmergencyCardData; locale: string }) {
         ) : (
           <ul className="divide-y">
             {data.recentVaccines.map((v) => {
-              const expired = !!v.expiresAt && v.expiresAt.slice(0, 10) < today;
+              const expired =
+                !!v.expiresAt &&
+                v.expiresAt.slice(0, 10) < today &&
+                !isSuperseded(v, data.recentVaccines);
               return (
                 <li
                   key={v.id}

@@ -20,7 +20,18 @@ import { sqliteTable, integer, text, real, index, uniqueIndex } from "drizzle-or
 export type UiPrefs = {
   sectionsHidden?: string[];
   dashboardHidden?: string[];
-  notifications?: { medication?: boolean; retest?: boolean; retestUpcoming?: boolean };
+  notifications?: {
+    medication?: boolean;
+    retest?: boolean;
+    retestUpcoming?: boolean;
+    vaccines?: boolean;
+  };
+  /**
+   * Vaccine reminders the user hid (`VaccineReminder.key`). Unlike the other
+   * prefs this is health-record state, not device chrome: it lives only here so
+   * the assistant and the MCP server see the same choice as every screen.
+   */
+  vaccineRemindersHidden?: string[];
 };
 
 // ── profile ────────────────────────────────────────────────────────────────

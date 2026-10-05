@@ -1,17 +1,28 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CalendarCheck, Check, ChevronDown, Clock, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarCheck,
+  Check,
+  ChevronDown,
+  Clock,
+  Eye,
+  EyeOff,
+  Plus,
+} from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import {
   computeAntigen,
-  countActionable,
   isGradedTier,
   TIER_ORDER,
+  vaccineReminders,
   VACCINE_SCHEDULE,
   type AntigenView,
   type DoseStatus,
+  type VaccineReminder,
   type VaccineTier,
 } from "@/lib/vaccine-schedule";
+import { Tooltip } from "@/components/ui/tooltip";
 import { settingsPath } from "@/lib/settings-navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { cn, formatDate, todayISO } from "@/lib/utils";
 
 export type VaccineRecord = {
+  id?: number;
   vaccineName: string;
   manufacturer?: string | null;
   date: string;
@@ -87,18 +99,25 @@ function StatusBadge({ status, t }: { status: DoseStatus; t: T }) {
 export function VaccineCalendar<R extends VaccineRecord>({
   birthDate,
   records,
+  hiddenKeys = [],
   onAddVaccine,
   onEditRecord,
+  onSetHidden,
 }: {
   birthDate: string | null;
   records: R[];
+  /** Reminder keys the user hid (profile `uiPrefs.vaccineRemindersHidden`). */
+  hiddenKeys?: string[];
   /** Opens the add form pre-filled with the antigen / vaccine name. */
   onAddVaccine?: (vaccineName: string) => void;
   /** Opens a recorded shot (used for lapsed certificates). */
   onEditRecord?: (record: R) => void;
+  /** Hides a reminder everywhere, or brings it back. */
+  onSetHidden?: (key: string, hidden: boolean) => void;
 }) {
   const { t, lang } = useI18n();
   const today = todayISO();
+  const [showHidden, setShowHidden] = React.useState(false);
 
   const byTier = React.useMemo(() => {
     const map = new Map<VaccineTier, AntigenView[]>();
@@ -112,14 +131,36 @@ export function VaccineCalendar<R extends VaccineRecord>({
   }, [birthDate, records, today]);
 
   const allViews = React.useMemo(() => [...byTier.values()].flat(), [byTier]);
-  // Headline count = genuinely actionable items only (recurring adult boosters
-  // past due + lapsed certificates). Unrecorded childhood doses never count.
-  const actionableCount = countActionable(allViews, records, today);
-  const overdueViews = allViews.filter((v) => v.overall === "overdue");
-  const dueViews = allViews.filter((v) => v.overall === "due");
-  const lapsed = records.filter((r) => r.expiresAt != null && r.expiresAt < today);
-  const dueCount = dueViews.length;
-  const clear = !!birthDate && actionableCount === 0 && dueCount === 0;
+  const reminders = React.useMemo(
+    () => vaccineReminders(allViews, records, today, hiddenKeys),
+    [allViews, records, today, hiddenKeys],
+  );
+  const active = reminders.filter((r) => !r.hidden);
+  const hidden = reminders.filter((r) => r.hidden);
+  // Headline count = genuinely actionable items only (overdue boosters/doses and
+  // lapsed certificates the user hasn't hidden). Unrecorded childhood doses never count.
+  const actionableCount = active.filter((r) => r.status === "overdue").length;
+  const dueCount = active.length - actionableCount;
+  const clear = !!birthDate && active.length === 0;
+  const activeAntigens = new Set(active.map((r) => r.antigenId));
+  const hiddenAntigens = new Set(
+    hidden.map((r) => r.antigenId).filter((id) => !activeAntigens.has(id)),
+  );
+
+  const reminderName = (r: VaccineReminder) => (lang === "ru" ? r.nameRu : r.name);
+  const reminderDetail = (r: VaccineReminder) => {
+    if (r.kind === "certificate")
+      return r.date ? `${t("vaccines.table.expires")}: ${formatDate(r.date)}` : undefined;
+    return [
+      lang === "ru" ? r.labelRu : r.label,
+      r.lastDate && t("vaccines.calendar.last", { date: formatDate(r.lastDate) }),
+      r.date &&
+        (r.kind === "dose" || r.status === "overdue") &&
+        t("vaccines.calendar.dueSince", { date: formatDate(r.date) }),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  };
 
   return (
     <>
@@ -139,7 +180,7 @@ export function VaccineCalendar<R extends VaccineRecord>({
         </Card>
       )}
 
-      {(actionableCount > 0 || dueCount > 0) && (
+      {active.length > 0 && (
         <Card className={actionableCount > 0 ? "border-destructive/40" : "border-warning/40"}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -164,43 +205,21 @@ export function VaccineCalendar<R extends VaccineRecord>({
               </p>
             </div>
             <ul className="mt-3 divide-y rounded-lg border">
-              {overdueViews.map((v) => (
+              {active.map((r) => (
                 <ActionItem
-                  key={`overdue-${v.entry.id}`}
-                  name={lang === "ru" ? v.entry.nameRu : v.entry.name}
-                  detail={[
-                    v.recurring && (lang === "ru" ? v.recurring.labelRu : v.recurring.label),
-                    v.recurring?.nextDate &&
-                      t("vaccines.calendar.next", { date: formatDate(v.recurring.nextDate) }),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  status="overdue"
-                  action={
-                    onAddVaccine && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onAddVaccine(lang === "ru" ? v.entry.nameRu : v.entry.name)}
-                      >
-                        <Plus /> {t("common.add")}
-                      </Button>
-                    )
-                  }
-                  t={t}
-                />
-              ))}
-              {lapsed.map((r, i) => (
-                <ActionItem
-                  key={`lapsed-${i}`}
-                  name={r.vaccineName}
-                  detail={`${t("vaccines.table.expires")}: ${formatDate(r.expiresAt!)}`}
-                  status="overdue"
-                  statusLabel={t("vaccines.expired")}
+                  key={r.key}
+                  name={reminderName(r)}
+                  detail={reminderDetail(r)}
+                  status={r.status}
+                  statusLabel={r.kind === "certificate" ? t("vaccines.expired") : undefined}
                   action={
                     <span className="flex items-center gap-1.5">
-                      {onEditRecord && (
-                        <Button size="sm" variant="ghost" onClick={() => onEditRecord(r)}>
+                      {r.kind === "certificate" && r.record && onEditRecord && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onEditRecord(r.record as R)}
+                        >
                           {t("common.edit")}
                         </Button>
                       )}
@@ -208,35 +227,24 @@ export function VaccineCalendar<R extends VaccineRecord>({
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => onAddVaccine(r.vaccineName)}
+                          onClick={() => onAddVaccine(reminderName(r))}
                         >
                           <Plus /> {t("common.add")}
                         </Button>
                       )}
+                      {onSetHidden && (
+                        <Tooltip content={t("vaccines.reminders.hideHint")}>
+                          <Button
+                            size="iconSm"
+                            variant="ghost"
+                            aria-label={t("vaccines.reminders.hide")}
+                            onClick={() => onSetHidden(r.key, true)}
+                          >
+                            <EyeOff />
+                          </Button>
+                        </Tooltip>
+                      )}
                     </span>
-                  }
-                  t={t}
-                />
-              ))}
-              {dueViews.map((v) => (
-                <ActionItem
-                  key={`due-${v.entry.id}`}
-                  name={lang === "ru" ? v.entry.nameRu : v.entry.name}
-                  detail={v.doses
-                    .filter((d) => d.status === "due")
-                    .map((d) => (lang === "ru" ? d.ageLabelRu : d.ageLabel))
-                    .join(", ")}
-                  status="due"
-                  action={
-                    onAddVaccine && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onAddVaccine(lang === "ru" ? v.entry.nameRu : v.entry.name)}
-                      >
-                        <Plus /> {t("common.add")}
-                      </Button>
-                    )
                   }
                   t={t}
                 />
@@ -244,6 +252,38 @@ export function VaccineCalendar<R extends VaccineRecord>({
             </ul>
           </CardContent>
         </Card>
+      )}
+
+      {hidden.length > 0 && onSetHidden && (
+        <div className="-mt-3 text-xs text-muted-foreground">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 hover:text-foreground"
+            onClick={() => setShowHidden((v) => !v)}
+            aria-expanded={showHidden}
+          >
+            <EyeOff className="size-3.5" />
+            {t("vaccines.reminders.hiddenCount", { count: String(hidden.length) })}
+            <ChevronDown
+              className={cn("size-3.5 transition-transform", showHidden && "rotate-180")}
+            />
+          </button>
+          {showHidden && (
+            <ul className="mt-2 divide-y rounded-lg border bg-card">
+              {hidden.map((r) => (
+                <li key={r.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-foreground">{reminderName(r)}</p>
+                    {reminderDetail(r) && <p className="mt-0.5">{reminderDetail(r)}</p>}
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => onSetHidden(r.key, false)}>
+                    <Eye /> {t("vaccines.reminders.show")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       <Card>
@@ -265,7 +305,17 @@ export function VaccineCalendar<R extends VaccineRecord>({
           {TIER_ORDER.map((tier) => {
             const views = byTier.get(tier);
             if (!views || views.length === 0) return null;
-            return <TierSection key={tier} tier={tier} views={views} lang={lang} t={t} />;
+            return (
+              <TierSection
+                key={tier}
+                tier={tier}
+                views={views}
+                activeAntigens={activeAntigens}
+                hiddenAntigens={hiddenAntigens}
+                lang={lang}
+                t={t}
+              />
+            );
           })}
         </CardContent>
       </Card>
@@ -312,15 +362,21 @@ function ActionItem({
 function TierSection({
   tier,
   views,
+  activeAntigens,
+  hiddenAntigens,
   lang,
   t,
 }: {
   tier: VaccineTier;
   views: AntigenView[];
+  /** Antigens with a reminder the user hasn't hidden. */
+  activeAntigens: Set<string | null>;
+  /** Antigens whose only reminders are hidden. */
+  hiddenAntigens: Set<string | null>;
   lang: string;
   t: T;
 }) {
-  const flagged = views.filter((v) => v.overall === "overdue" || v.overall === "due").length;
+  const flagged = views.filter((v) => activeAntigens.has(v.entry.id)).length;
   const done = views.filter((v) => v.overall === "done").length;
   // Only a tier that actually asks for something opens by default; the rest is
   // reference material and stays folded so the page reads top-down.
@@ -374,7 +430,13 @@ function TierSection({
       {open && (
         <div id={contentId} className="divide-y border-t">
           {views.map((v) => (
-            <AntigenRow key={v.entry.id} view={v} lang={lang} t={t} />
+            <AntigenRow
+              key={v.entry.id}
+              view={v}
+              reminderHidden={hiddenAntigens.has(v.entry.id)}
+              lang={lang}
+              t={t}
+            />
           ))}
         </div>
       )}
@@ -382,7 +444,17 @@ function TierSection({
   );
 }
 
-function AntigenRow({ view, lang, t }: { view: AntigenView; lang: string; t: T }) {
+function AntigenRow({
+  view,
+  reminderHidden,
+  lang,
+  t,
+}: {
+  view: AntigenView;
+  reminderHidden: boolean;
+  lang: string;
+  t: T;
+}) {
   const name = lang === "ru" ? view.entry.nameRu : view.entry.name;
   const disease = lang === "ru" ? view.entry.diseaseRu : view.entry.disease;
   const note = lang === "ru" ? view.entry.noteRu : view.entry.note;
@@ -394,7 +466,14 @@ function AntigenRow({ view, lang, t }: { view: AntigenView; lang: string; t: T }
           <p className="text-sm font-medium">{name}</p>
           {disease !== name && <p className="text-xs text-muted-foreground">{disease}</p>}
         </div>
-        <StatusBadge status={view.overall} t={t} />
+        {reminderHidden && (view.overall === "overdue" || view.overall === "due") ? (
+          <Badge variant="secondary">
+            <EyeOff className="size-3" />
+            {t("vaccines.reminders.hidden")}
+          </Badge>
+        ) : (
+          <StatusBadge status={view.overall} t={t} />
+        )}
       </div>
 
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -426,6 +505,7 @@ function AntigenRow({ view, lang, t }: { view: AntigenView; lang: string; t: T }
             className={cn(
               "inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-0.5 text-xs",
               view.recurring.status === "overdue" && "border-destructive/50 bg-destructive/10",
+              view.recurring.status === "due" && "border-warning/50 bg-warning/10",
               STATUS_TEXT[view.recurring.status],
             )}
           >
@@ -433,10 +513,22 @@ function AntigenRow({ view, lang, t }: { view: AntigenView; lang: string; t: T }
             <span className="font-medium">
               {lang === "ru" ? view.recurring.labelRu : view.recurring.label}
             </span>
-            {view.recurring.nextDate && (
+            {view.recurring.status === "due" && view.recurring.lastDate ? (
               <span className="opacity-80">
-                · {t("vaccines.calendar.next", { date: formatDate(view.recurring.nextDate) })}
+                · {t("vaccines.calendar.last", { date: formatDate(view.recurring.lastDate) })}
               </span>
+            ) : (
+              view.recurring.nextDate && (
+                <span className="opacity-80">
+                  ·{" "}
+                  {t(
+                    view.recurring.status === "overdue"
+                      ? "vaccines.calendar.dueSince"
+                      : "vaccines.calendar.next",
+                    { date: formatDate(view.recurring.nextDate) },
+                  )}
+                </span>
+              )
             )}
           </span>
         )}

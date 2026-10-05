@@ -3,6 +3,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { EmergencyCardData } from "@/db/repos";
 import type { Allergy } from "@/db/schema";
 import { formatDateIn } from "@/lib/utils";
+import { isSuperseded } from "@/lib/vaccine-schedule";
 
 /** Translator signature compatible with the i18n `t` returned by useI18n(). */
 export type Translate = (key: string, vars?: Record<string, string>) => string;
@@ -223,7 +224,10 @@ export function generateEmergencyHtml(
               v.dose != null
                 ? escapeHtml(t("emergency.vaccines.doseValue", { n: String(v.dose) }))
                 : "—";
-            const expired = !!v.expiresAt && v.expiresAt.slice(0, 10) < today;
+            const expired =
+              !!v.expiresAt &&
+              v.expiresAt.slice(0, 10) < today &&
+              !isSuperseded(v, data.recentVaccines);
             const expires = v.expiresAt
               ? `${fd(v.expiresAt)}${expired ? ` <span class="badge danger">${escapeHtml(t("emergency.vaccines.expired"))}</span>` : ""}`
               : "—";

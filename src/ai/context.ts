@@ -28,6 +28,7 @@ import {
   listWeightLog,
 } from "@/db/repos";
 import type { LifestyleLog } from "@/db/schema";
+import { VACCINE_SCHEDULE, matchRecords } from "@/lib/vaccine-schedule";
 
 /** Cap on listed abnormal markers, to bound the prompt token cost. */
 const MAX_ABNORMAL = 25;
@@ -89,6 +90,27 @@ function coverageLine(sections: Record<string, { date: string }[]>): string {
       return `${name} ${rows.length} (${span})`;
     })
     .join("; ");
+}
+
+function latestVaccineLine(
+  vaccines: { vaccineName: string; date: string; manufacturer?: string | null }[],
+): string {
+  const parts: string[] = [];
+  const covered = new Set<(typeof vaccines)[number]>();
+  for (const entry of VACCINE_SCHEDULE) {
+    const matched = matchRecords(entry, vaccines);
+    if (!matched.length) continue;
+    matched.forEach((v) => covered.add(v));
+    parts.push(`${entry.name} ${matched[matched.length - 1].date.slice(0, 10)}`);
+  }
+  const latestOther = new Map<string, string>();
+  for (const v of vaccines) {
+    if (covered.has(v)) continue;
+    const prev = latestOther.get(v.vaccineName);
+    if (!prev || prev < v.date) latestOther.set(v.vaccineName, v.date.slice(0, 10));
+  }
+  for (const [name, date] of latestOther) parts.push(`${name} ${date}`);
+  return parts.join("; ");
 }
 
 function bloodTypeLabel(
@@ -163,6 +185,10 @@ export async function buildHealthContext(profileId: number): Promise<string> {
   lines.push(
     `Record coverage: ${coverageLine({ panels, vaccines, visits, bpLog, weightLog, symptoms })}`,
   );
+
+  // Latest shot per antigen, so "did I get Td recently?" never needs guessing.
+  // Grading (overdue/due/hidden) lives in get_vaccination_status.
+  if (vaccines.length) lines.push(`Latest vaccine per antigen: ${latestVaccineLine(vaccines)}`);
 
   const activeAllergies = allergies
     .filter((a) => a.status === "active")

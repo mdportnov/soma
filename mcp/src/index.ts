@@ -22,6 +22,7 @@ import {
   weightLog,
 } from "../../src/db/schema";
 import { computeFlag, convertToDefaultUnit } from "../../src/lib/units";
+import { antigenIdsOf, certificateReminderKey, isSuperseded } from "../../src/lib/vaccine-schedule";
 import {
   ATTACHMENT_ENTITY_TYPES,
   medicationDeletePlan,
@@ -334,7 +335,7 @@ server.registerTool(
         startDate: m.startDate,
       }));
 
-    const vaccines = db.orm
+    const recentVaccines = db.orm
       .select({
         name: vaccine.vaccineName,
         date: vaccine.date,
@@ -345,11 +346,18 @@ server.registerTool(
       .where(eq(vaccine.profileId, pid.id))
       .orderBy(desc(vaccine.date))
       .limit(5)
-      .all()
-      .map((v) => ({
+      .all();
+    const vaccines = recentVaccines.map((v) => {
+      const superseded = isSuperseded(
+        { vaccineName: v.name, date: v.date },
+        recentVaccines.map((r) => ({ vaccineName: r.name, date: r.date })),
+      );
+      return {
         ...v,
-        expired: v.expiresAt != null && v.expiresAt < today,
-      }));
+        expired: v.expiresAt != null && v.expiresAt < today && !superseded,
+        superseded,
+      };
+    });
 
     return ok({
       profile: {
@@ -2386,7 +2394,7 @@ server.registerTool(
   {
     title: "List vaccines",
     description:
-      "Full vaccination history (get_medical_summary shows only the 5 most recent): name, date, dose number in the series, manufacturer, validity and an `expired` flag. Use it for 'am I covered for X' and travel-vaccine questions.",
+      "Full vaccination history (get_medical_summary shows only the 5 most recent): name, date, dose number in the series, manufacturer, validity, an `expired` flag (validity passed and no later shot renewed it) and a `superseded` flag (a later shot of the same vaccine replaced this one — history, not a lapse), `antigens` (diseases covered: Td/Tdap/АДС-М are all dtp) and `reminderHidden` (the user hid this certificate's expiry reminder — don't raise it unprompted). Use it for 'am I covered for X' and travel-vaccine questions.",
     inputSchema: {
       profileId: z.number().int().optional(),
     },
@@ -2401,9 +2409,25 @@ server.registerTool(
       .from(vaccine)
       .where(eq(vaccine.profileId, pid.id))
       .orderBy(desc(vaccine.date))
-      .all()
-      .map((v) => ({ ...v, expired: v.expiresAt != null && v.expiresAt < today }));
-    return ok({ vaccines: rows });
+      .all();
+    const prefs = db.orm
+      .select({ uiPrefs: profile.uiPrefs })
+      .from(profile)
+      .where(eq(profile.id, pid.id))
+      .get()?.uiPrefs;
+    const hidden = new Set(prefs?.vaccineRemindersHidden ?? []);
+    return ok({
+      vaccines: rows.map((v) => {
+        const superseded = isSuperseded(v, rows);
+        return {
+          ...v,
+          antigens: antigenIdsOf(v),
+          expired: v.expiresAt != null && v.expiresAt < today && !superseded,
+          superseded,
+          reminderHidden: hidden.has(certificateReminderKey(v)),
+        };
+      }),
+    });
   },
 );
 

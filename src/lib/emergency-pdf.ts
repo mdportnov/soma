@@ -6,6 +6,7 @@ import boldUrl from "@/assets/fonts/PTSans-Bold.ttf?url";
 import type { EmergencyCardData } from "@/db/repos";
 import { severityClass, type EmergencyExportOptions } from "@/lib/emergency-export";
 import { formatDateIn } from "@/lib/utils";
+import { isSuperseded } from "@/lib/vaccine-schedule";
 
 const FONT_FAMILY = "PTSans";
 const PAGE_BOTTOM = 270; // mm; trigger a page break past this y-cursor
@@ -309,7 +310,8 @@ export async function generateEmergencyPdf(
     writeText(t("emergency.vaccines.none"), { color: MUTED });
   } else {
     for (const v of data.recentVaccines) {
-      const expired = !!v.expiresAt && v.expiresAt.slice(0, 10) < today;
+      const expired =
+        !!v.expiresAt && v.expiresAt.slice(0, 10) < today && !isSuperseded(v, data.recentVaccines);
       const doseStr =
         v.dose != null ? t("emergency.vaccines.doseValue", { n: String(v.dose) }) : "";
       const expiresStr = v.expiresAt

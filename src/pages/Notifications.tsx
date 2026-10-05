@@ -10,6 +10,7 @@ import {
   Play,
   Plus,
   SlidersHorizontal,
+  Syringe,
   TestTubes,
   Trash2,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   getNotificationFeedData,
   listBiomarkers,
   listRetestSchedules,
+  setVaccineReminderHidden,
   updateRetestSchedule,
 } from "@/db/repos";
 import type { Biomarker, NewRetestSchedule, RetestSchedule } from "@/db/schema";
@@ -29,6 +31,7 @@ import {
   buildNotificationFeed,
   dismissNotification,
   filterByPrefs,
+  isDismissed,
   loadDismissedIds,
   loadNotificationPrefs,
   NOTIFICATION_PREFS_EVENT,
@@ -98,7 +101,7 @@ export function Notifications() {
         description={t("notifications.description")}
       />
       <PrefsSection />
-      <FeedSection feedData={data.feedData} />
+      <FeedSection profileId={profileId} feedData={data.feedData} reload={reload} />
       <SchedulesSection
         profileId={profileId}
         schedules={data.schedules}
@@ -156,6 +159,13 @@ function PrefsSection() {
           disabled={!prefs.retest}
           onChange={(v) => set({ retestUpcoming: v })}
         />
+        <ToggleRow
+          icon={Syringe}
+          label={t("notifications.prefs.vaccines.label")}
+          description={t("notifications.prefs.vaccines.desc")}
+          checked={prefs.vaccines}
+          onChange={(v) => set({ vaccines: v })}
+        />
       </CardContent>
     </Card>
   );
@@ -164,11 +174,15 @@ function PrefsSection() {
 // ── Feed ─────────────────────────────────────────────────────────────────────
 
 function FeedSection({
+  profileId,
   feedData,
+  reload,
 }: {
+  profileId: number;
   feedData: Awaited<ReturnType<typeof getNotificationFeedData>>;
+  reload: () => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
   const [dismissed, setDismissed] = React.useState<Set<string>>(() => loadDismissedIds());
@@ -186,21 +200,28 @@ function FeedSection({
     [feedData, prefs],
   );
   const visible = visibleNotifications(items, dismissed);
-  const hidden = items.filter((i) => dismissed.has(i.id));
+  const hidden = items.filter((i) => isDismissed(i, dismissed));
 
-  const dismiss = (item: NotificationItem) => {
-    dismissNotification(item.id);
-    setDismissed(loadDismissedIds());
-    toast.showAction(t("notifications.dismissed"), t("common.undo"), () => {
-      restoreNotification(item.id);
+  // A vaccine reminder is hidden on the profile — everywhere, not just the bell.
+  const setHidden = async (item: NotificationItem, hide: boolean) => {
+    if (item.kind === "vaccine") {
+      await setVaccineReminderHidden(profileId, item.reminderKey, hide);
+      await reload();
+    } else {
+      if (hide) dismissNotification(item.id);
+      else restoreNotification(item.id);
       setDismissed(loadDismissedIds());
+    }
+  };
+
+  const dismiss = async (item: NotificationItem) => {
+    await setHidden(item, true);
+    toast.showAction(t("notifications.dismissed"), t("common.undo"), () => {
+      void setHidden(item, false);
     });
   };
 
-  const restore = (item: NotificationItem) => {
-    restoreNotification(item.id);
-    setDismissed(loadDismissedIds());
-  };
+  const restore = (item: NotificationItem) => void setHidden(item, false);
 
   return (
     <Card className="mb-6">
@@ -231,7 +252,7 @@ function FeedSection({
                 key={item.id}
                 item={item}
                 onOpen={() => navigate(item.route)}
-                onDismiss={() => dismiss(item)}
+                onDismiss={() => void dismiss(item)}
               />
             ))}
           </ul>
@@ -246,7 +267,7 @@ function FeedSection({
               {hidden.map((item) => (
                 <li key={item.id} className="flex items-center gap-3 py-2.5">
                   <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                    {headline(item, t)}
+                    {headline(item, t, lang)}
                   </span>
                   <Button variant="ghost" size="sm" onClick={() => restore(item)}>
                     {t("notifications.restore")}
@@ -270,9 +291,15 @@ function FeedRow({
   onOpen: () => void;
   onDismiss: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const Icon =
-    item.kind === "medication" ? Pill : item.severity === "alert" ? TestTubes : FlaskConical;
+    item.kind === "medication"
+      ? Pill
+      : item.kind === "vaccine"
+        ? Syringe
+        : item.severity === "alert"
+          ? TestTubes
+          : FlaskConical;
 
   return (
     <li className="flex items-center gap-3 py-2.5">
@@ -286,7 +313,7 @@ function FeedRow({
           <Icon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{headline(item, t)}</p>
+          <p className="truncate text-sm font-medium">{headline(item, t, lang)}</p>
           <p className="truncate text-xs text-muted-foreground">{subline(item, t)}</p>
         </div>
         <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -301,10 +328,13 @@ function FeedRow({
 function headline(
   item: NotificationItem,
   t: (key: string, vars?: Record<string, string>) => string,
+  lang: string,
 ) {
-  return item.kind === "medication"
-    ? t("notifications.medication.title", { name: item.medName })
-    : t("notifications.retest.title", { label: item.label });
+  if (item.kind === "medication")
+    return t("notifications.medication.title", { name: item.medName });
+  if (item.kind === "vaccine")
+    return t("notifications.vaccine.title", { name: lang === "ru" ? item.nameRu : item.name });
+  return t("notifications.retest.title", { label: item.label });
 }
 
 function subline(
@@ -316,6 +346,23 @@ function subline(
     return item.times.length
       ? `${due} · ${t("notifications.medication.atTimes", { times: item.times.join(", ") })}`
       : due;
+  }
+  if (item.kind === "vaccine") {
+    const parts: string[] = [];
+    if (item.reminderKind === "certificate") {
+      if (item.date)
+        parts.push(t("notifications.vaccine.expired", { date: formatDate(item.date) }));
+    } else {
+      parts.push(
+        t(
+          item.status === "overdue" ? "notifications.vaccine.overdue" : "notifications.vaccine.due",
+        ),
+      );
+      if (item.date) parts.push(t("notifications.retest.due", { date: formatDate(item.date) }));
+    }
+    if (item.lastDate)
+      parts.push(t("notifications.vaccine.last", { date: formatDate(item.lastDate) }));
+    return parts.join(" · ");
   }
   const status = item.noAnchor
     ? t("notifications.retest.noAnchor")

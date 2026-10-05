@@ -1460,6 +1460,17 @@ export const en = {
       expires: "Expires",
     },
     expired: "Expired",
+    superseded: "Renewed",
+    supersededHint: "A later dose replaced this one",
+    reminders: {
+      hide: "Hide reminder",
+      hideHint:
+        "Hide this reminder everywhere — page, dashboard, bell and assistant. It comes back if a new dose lapses.",
+      hiddenCount: "Hidden reminders: {{count}}",
+      show: "Show again",
+      hidden: "Hidden",
+      hiddenToast: "Reminder hidden",
+    },
     expiry: {
       lifetime: "Lifetime validity — no expiry (WHO).",
       suggest: "Suggested validity: {{date}} — tap to use",
@@ -1480,6 +1491,8 @@ export const en = {
       due: "{{n}} due",
       doseN: "Dose {{n}}",
       next: "next {{date}}",
+      last: "last {{date}}",
+      dueSince: "due since {{date}}",
       protects: "Protects against {{disease}}",
       status: {
         done: "Done",
@@ -2502,9 +2515,9 @@ export const en = {
   notifications: {
     title: "Notifications",
     description:
-      "Medication nudges and scheduled re-tests — in-app only, nothing leaves your device.",
+      "Medication nudges, scheduled re-tests and vaccine boosters — in-app only, nothing leaves your device.",
     emptyTitle: "You're all caught up",
-    emptyDescription: "Medication reminders and due re-tests will appear here.",
+    emptyDescription: "Medication reminders, due re-tests and vaccine boosters will appear here.",
     feedTitle: "Feed",
     prefs: {
       title: "What you get notified about",
@@ -2521,6 +2534,10 @@ export const en = {
         label: "Include upcoming re-tests",
         desc: "Show re-tests due soon too — turn off to only get due and overdue ones.",
       },
+      vaccines: {
+        label: "Vaccine reminders",
+        desc: "Boosters that are due or overdue and lapsed certificates. Hiding one here hides it everywhere.",
+      },
     },
     dismiss: "Dismiss",
     dismissed: "Dismissed",
@@ -2532,6 +2549,13 @@ export const en = {
       due: "Scheduled for today — not logged yet",
       atTimes: "At {{times}}",
       open: "Medications",
+    },
+    vaccine: {
+      title: "{{name}} vaccine",
+      overdue: "Booster overdue",
+      due: "Due now",
+      expired: "Certificate expired {{date}}",
+      last: "last shot {{date}}",
     },
     retest: {
       title: "{{label}} re-test",

@@ -62,6 +62,7 @@ describe("buildVaccinationStatus", () => {
         antigenId: null,
         label: "Custom travel shot",
         date: "2025-01-01",
+        lastDate: "2020-01-01",
         ref: "vaccine:7",
       },
     ]);
@@ -91,8 +92,12 @@ describe("buildVaccinationStatus", () => {
         date: "2019-03-03",
         dose: null,
         manufacturer: null,
+        antigens: ["yellow-fever"],
+        country: null,
+        notes: null,
         expiresAt: null,
         lapsed: false,
+        superseded: false,
       },
     ]);
     expect(yf!.doses[0].status).toBe("done");
@@ -106,5 +111,63 @@ describe("buildVaccinationStatus", () => {
     expect(status.actionable).toEqual([]);
     expect(status.notRecorded).toEqual([]);
     expect(status.due).toEqual([]);
+  });
+
+  it("runs the booster clock from the last shot and ignores renewed certificates", () => {
+    const status = buildVaccinationStatus({
+      today: "2026-10-05",
+      birthDate: "2001-05-10",
+      vaccines: [
+        shot({ id: 11, vaccineName: "DTP", date: "2008-06-24", expiresAt: "2018-06-24" }),
+        shot({ id: 29, vaccineName: "DTP", date: "2026-07-28", expiresAt: "2036-07-28" }),
+      ],
+    });
+    expect(status.actionable).toEqual([]);
+    const dtp = [...status.done, ...status.notRecorded].find((a) => a.id === "dtp");
+    expect(dtp?.recurring).toMatchObject({
+      lastDate: "2026-07-28",
+      nextDate: "2036-07-28",
+      status: "upcoming",
+    });
+    expect(dtp?.records.map((r) => [r.ref, r.lapsed, r.superseded])).toEqual([
+      ["vaccine:11", false, true],
+      ["vaccine:29", false, false],
+    ]);
+  });
+
+  it("keeps a hidden reminder out of actionable and reports it under hiddenByUser", () => {
+    const vaccines = [shot({ id: 1, vaccineName: "Td", date: "2010-06-01" })];
+    const visible = buildVaccinationStatus({ today: TODAY, birthDate: "1990-05-05", vaccines });
+    expect(visible.actionable).toHaveLength(1);
+    const status = buildVaccinationStatus({
+      today: TODAY,
+      birthDate: "1990-05-05",
+      vaccines,
+      hiddenReminders: ["booster:dtp:2020-06-01"],
+    });
+    expect(status.actionable).toEqual([]);
+    expect(status.hiddenByUser).toMatchObject([
+      { kind: "booster_overdue", antigenId: "dtp", lastDate: "2010-06-01", ref: "vaccine:1" },
+    ]);
+  });
+
+  it("tracks a course started in adulthood dose by dose", () => {
+    const status = buildVaccinationStatus({
+      today: "2026-10-06",
+      birthDate: "2001-05-10",
+      vaccines: [
+        shot({ id: 34, vaccineName: "HPV (Gardasil 9)", date: "2026-09-02" }),
+        shot({ id: 35, vaccineName: "Rabies (Verorab)", date: "2026-09-02" }),
+      ],
+    });
+    expect(status.dueNow).toMatchObject([
+      { kind: "dose_due", antigenId: "rabies", date: "2026-09-09", ref: "vaccine:35" },
+    ]);
+    const hpv = status.upcoming.find((a) => a.id === "hpv");
+    expect(hpv?.doses.map((d) => [d.status, d.dueDate ?? d.doneDate])).toEqual([
+      ["done", "2026-09-02"],
+      ["upcoming", "2026-11-01"],
+      ["upcoming", "2027-03-01"],
+    ]);
   });
 });

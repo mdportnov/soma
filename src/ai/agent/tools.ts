@@ -28,7 +28,10 @@ import {
   listVaccines,
   listVisits,
   listWeightLog,
+  hiddenVaccineReminders,
 } from "@/db/repos";
+import type { Vaccine } from "@/db/schema";
+import { antigenIdsOf, isSuperseded } from "@/lib/vaccine-schedule";
 import { ensureSearchIndex, searchRecords } from "@/db/search";
 import { normalizeLabel, similarity } from "@/lib/fuzzy";
 import { ageYearsFrom, resolveRange } from "@/lib/units";
@@ -77,7 +80,7 @@ export const agentToolDefinitions: AIToolDefinition[] = [
   {
     name: "list_records",
     description:
-      "Lists stored records of one type, newest first, each with its id and ref. Use it to find the exact record (and its id) before drafting an update or delete, e.g. the last weight entry, a vaccine dose, a visit or a lab panel.",
+      "Lists stored records of one type, newest first, each with its id and ref. Use it to find the exact record (and its id) before drafting an update or delete, e.g. the last weight entry, a vaccine dose, a visit or a lab panel. For vaccines the query also matches by antigen (Tdap/Td/АКДС/tetanus all find the same shots) and each row carries its antigens and a superseded flag.",
     inputSchema: objectSchema(
       {
         entityType: { type: "string", enum: [...DELETABLE_ENTITY_TYPES] },
@@ -127,7 +130,7 @@ export const agentToolDefinitions: AIToolDefinition[] = [
   {
     name: "get_vaccination_status",
     description:
-      "Personalized vaccination status against the built-in WHO-based calendar, graded exactly as the Vaccines screen: actionable items (overdue adult boosters, lapsed certificates), doses due now, upcoming, done, childhood doses never recorded (a documentation gap, NOT overdue), travel/risk antigens (contextual), and recorded shots that match no calendar antigen. Includes a legend explaining each status. Call it for any question about vaccines, boosters or certificates; never answer those from general knowledge alone.",
+      "Personalized vaccination status against the built-in WHO-based calendar, graded exactly as the Vaccines screen: actionable items (overdue boosters timed from the last recorded shot, late doses of a started course, lapsed certificates no later shot renewed), dueNow items, reminders the user hid (hiddenByUser), then antigens by status — done, upcoming, childhood doses never recorded (a documentation gap, NOT overdue), travel/risk antigens (contextual) — each with its recorded shots (date, antigens covered, country, notes with the printed product name, superseded flag) and the booster's lastDate/nextDate. Call it for any question about vaccines, boosters or certificates, and before claiming a shot is missing; never answer those from general knowledge alone.",
     inputSchema: objectSchema({}),
   },
   {
@@ -206,6 +209,19 @@ export async function executeReadTool(
     const query = optionalTextArg(args.query);
     const limit = intArg(args.limit, 30, 1, 100);
     const rows = await listRecordsOfType(profileId, entityType as DeletableEntityType);
+    if (entityType === "vaccine") {
+      const vaccines = rows as unknown as Vaccine[];
+      return {
+        records: filterVaccines(vaccines, query)
+          .slice(0, limit)
+          .map((row) => ({
+            ...row,
+            ref: `vaccine:${row.id}`,
+            antigens: antigenIdsOf(row),
+            superseded: isSuperseded(row, vaccines),
+          })),
+      };
+    }
     return {
       records: filterNamed(rows, (row) => recordName(row), query)
         .slice(0, limit)
@@ -291,6 +307,7 @@ export async function executeReadTool(
       today: localIsoDate(),
       birthDate: profile?.birthDate ?? null,
       vaccines,
+      hiddenReminders: hiddenVaccineReminders(profile),
     });
   }
   if (name === "get_symptom_trend") {
@@ -410,6 +427,22 @@ function owned<T extends { id: number; profileId?: number }>(
 ): (T & { ref: string }) | null {
   if (!row || (row.profileId != null && row.profileId !== profileId)) return null;
   return { ...row, ref: `${entityType}:${row.id}` };
+}
+
+/**
+ * A vaccine query matches by name or by antigen: "Tdap", "АКДС" and "tetanus"
+ * all find a shot stored as "Td" or "DTP", because they protect against the
+ * same thing. The printed product name kept in notes counts too.
+ */
+function filterVaccines(rows: Vaccine[], query: string | null): Vaccine[] {
+  if (!query) return rows;
+  const wanted = antigenIdsOf({ vaccineName: query, date: "" });
+  const byName = new Set(
+    filterNamed(rows, (row) => `${row.vaccineName} ${row.notes ?? ""}`, query).map((r) => r.id),
+  );
+  return rows.filter(
+    (row) => byName.has(row.id) || antigenIdsOf(row).some((id) => wanted.includes(id)),
+  );
 }
 
 function filterNamed<T>(rows: T[], name: (row: T) => string, query: string | null): T[] {

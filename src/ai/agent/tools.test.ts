@@ -33,6 +33,7 @@ vi.mock("@/db/repos", () => ({
   getMedication: vi.fn(),
   getPanel: vi.fn(),
   getProfile: vi.fn(async () => ({ id: 1, birthDate: "1990-05-05", sex: "male" })),
+  hiddenVaccineReminders: vi.fn(() => []),
   getReferenceRangesByBiomarker: vi.fn(async () => new Map()),
   getSymptomSeries: vi.fn(),
   getVisit: vi.fn(),

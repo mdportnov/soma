@@ -69,7 +69,7 @@ export function applyPersonalization(prefs: UiPrefs): void {
 export async function resetPersonalization(profileId: number): Promise<void> {
   saveInterests(new Set(SECTION_GROUPS as readonly SectionGroup[]));
   saveDashboardWidgets(new Set(DASHBOARD_WIDGETS as readonly DashboardWidget[]));
-  saveNotificationPrefs({ medication: true, retest: true, retestUpcoming: true });
+  saveNotificationPrefs({ medication: true, retest: true, retestUpcoming: true, vaccines: true });
   clearDismissedNotifications();
   clearDismissedHints();
   try {
@@ -82,7 +82,11 @@ export async function resetPersonalization(profileId: number): Promise<void> {
 /** Mirror the current localStorage prefs onto the profile. Fire-and-forget. */
 export async function syncPersonalizationToDb(profileId: number): Promise<void> {
   try {
-    await updateProfile(profileId, { uiPrefs: collectPersonalization() });
+    // Keep DB-only state (hidden vaccine reminders) that localStorage never holds.
+    const current = await getProfile(profileId);
+    await updateProfile(profileId, {
+      uiPrefs: { ...(current?.uiPrefs ?? {}), ...collectPersonalization() },
+    });
   } catch {
     /* a failed mirror just means this change lives only in localStorage for now */
   }

@@ -13,7 +13,7 @@ import { useI18n } from "@/lib/i18n";
 import { useApp } from "@/app/AppContext";
 import { NAV, type NavItem } from "@/app/nav-items";
 import { useQuery } from "@/hooks/useQuery";
-import { getNotificationFeedData } from "@/db/repos";
+import { getNotificationFeedData, VACCINE_REMINDERS_EVENT } from "@/db/repos";
 import { INTERESTS_EVENT, isRouteEnabled, loadInterests } from "@/lib/interests";
 import {
   buildNotificationFeed,
@@ -50,7 +50,11 @@ function NotificationBell() {
   React.useEffect(() => {
     const onChange = () => setPrefsTick((n) => n + 1);
     window.addEventListener(NOTIFICATION_PREFS_EVENT, onChange);
-    return () => window.removeEventListener(NOTIFICATION_PREFS_EVENT, onChange);
+    window.addEventListener(VACCINE_REMINDERS_EVENT, onChange);
+    return () => {
+      window.removeEventListener(NOTIFICATION_PREFS_EVENT, onChange);
+      window.removeEventListener(VACCINE_REMINDERS_EVENT, onChange);
+    };
   }, []);
   const { data: count } = useQuery(
     async () => {

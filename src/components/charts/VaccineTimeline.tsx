@@ -5,6 +5,7 @@ import { TimelinePanel } from "./TimelinePanel";
 import { useI18n } from "@/lib/i18n";
 import { OVERLAY_COLORS } from "./TrendChart";
 import { cn, formatDate, formatDateObject, todayISO } from "@/lib/utils";
+import { certificateReminderKey, isSuperseded } from "@/lib/vaccine-schedule";
 
 const DAY = 86400000;
 const PX_PER_MONTH = 64;
@@ -29,9 +30,12 @@ type Lane = { name: string; color: string; records: Vaccine[] };
 export function VaccineTimeline({
   vaccines,
   storageKey,
+  hiddenKeys = [],
   onSelect,
 }: {
   vaccines: Vaccine[];
+  /** Hidden reminder keys — a hidden lapse is drawn muted, not red. */
+  hiddenKeys?: string[];
   /** localStorage key to remember the collapsed state. */
   storageKey?: string;
   onSelect?: (v: Vaccine) => void;
@@ -183,7 +187,10 @@ export function VaccineTimeline({
                     const x1 = frac(ts(v.date)) * 100;
                     const x2 = Math.min(frac(ts(v.expiresAt)) * 100, 100);
                     if (x2 <= x1) return null;
-                    const expired = v.expiresAt < today;
+                    const expired =
+                      v.expiresAt < today &&
+                      !isSuperseded(v, vaccines) &&
+                      !hiddenKeys.includes(certificateReminderKey(v));
                     return (
                       <span
                         key={`val-${v.id}`}
@@ -200,7 +207,9 @@ export function VaccineTimeline({
                   {/* dose dots */}
                   {lane.records.map((v) => {
                     const x = frac(ts(v.date)) * 100;
-                    const expired = v.expiresAt != null && v.expiresAt < today;
+                    const lapsedDate = v.expiresAt != null && v.expiresAt < today;
+                    const renewed = lapsedDate && isSuperseded(v, vaccines);
+                    const expired = lapsedDate && !renewed;
                     const meta: { label: string; value: React.ReactNode }[] = [];
                     const lot = [v.manufacturer, v.batchNumber].filter(Boolean).join(" / ");
                     if (lot)
@@ -219,6 +228,7 @@ export function VaccineTimeline({
                           <span className={cn("tabular-nums", expired && "text-destructive")}>
                             {formatDate(v.expiresAt)}
                             {expired && ` · ${t("vaccines.expired")}`}
+                            {renewed && ` · ${t("vaccines.superseded")}`}
                           </span>
                         ),
                       });

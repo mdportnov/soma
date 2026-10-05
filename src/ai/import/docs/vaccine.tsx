@@ -9,6 +9,7 @@
  * to confirm or correct. The model never guesses: unreadable fields become null.
  */
 
+import { antigenIdsOf } from "@/lib/vaccine-schedule";
 import { Syringe } from "lucide-react";
 import { VACCINE_EXTRACTION_PROMPT } from "../../prompts";
 import type { RawVaccineExtraction } from "../../types";
@@ -129,13 +130,16 @@ async function saveVaccines(
   let linked = false;
   for (const r of included) {
     // Store the canonical antigen name when matched, so the calendar recognises
-    // the dose; preserve the printed original in notes so nothing is lost.
+    // the dose; preserve the printed original in notes so nothing is lost. A
+    // combination product (MMR, Pentaxim) keeps its printed name: collapsing it
+    // to one antigen would drop the others it protects against.
     const printed = r.vaccineName.trim();
-    const storedName = r.match ? r.match.name : printed;
+    const combination =
+      antigenIdsOf({ vaccineName: printed, manufacturer: r.manufacturer, date: r.date! }).length >
+      1;
+    const storedName = r.match && !combination ? r.match.name : printed;
     const note =
-      r.match && r.match.name.toLowerCase() !== printed.toLowerCase()
-        ? `Imported as «${printed}»`
-        : null;
+      storedName.toLowerCase() !== printed.toLowerCase() ? `Imported as «${printed}»` : null;
     const vaccineId = await createVaccine({
       profileId: ctx.profileId,
       vaccineName: storedName,

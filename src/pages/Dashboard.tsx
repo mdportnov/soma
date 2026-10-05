@@ -30,6 +30,7 @@ import {
   listMedications,
   listPanels,
   listVaccines,
+  hiddenVaccineReminders,
 } from "@/db/repos";
 import { buildDashboardDigest, type AttentionType } from "@/lib/dashboard-digest";
 import { loadDashboardWidgets } from "@/lib/dashboard-prefs";
@@ -130,7 +131,12 @@ export function Dashboard() {
   const vaccineViews = VACCINE_SCHEDULE.map((entry) =>
     computeAntigen(entry, profile?.birthDate ?? null, vaccines, today, isGradedTier(entry.tier)),
   );
-  const vaccineActionable = countActionable(vaccineViews, vaccines, today);
+  const vaccineActionable = countActionable(
+    vaccineViews,
+    vaccines,
+    today,
+    hiddenVaccineReminders(profile),
+  );
 
   const digest = buildDashboardDigest(
     {

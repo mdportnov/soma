@@ -3,6 +3,7 @@ import {
   type HealthChange,
   type HealthChangeSetDraft,
 } from "./change-schema";
+import { antigenIdsOf } from "@/lib/vaccine-schedule";
 import {
   countMedicationLogEntries,
   getHealthNote,
@@ -365,6 +366,22 @@ export async function validateHealthChangeSet(
           label: duplicate.vaccineName,
         });
         base.errorsJson.push("An identical vaccine dose is already recorded.");
+      } else {
+        // Same day, same disease under another name (Tdap vs a stored "Td").
+        const covers = antigenIdsOf({ vaccineName: change.vaccineName, date: change.date });
+        const sameAntigen = vaccines.find(
+          (row) => row.date === change.date && antigenIdsOf(row).some((id) => covers.includes(id)),
+        );
+        if (sameAntigen) {
+          base.candidateMatchesJson.push({
+            entityType: "vaccine",
+            entityId: sameAntigen.id,
+            label: sameAntigen.vaccineName,
+          });
+          base.warningsJson.push(
+            `A shot against the same disease (${sameAntigen.vaccineName}) is already recorded on this date.`,
+          );
+        }
       }
     }
     if (change.kind === "create_retest_schedule") {

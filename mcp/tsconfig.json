@@ -24,6 +24,7 @@
     "../src/db/tx-plans.ts",
     "../src/db/guards.ts",
     "../src/lib/units.ts",
-    "../src/lib/fuzzy.ts"
+    "../src/lib/fuzzy.ts",
+    "../src/lib/vaccine-schedule.ts"
   ]
 }

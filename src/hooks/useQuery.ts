@@ -39,7 +39,7 @@ export function useQuery<T>(
   // immediately after scheduling a re-render). Returns void — the fresh data is
   // delivered through `data`, and returning it would break callers that pass
   // `reload` where a `() => Promise<void>` is expected.
-  const reload = useCallback(async (): Promise<void> => {
+  const reload = useCallback(async (options?: { preserveOnError?: boolean }): Promise<void> => {
     const id = ++runId.current;
     setLoading(true);
     setError(null);
@@ -53,8 +53,9 @@ export function useQuery<T>(
     } catch (e: unknown) {
       console.error(e);
       if (mounted.current && runId.current === id) {
-        setError(e instanceof Error ? e : new Error(String(e)));
         setLoading(false);
+        if (options?.preserveOnError) throw e;
+        setError(e instanceof Error ? e : new Error(String(e)));
       }
     }
   }, []);

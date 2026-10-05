@@ -1,6 +1,6 @@
 import * as React from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { Sparkles, TestTubes, Trash2, Pencil } from "lucide-react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Sparkles, TestTubes, Trash2, Pencil, ArrowRight, ClipboardCheck } from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
 import { seedState, useSeed, type BiomarkerSeed, type LabPanelSeed } from "@/app/seed";
 import { useHighlight } from "@/hooks/useHighlight";
@@ -15,8 +15,6 @@ import {
   getPanelResults,
   getPanelSource,
   getProfile,
-  markPanelReviewed,
-  markResultReviewed,
   updateFinding,
   updatePanel,
   updateResultValue,
@@ -33,7 +31,8 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { FlagBadge } from "@/components/app/FlagBadge";
 import { DeltaBadge } from "@/components/app/DeltaBadge";
 import { NotableChanges } from "@/components/app/NotableChanges";
-import { Button } from "@/components/ui/button";
+import { resultReviewReason } from "@/lib/result-review";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,6 +102,8 @@ export function LabPanelDetail() {
   // ⌘K lands on a single measurement as /labs/<panel>?highlight=<row id> —
   // flash the result or finding the user searched for inside the panel.
   const highlight = useHighlight();
+  const [searchParams] = useSearchParams();
+  const highlightFindings = searchParams.get("section") === "findings";
   // Opened from the labs list: the panel row and its counts came with the
   // click, so the header is on screen at once and only the results wait.
   const seed = useSeed<LabPanelSeed>("labPanel");
@@ -253,7 +254,14 @@ export function LabPanelDetail() {
             ? null
             : outOfRange
               ? `${outOfRange} ${t("labPanelDetail.outOfRange")}`
-              : t("labPanelDetail.allInRange"),
+              : settled && results.every((result) => result.valueNormalized != null)
+                ? t("labPanelDetail.allInRange")
+                : null,
+          settled && results.some((result) => result.valueNormalized == null)
+            ? t("verify.notEvaluatedCount", {
+                count: String(results.filter((result) => result.valueNormalized == null).length),
+              })
+            : null,
           panel.cost != null ? `$${panel.cost.toLocaleString()}` : null,
         ]
           .filter(Boolean)
@@ -322,42 +330,32 @@ export function LabPanelDetail() {
         <Loading />
       ) : (
         <>
+          {needsReview.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-warning/40 bg-warning/5 p-4">
+              <ClipboardCheck className="size-5 shrink-0 text-warning-strong" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {t(needsReview.length === 1 ? "needsReview.one" : "needsReview.many", {
+                    count: String(needsReview.length),
+                  })}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("needsReview.panelDescription")}
+                </p>
+              </div>
+              <Link
+                to={`/labs/${panelId}/verify`}
+                state={drillState}
+                className={buttonVariants({ size: "sm" })}
+              >
+                {t("needsReview.verifyAction")} <ArrowRight />
+              </Link>
+            </div>
+          )}
+
           <div className="mb-4">
             <NotableChanges changes={changes} />
           </div>
-
-          {needsReview.length > 0 && (
-            <div className="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">{t("needsReview.panelTitle")}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t("needsReview.panelDescription")}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link
-                    to={`/labs/${panelId}/verify`}
-                    state={drillState}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    {t("needsReview.verifyAction")}
-                  </Link>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={async () => {
-                      await markPanelReviewed(panelId);
-                      await reload();
-                      toast.show(t("needsReview.confirmedToast"));
-                    }}
-                  >
-                    {t("needsReview.confirmAll")}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
 
           <Card>
             <CardContent className="p-0">
@@ -373,20 +371,22 @@ export function LabPanelDetail() {
                       <TableHead>{t("labPanelDetail.tableColumns.biomarker")}</TableHead>
                       <TableHead numeric>{t("labPanelDetail.tableColumns.value")}</TableHead>
                       <TableHead numeric>{t("labPanelDetail.tableColumns.change")}</TableHead>
-                      <TableHead numeric>{t("labPanelDetail.tableColumns.normalized")}</TableHead>
                       <TableHead numeric>{t("labPanelDetail.tableColumns.reference")}</TableHead>
                       <TableHead>{t("labPanelDetail.tableColumns.status")}</TableHead>
                       <TableHead>{t("labPanelDetail.tableColumns.sourceLabel")}</TableHead>
+                      <TableHead>{t("verify.reviewColumn")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {results.map((r) => (
                       <TableRow
                         key={r.id}
-                        ref={highlight.id === r.id ? highlight.ref : undefined}
+                        ref={
+                          !highlightFindings && highlight.id === r.id ? highlight.ref : undefined
+                        }
                         className={cn(
                           r.reviewedAt == null && "bg-warning/5",
-                          highlight.className(r.id),
+                          !highlightFindings && highlight.className(r.id),
                         )}
                       >
                         <TableCell>
@@ -414,6 +414,11 @@ export function LabPanelDetail() {
                         </TableCell>
                         <TableCell numeric className="whitespace-nowrap">
                           {formatValue(r.value)} {r.unit}
+                          {r.valueNormalized != null && r.unitNormalized !== r.unit && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {formatValue(r.valueNormalized)} {r.unitNormalized}
+                            </p>
+                          )}
                         </TableCell>
                         <TableCell numeric>
                           {(() => {
@@ -434,11 +439,6 @@ export function LabPanelDetail() {
                               );
                             return <span className="text-xs text-muted-foreground">—</span>;
                           })()}
-                        </TableCell>
-                        <TableCell numeric className="whitespace-nowrap text-muted-foreground">
-                          {r.valueNormalized != null && r.unitNormalized !== r.unit
-                            ? `${formatValue(r.valueNormalized)} ${r.unitNormalized}`
-                            : "—"}
                         </TableCell>
                         <TableCell numeric className="whitespace-nowrap text-muted-foreground">
                           {(() => {
@@ -495,21 +495,27 @@ export function LabPanelDetail() {
                               ) : null}
                               <SourcePageLink attachment={source} page={r.sourcePage} />
                             </div>
-                            {r.reviewedAt == null && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-5 px-1 text-[10px]"
-                                onClick={async () => {
-                                  await markResultReviewed(r.id);
-                                  await reload();
-                                  toast.show(t("needsReview.confirmedToast"));
-                                }}
-                              >
-                                {t("needsReview.confirm")}
-                              </Button>
-                            )}
                           </div>
+                        </TableCell>
+                        <TableCell className="min-w-44 max-w-56">
+                          {r.reviewedAt == null ? (
+                            <div className="space-y-2">
+                              <p className="text-xs text-warning-strong">
+                                {t(resultReviewReason(r))}
+                              </p>
+                              <Link
+                                to={`/labs/${panelId}/verify?result=${r.id}`}
+                                state={drillState}
+                                className={buttonVariants({ variant: "outline", size: "sm" })}
+                              >
+                                {t("needsReview.verifyAction")} <ArrowRight />
+                              </Link>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              {t("needsReview.reviewed")}
+                            </span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -527,6 +533,14 @@ export function LabPanelDetail() {
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("labs.findingsName")}</TableHead>
+                      <TableHead>{t("labPanelDetail.tableColumns.value")}</TableHead>
+                      <TableHead>{t("labPanelDetail.tableColumns.reference")}</TableHead>
+                      <TableHead>{t("labs.findingsReport")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {findings.map((f) => (
                       <TableRow
@@ -535,23 +549,21 @@ export function LabPanelDetail() {
                         className={highlight.className(f.id)}
                       >
                         <TableCell className="max-w-64">
-                          <p className="truncate text-sm" title={f.rawLabel}>
-                            {f.rawLabel}
-                          </p>
+                          <p className="whitespace-normal break-words text-sm">{f.rawLabel}</p>
                           {f.nameEn && f.nameEn.toLowerCase() !== f.rawLabel.toLowerCase() && (
                             <p
-                              className="truncate text-[10px] italic text-muted-foreground"
+                              className="whitespace-normal break-words text-xs text-muted-foreground"
                               title={f.nameEn}
                             >
                               ≈ {f.nameEn}
                             </p>
                           )}
                         </TableCell>
-                        <TableCell numeric className="whitespace-nowrap">
+                        <TableCell className="max-w-72 whitespace-normal break-words">
                           {f.valueText}
                           {f.unit ? ` ${f.unit}` : ""}
                         </TableCell>
-                        <TableCell numeric className="text-muted-foreground">
+                        <TableCell className="max-w-72 whitespace-normal break-words text-muted-foreground">
                           {f.refRangeText ?? "—"}
                         </TableCell>
                         <TableCell actions>

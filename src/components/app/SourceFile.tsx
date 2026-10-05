@@ -46,7 +46,7 @@ function DocBody({
     return () => {
       active = false;
     };
-  }, [attachment]);
+  }, [attachment.filePath]);
 
   const src = convertFileSrc(attachment.filePath);
   const name = attachmentName(attachment);

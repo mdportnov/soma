@@ -563,7 +563,7 @@ export async function updatePanel(panelId: number, patch: PanelMetaPatch): Promi
  */
 export async function updateResultValue(
   resultId: number,
-  patch: { value: number; unit: string },
+  patch: { value: number; unit: string; biomarkerId?: number },
 ): Promise<void> {
   markSearchIndexStale();
   const rows = await db
@@ -577,33 +577,30 @@ export async function updateResultValue(
     .where(eq(labResult.id, resultId));
   const row = rows[0];
   if (!row) return;
+  const biomarkerId = patch.biomarkerId ?? row.biomarkerId;
   const [bioRows, prof, rangesByBiomarker] = await Promise.all([
-    db.select().from(biomarker).where(eq(biomarker.id, row.biomarkerId)),
+    db.select().from(biomarker).where(eq(biomarker.id, biomarkerId)),
     getProfile(row.profileId),
     getReferenceRangesByBiomarker(),
   ]);
   const bio = bioRows[0];
+  if (!bio) throw new Error("Biomarker not found");
   const ctx: ProfileContext = {
     sex: prof?.sex ?? null,
     ageYears: ageYearsFrom(prof?.birthDate, new Date(`${row.date.slice(0, 10)}T00:00:00Z`)),
   };
-  const { unitNormalized, valueNormalized, outOfRange, flag } = bio
-    ? normalizeResultValue(
-        patch.value,
-        patch.unit,
-        bio,
-        rangesByBiomarker.get(row.biomarkerId),
-        ctx,
-      )
-    : {
-        unitNormalized: null,
-        valueNormalized: null,
-        outOfRange: false,
-        flag: null,
-      };
+  const { unitNormalized, valueNormalized, outOfRange, flag } = normalizeResultValue(
+    patch.value,
+    patch.unit,
+    bio,
+    rangesByBiomarker.get(biomarkerId),
+    ctx,
+  );
   await db
     .update(labResult)
     .set({
+      biomarkerId,
+      ...(biomarkerId !== row.biomarkerId ? { confidence: "manual" as const } : {}),
       value: patch.value,
       unit: patch.unit,
       unitNormalized,

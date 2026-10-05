@@ -961,6 +961,16 @@ export const en = {
 
   // Labs page
   labs: {
+    findingsName: "Finding",
+    findingsLatest: "Latest result",
+    findingsReport: "Report",
+    findingsSearch: "Search findings by name…",
+    findingsClearSearch: "Clear search",
+    findingsByName: "Name: A–Z",
+    findingsByDate: "Most recent first",
+    findingsCount: "{{count}} of {{total}} findings",
+    findingsHistory: "Earlier results ({{count}})",
+    findingsOpenReport: "Open {{name}} in the report from {{date}}",
     title: "Lab results",
     description: "Every blood draw and urine test, manually entered or AI-imported.",
     aiImport: "AI import",
@@ -970,7 +980,7 @@ export const en = {
     addFirstPanel: "Add first panel",
     findingsTitle: "Additional findings",
     findingsDescription:
-      "Results saved without a biomarker (unmapped or qualitative), grouped across all panels. Click a row to open the panel.",
+      "Latest result for each finding. Expand earlier results to compare reports, or open a report by its date.",
     tableColumns: {
       date: "Date",
       lab: "Lab",
@@ -1806,7 +1816,7 @@ export const en = {
     many: "{{count}} results need review",
     panelTitle: "Some results need your review",
     panelDescription:
-      "These mappings were uncertain — open the original document, check each value, and confirm.",
+      "Check the marked rows against the document: biomarker, value and unit. Each row explains why it needs review.",
     rowHint: "Uncertain — verify against the source",
     confirm: "Confirm",
     confirmRow: "Confirm mapping",
@@ -1824,19 +1834,39 @@ export const en = {
 
   // Side-by-side verify screen (document ⟷ extracted values)
   verify: {
+    saving: "Saving…",
+    notEvaluatedCount: "{{count}} not evaluated",
     title: "Verify import",
-    description: "Compare each extracted value against the original document.",
+    description:
+      "Match the source label, value and unit to the document. Correct any differences, then confirm each result.",
     sourcePane: "Original document",
     resultsPane: "Extracted results",
     onlyUncertain: "Only rows needing review",
     showAll: "Show all rows",
-    confirm: "Confirm",
-    confirmAll: "Confirm all remaining",
-    edit: "Edit mapping",
+    confirm: "Matches document",
+    confirmAll: "I checked all remaining results",
+    edit: "Edit result",
     done: "Done",
     backToPanel: "Back to panel",
     empty: "Nothing left to verify.",
     jumpToPage: "Go to page {{n}}",
+    reviewColumn: "Import review",
+    progress: "{{done}} of {{total}} results verified",
+    savedAs: "Biomarker in Soma",
+    sourceLabel: "Label in the document",
+    reasonUnit: "Unit could not be converted",
+    reasonAi: "Check the AI-selected biomarker",
+    reasonTranslated: "Check the translated biomarker",
+    reasonFuzzy: "Check the suggested biomarker",
+    reasonDefault: "Check against the document",
+    saveConfirm: "Save & verify",
+    confirmNext: "Matches · next result",
+    unitHelp:
+      "Soma could not convert {{unit}} to {{expected}}. Check the unit in the document. Confirming verifies the imported data; it does not resolve the conversion.",
+    checkHelp:
+      "Verify the imported data here. Reference ranges and high/low flags are shown in the report.",
+    bulkHelp: "Already compared every remaining result?",
+    saveError: "Could not save your review. Your changes are still here — try again.",
   },
 
   // Typed AI import errors (replaces the single generic banner)

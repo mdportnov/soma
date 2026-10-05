@@ -1,6 +1,6 @@
-import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeftRight, Paperclip, Plus, Sparkles, TestTubes } from "lucide-react";
+import { AdditionalFindings } from "@/components/app/AdditionalFindings";
 import { useApp } from "@/app/AppContext";
 import { useQuery } from "@/hooks/useQuery";
 import { getAllFindings, listPanels } from "@/db/repos";
@@ -32,21 +32,6 @@ export function Labs() {
     ]);
     return { panels, findings };
   }, [profileId]);
-
-  // Aggregated cross-panel view: group findings by their (English) name so
-  // e.g. every "Anti-HCV" reading lines up together, newest first within a
-  // group (the query already returns rows date-desc).
-  const findingGroups = React.useMemo(() => {
-    if (!data) return [];
-    const byName = new Map<string, typeof data.findings>();
-    for (const f of data.findings) {
-      const key = (f.nameEn ?? f.rawLabel).toLowerCase();
-      (byName.get(key) ?? byName.set(key, []).get(key)!).push(f);
-    }
-    return [...byName.values()]
-      .map((items) => ({ name: items[0].nameEn ?? items[0].rawLabel, items }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [data]);
 
   if (loading || !data) return <Loading />;
   const { panels, findings } = data;
@@ -174,74 +159,7 @@ export function Labs() {
         </div>
       )}
 
-      {findings.length > 0 && (
-        <>
-          <h2 className="mb-1 mt-8 text-lg font-semibold">{t("labs.findingsTitle")}</h2>
-          <p className="mb-3 text-sm text-muted-foreground">{t("labs.findingsDescription")}</p>
-          <div className="rounded-xl border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("labs.tableColumns.finding")}</TableHead>
-                  <TableHead numeric>{t("labPanelDetail.tableColumns.value")}</TableHead>
-                  <TableHead numeric>{t("labPanelDetail.tableColumns.reference")}</TableHead>
-                  <TableHead>{t("labs.tableColumns.date")}</TableHead>
-                  <TableHead>{t("labs.tableColumns.lab")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {findingGroups.map((g) => (
-                  <React.Fragment key={g.name}>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableCell colSpan={5} className="py-1.5 font-medium">
-                        {g.name}
-                        <Badge variant="secondary" className="ml-2">
-                          {g.items.length}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                    {g.items.map((f) => (
-                      <TableRow
-                        key={f.id}
-                        className="cursor-pointer"
-                        onClick={() => navigate(`/labs/${f.panelId}`)}
-                      >
-                        <TableCell className="max-w-56 text-xs text-muted-foreground">
-                          <span className="block truncate" title={f.rawLabel}>
-                            {f.rawLabel.toLowerCase() !== g.name.toLowerCase() ? f.rawLabel : "—"}
-                          </span>
-                        </TableCell>
-                        <TableCell numeric className="max-w-48">
-                          <span
-                            className="block truncate"
-                            title={`${f.valueText}${f.unit ? ` ${f.unit}` : ""}`}
-                          >
-                            {f.valueText}
-                            {f.unit ? ` ${f.unit}` : ""}
-                          </span>
-                        </TableCell>
-                        <TableCell numeric className="max-w-56 text-muted-foreground">
-                          <span className="block truncate" title={f.refRangeText ?? undefined}>
-                            {f.refRangeText ?? "—"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap font-medium">
-                          {formatDate(f.date)}
-                        </TableCell>
-                        <TableCell className="max-w-48">
-                          <span className="block truncate" title={f.labName ?? undefined}>
-                            {f.labName ?? "—"}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </>
-      )}
+      {findings.length > 0 && <AdditionalFindings findings={findings} />}
     </>
   );
 }

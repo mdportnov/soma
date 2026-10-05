@@ -1,4 +1,13 @@
-import * as React from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,6 +30,7 @@ type ComboboxProps = {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  "aria-label"?: string;
   /** Offer the typed query as a free-form value when it matches no option. */
   allowCustom?: boolean;
 };
@@ -58,22 +68,36 @@ export function Combobox({
   disabled,
   className,
   allowCustom,
+  "aria-label": ariaLabel,
 }: ComboboxProps) {
   const { t } = useI18n();
-  const [open, setOpen] = React.useState(false);
-  const [query, setQuery] = React.useState("");
-  const [activeIndex, setActiveIndex] = React.useState(0);
-  const [panelStyle, setPanelStyle] = React.useState<PanelStyle | null>(null);
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const [restoreFocus, setRestoreFocus] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [panelStyle, setPanelStyle] = useState<PanelStyle | null>(null);
 
-  const triggerRef = React.useRef<HTMLButtonElement>(null);
-  const searchRef = React.useRef<HTMLInputElement>(null);
-  const listRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const orderedOptions = useMemo(() => {
+    const groups = new Map<string, ComboboxOption[]>();
+    for (const option of options) {
+      const group = option.group ?? "";
+      const items = groups.get(group) ?? [];
+      items.push(option);
+      groups.set(group, items);
+    }
+    return [...groups.values()].flat();
+  }, [options]);
 
   const selectedOption = options.find((o) => o.value === value) ?? null;
   // A custom (free-form) value has no matching option but should still display.
   const selectedLabel = selectedOption?.label ?? (allowCustom && value ? value : null);
   const isSearching = query.trim().length > 0;
-  const filtered = filterOptions(options, query);
+  const filtered = useMemo(() => filterOptions(orderedOptions, query), [orderedOptions, query]);
   const trimmedQuery = query.trim();
   const customOption: ComboboxOption | null =
     allowCustom &&
@@ -85,7 +109,7 @@ export function Combobox({
       : null;
   const flatOptions = customOption ? [...filtered, customOption] : filtered;
 
-  const computePanel = React.useCallback(() => {
+  const computePanel = useCallback(() => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom - 8;
@@ -103,36 +127,40 @@ export function Combobox({
     });
   }, []);
 
-  const openPanel = React.useCallback(() => {
+  const openPanel = useCallback(() => {
     if (disabled) return;
     computePanel();
+    setRestoreFocus(false);
     setOpen(true);
     setQuery("");
-    setActiveIndex(0);
-  }, [disabled, computePanel]);
+    setActiveIndex(
+      Math.max(
+        0,
+        orderedOptions.findIndex((option) => option.value === value),
+      ),
+    );
+  }, [disabled, computePanel, orderedOptions, value]);
 
-  const closePanel = React.useCallback(() => {
+  const closePanel = useCallback(() => {
     setOpen(false);
     setQuery("");
   }, []);
 
-  const selectOption = React.useCallback(
+  const selectOption = useCallback(
     (opt: ComboboxOption) => {
       onChange(opt.value);
       closePanel();
+      setRestoreFocus(true);
     },
     [onChange, closePanel],
   );
 
-  // Return focus to trigger after panel closes
-  const prevOpen = React.useRef(false);
-  React.useEffect(() => {
-    if (prevOpen.current && !open) triggerRef.current?.focus();
-    prevOpen.current = open;
-  }, [open]);
+  useEffect(() => {
+    if (!open && restoreFocus) triggerRef.current?.focus({ preventScroll: true });
+  }, [open, restoreFocus]);
 
   // Recompute position on scroll/resize while open
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     const handler = () => computePanel();
     window.addEventListener("scroll", handler, true);
@@ -143,26 +171,34 @@ export function Combobox({
     };
   }, [open, computePanel]);
 
-  // Focus search input when panel opens
-  React.useEffect(() => {
-    if (open) setTimeout(() => searchRef.current?.focus(), 0);
+  useLayoutEffect(() => {
+    if (open) searchRef.current?.focus({ preventScroll: true });
   }, [open]);
+
+  const scrollToOption = (element: HTMLElement | null, center = false) => {
+    const viewport = scrollRef.current;
+    if (!viewport || !element) return;
+    const row = element.getBoundingClientRect();
+    const bounds = viewport.getBoundingClientRect();
+    if (center) viewport.scrollTop += row.top - bounds.top - (bounds.height - row.height) / 2;
+    else if (row.top < bounds.top + 28) viewport.scrollTop += row.top - bounds.top - 28;
+    else if (row.bottom > bounds.bottom) viewport.scrollTop += row.bottom - bounds.bottom;
+  };
 
   // Scroll the active row into view, but ONLY when navigating by keyboard.
   // Doing it on hover makes the list nudge under the cursor, which retriggers
   // mouseenter on a neighbouring row → visible jitter while moving the mouse.
-  const navByKeyboard = React.useRef(false);
-  React.useEffect(() => {
+  const navByKeyboard = useRef(false);
+  useEffect(() => {
     if (!navByKeyboard.current) return;
     navByKeyboard.current = false;
     const panel = listRef.current;
     if (!panel) return;
-    const activeEl = panel.querySelector<HTMLElement>("[data-active=true]");
-    activeEl?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex]);
+    scrollToOption(panel.querySelector<HTMLElement>("[data-active=true]"));
+  }, [activeIndex, query]);
 
   // Outside click
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -174,9 +210,9 @@ export function Combobox({
     return () => document.removeEventListener("mousedown", handler);
   }, [open, closePanel]);
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
+  const onKeyDown = (e: KeyboardEvent) => {
     if (!open) {
-      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
+      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         openPanel();
       }
@@ -184,12 +220,17 @@ export function Combobox({
     }
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       closePanel();
-      triggerRef.current?.focus();
+      triggerRef.current?.focus({ preventScroll: true });
+    } else if (e.key === "Tab") {
+      if (e.shiftKey) e.preventDefault();
+      triggerRef.current?.focus({ preventScroll: true });
+      closePanel();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
       navByKeyboard.current = true;
-      setActiveIndex((i) => Math.min(i + 1, flatOptions.length - 1));
+      setActiveIndex((i) => Math.max(0, Math.min(i + 1, flatOptions.length - 1)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       navByKeyboard.current = true;
@@ -202,7 +243,7 @@ export function Combobox({
   };
 
   // Group options for display when not searching
-  const groups = React.useMemo(() => {
+  const groups = useMemo(() => {
     if (isSearching) return null;
     const map = new Map<string, ComboboxOption[]>();
     for (const opt of filtered) {
@@ -214,10 +255,13 @@ export function Combobox({
     return map;
   }, [filtered, isSearching]);
 
-  // Reset active index when query changes
-  React.useEffect(() => {
-    setActiveIndex(0);
-  }, [query]);
+  useLayoutEffect(() => {
+    if (!open) return;
+    scrollToOption(
+      listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]') ?? null,
+      true,
+    );
+  }, [open]);
 
   return (
     <div className={cn("relative", className)}>
@@ -225,7 +269,9 @@ export function Combobox({
         ref={triggerRef}
         type="button"
         role="combobox"
+        aria-label={ariaLabel}
         aria-expanded={open}
+        aria-controls={open ? listId : undefined}
         aria-haspopup="listbox"
         disabled={disabled}
         onKeyDown={onKeyDown}
@@ -251,7 +297,6 @@ export function Combobox({
         createPortal(
           <div
             ref={listRef}
-            role="listbox"
             style={{
               position: "fixed",
               top: panelStyle.top,
@@ -270,14 +315,33 @@ export function Combobox({
               <input
                 ref={searchRef}
                 type="text"
+                role="combobox"
+                aria-label={t("common.search")}
+                aria-autocomplete="list"
+                aria-expanded={open}
+                aria-controls={listId}
+                aria-activedescendant={
+                  flatOptions[activeIndex] ? `${listId}-${activeIndex}` : undefined
+                }
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setActiveIndex(0);
+                  navByKeyboard.current = true;
+                }}
                 placeholder={t("common.search")}
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
               />
             </div>
 
-            <div className="overflow-y-auto" style={{ maxHeight: panelStyle.maxHeight - 40 }}>
+            <div
+              ref={scrollRef}
+              id={listId}
+              role="listbox"
+              aria-label={ariaLabel ?? selectedLabel ?? t("common.select")}
+              className="overflow-y-auto"
+              style={{ maxHeight: panelStyle.maxHeight - 40 }}
+            >
               {flatOptions.length === 0 ? (
                 <p className="px-3 py-6 text-center text-xs text-muted-foreground">
                   {t("common.noMatches")}
@@ -286,6 +350,7 @@ export function Combobox({
                 flatOptions.map((opt, i) => (
                   <OptionRow
                     key={opt.isCustom ? "__custom__" : opt.value}
+                    id={`${listId}-${i}`}
                     opt={
                       opt.isCustom
                         ? { ...opt, label: t("common.useCustomValue", { value: opt.value }) }
@@ -314,6 +379,7 @@ export function Combobox({
                           return (
                             <OptionRow
                               key={opt.value}
+                              id={`${listId}-${i}`}
                               opt={opt}
                               isActive={i === activeIndex}
                               isSelected={opt.value === value}
@@ -337,6 +403,7 @@ export function Combobox({
 }
 
 type OptionRowProps = {
+  id: string;
   opt: ComboboxOption;
   isActive: boolean;
   isSelected: boolean;
@@ -346,6 +413,7 @@ type OptionRowProps = {
 };
 
 function OptionRow({
+  id,
   opt,
   isActive,
   isSelected,
@@ -355,6 +423,7 @@ function OptionRow({
 }: OptionRowProps) {
   return (
     <div
+      id={id}
       role="option"
       aria-selected={isSelected}
       data-active={isActive}

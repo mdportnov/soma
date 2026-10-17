@@ -1,12 +1,23 @@
 import * as React from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Sparkles, TestTubes, Trash2, Pencil, ArrowRight, ClipboardCheck } from "lucide-react";
+import {
+  Sparkles,
+  TestTubes,
+  Trash2,
+  Pencil,
+  ArrowRight,
+  ClipboardCheck,
+  Plus,
+} from "lucide-react";
 import { useQuery } from "@/hooks/useQuery";
 import { seedState, useSeed, type BiomarkerSeed, type LabPanelSeed } from "@/app/seed";
 import { useHighlight } from "@/hooks/useHighlight";
 import {
+  addFindingToPanel,
+  addResultToPanel,
   createPanelFindings,
   createPanelWithResults,
+  DuplicateResultError,
   deleteFinding,
   deletePanel,
   getFindingsByPanel,
@@ -15,6 +26,7 @@ import {
   getPanelResults,
   getPanelSource,
   getProfile,
+  listBiomarkers,
   updateFinding,
   updatePanel,
   updateResultValue,
@@ -38,6 +50,7 @@ import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/app/Field";
 import { Input } from "@/components/ui/input";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import type { LabFinding, LabPanel, SampleType } from "@/db/schema";
 import { SAMPLE_TYPES } from "@/db/schema";
 import { useApp } from "@/app/AppContext";
@@ -108,34 +121,84 @@ export function LabPanelDetail() {
   // click, so the header is on screen at once and only the results wait.
   const seed = useSeed<LabPanelSeed>("labPanel");
   const [editFinding, setEditFinding] = React.useState<LabFinding | null>(null);
-  const [editDraft, setEditDraft] = React.useState({ valueText: "", unit: "", refRangeText: "" });
+  // `addingFinding` reuses the finding dialog for a new row (label editable).
+  const [addingFinding, setAddingFinding] = React.useState(false);
+  const [editDraft, setEditDraft] = React.useState({
+    rawLabel: "",
+    valueText: "",
+    unit: "",
+    refRangeText: "",
+  });
   const [editResult, setEditResult] = React.useState<ResultWithBiomarker | null>(null);
-  const [resultDraft, setResultDraft] = React.useState({ valueText: "", unit: "" });
+  // `addingResult` reuses the result dialog for a row missing from the panel.
+  const [addingResult, setAddingResult] = React.useState(false);
+  const [resultDraft, setResultDraft] = React.useState({
+    biomarkerId: "",
+    valueText: "",
+    unit: "",
+    labRefRangeText: "",
+  });
+  const [resultError, setResultError] = React.useState<string | null>(null);
   const [editPanel, setEditPanel] = React.useState<PanelDraft | null>(null);
 
   const { data, loading, reload } = useQuery(async () => {
-    const [panel, results, changes, source, findings, profile] = await Promise.all([
+    const [panel, results, changes, source, findings, profile, biomarkers] = await Promise.all([
       getPanel(panelId),
       getPanelResults(panelId),
       getPanelChanges(panelId),
       getPanelSource(panelId),
       getFindingsByPanel(panelId),
       getProfile(profileId),
+      listBiomarkers(),
     ]);
-    return { panel, results, changes, source, findings, profile };
+    return { panel, results, changes, source, findings, profile, biomarkers };
   }, [panelId, profileId]);
 
   const parsedResult = parseResultInput(resultDraft.valueText);
-  const resultDraftValid = parsedResult != null && resultDraft.unit.trim() !== "";
+  const resultDraftValid =
+    parsedResult != null && resultDraft.unit.trim() !== "" && resultDraft.biomarkerId !== "";
+  const biomarkerOptions: ComboboxOption[] = React.useMemo(
+    () =>
+      (data?.biomarkers ?? []).map((b) => ({
+        value: String(b.id),
+        label: b.canonicalName,
+        group: b.category,
+        keywords: b.aliases ?? [],
+      })),
+    [data?.biomarkers],
+  );
+  const closeResultDialog = () => {
+    setEditResult(null);
+    setAddingResult(false);
+    setResultError(null);
+  };
+  const closeFindingDialog = () => {
+    setEditFinding(null);
+    setAddingFinding(false);
+  };
 
   const saveFinding = async () => {
-    if (!editFinding || !editDraft.valueText.trim()) return;
-    await updateFinding(editFinding.id, {
+    if (!editDraft.valueText.trim()) return;
+    const fields = {
       valueText: editDraft.valueText.trim(),
       unit: editDraft.unit.trim() || null,
       refRangeText: editDraft.refRangeText.trim() || null,
-    });
-    setEditFinding(null);
+    };
+    if (addingFinding) {
+      if (!editDraft.rawLabel.trim()) return;
+      await addFindingToPanel(panelId, {
+        ...fields,
+        rawLabel: editDraft.rawLabel.trim(),
+        valueNumeric: parseResultInput(fields.valueText)?.value ?? null,
+      });
+      toast.show(t("labPanelDetail.findingAddedToast"));
+    } else if (editFinding) {
+      await updateFinding(editFinding.id, {
+        ...fields,
+        rawLabel: editDraft.rawLabel.trim() || editFinding.rawLabel,
+      });
+    }
+    closeFindingDialog();
     await reload();
   };
 
@@ -159,15 +222,38 @@ export function LabPanelDetail() {
   };
 
   const saveResultValue = async () => {
-    if (!editResult || !resultDraftValid || !parsedResult) return;
-    await updateResultValue(editResult.id, {
-      value: parsedResult.value,
-      comparator: parsedResult.comparator,
-      unit: resultDraft.unit.trim(),
-    });
-    setEditResult(null);
+    if (!resultDraftValid || !parsedResult) return;
+    const biomarkerId = Number(resultDraft.biomarkerId);
+    try {
+      if (addingResult) {
+        await addResultToPanel(panelId, {
+          biomarkerId,
+          value: parsedResult.value,
+          comparator: parsedResult.comparator,
+          unit: resultDraft.unit.trim(),
+          labRefRangeText: resultDraft.labRefRangeText.trim() || null,
+        });
+      } else if (editResult) {
+        // Remapping keeps the row: id, value, raw label, source page and
+        // provenance stay; only the biomarker (confidence → manual) changes.
+        await updateResultValue(editResult.id, {
+          value: parsedResult.value,
+          comparator: parsedResult.comparator,
+          unit: resultDraft.unit.trim(),
+          biomarkerId,
+        });
+      } else return;
+    } catch (e) {
+      if (e instanceof DuplicateResultError) {
+        setResultError(t("labPanelDetail.duplicateResult"));
+        return;
+      }
+      throw e;
+    }
+    const added = addingResult;
+    closeResultDialog();
     await reload();
-    toast.show(t("labPanelDetail.resultUpdatedToast"));
+    toast.show(t(added ? "labPanelDetail.resultAddedToast" : "labPanelDetail.resultUpdatedToast"));
   };
 
   const panel = data ? data.panel : (seed?.panel ?? null);
@@ -359,6 +445,39 @@ export function LabPanelDetail() {
             <NotableChanges changes={changes} />
           </div>
 
+          <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+            {needsReview.length === 0 && results.length > 0 && (
+              <Link
+                to={`/labs/${panelId}/verify?all=1`}
+                state={drillState}
+                className={buttonVariants({ variant: "ghost", size: "sm" })}
+              >
+                <ClipboardCheck /> {t("labPanelDetail.reviewMappings")}
+              </Link>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAddingFinding(true);
+                setEditDraft({ rawLabel: "", valueText: "", unit: "", refRangeText: "" });
+              }}
+            >
+              <Plus /> {t("labPanelDetail.addFinding")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAddingResult(true);
+                setResultError(null);
+                setResultDraft({ biomarkerId: "", valueText: "", unit: "", labRefRangeText: "" });
+              }}
+            >
+              <Plus /> {t("labPanelDetail.addResult")}
+            </Button>
+          </div>
+
           <Card>
             <CardContent className="p-0">
               {results.length === 0 ? (
@@ -509,9 +628,12 @@ export function LabPanelDetail() {
                                 aria-label={t("common.edit")}
                                 onClick={() => {
                                   setEditResult(r);
+                                  setResultError(null);
                                   setResultDraft({
+                                    biomarkerId: String(r.biomarkerId),
                                     valueText: formatResult(r.value, r.comparator, 6),
                                     unit: r.unit,
+                                    labRefRangeText: r.labRefRangeText ?? "",
                                   });
                                 }}
                               >
@@ -546,7 +668,14 @@ export function LabPanelDetail() {
                             </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">
-                              {t("needsReview.reviewed")}
+                              {t("needsReview.reviewed")} ·{" "}
+                              <Link
+                                to={`/labs/${panelId}/verify?all=1&result=${r.id}`}
+                                state={drillState}
+                                className="text-primary hover:underline"
+                              >
+                                {t("labPanelDetail.recheck")}
+                              </Link>
                             </span>
                           )}
                         </TableCell>
@@ -609,6 +738,7 @@ export function LabPanelDetail() {
                               onClick={() => {
                                 setEditFinding(f);
                                 setEditDraft({
+                                  rawLabel: f.rawLabel,
                                   valueText: f.valueText,
                                   unit: f.unit ?? "",
                                   refRangeText: f.refRangeText ?? "",
@@ -645,15 +775,23 @@ export function LabPanelDetail() {
           )}
 
           <Dialog
-            open={editFinding != null}
-            onClose={() => setEditFinding(null)}
-            title={t("labPanelDetail.editFindingTitle")}
-            description={editFinding?.rawLabel}
+            open={editFinding != null || addingFinding}
+            onClose={closeFindingDialog}
+            title={t(
+              addingFinding ? "labPanelDetail.addFindingTitle" : "labPanelDetail.editFindingTitle",
+            )}
+            description={addingFinding ? t("labPanelDetail.addFindingDescription") : undefined}
             onSubmit={() => void saveFinding()}
-            submitDisabled={!editDraft.valueText.trim()}
+            submitDisabled={!editDraft.valueText.trim() || !editDraft.rawLabel.trim()}
             guardUnsaved
           >
             <div className="grid gap-3">
+              <Field label={t("labPanelDetail.findingLabel")}>
+                <Input
+                  value={editDraft.rawLabel}
+                  onChange={(e) => setEditDraft({ ...editDraft, rawLabel: e.target.value })}
+                />
+              </Field>
               <Field label={t("labPanelDetail.tableColumns.value")}>
                 <Input
                   value={editDraft.valueText}
@@ -673,27 +811,54 @@ export function LabPanelDetail() {
                 />
               </Field>
               <DialogActions
-                onClose={() => setEditFinding(null)}
+                onClose={closeFindingDialog}
                 onSubmit={() => void saveFinding()}
                 submitLabel={t("common.save")}
-                disabled={!editDraft.valueText.trim()}
+                disabled={!editDraft.valueText.trim() || !editDraft.rawLabel.trim()}
               />
             </div>
           </Dialog>
 
           <Dialog
-            open={editResult != null}
-            onClose={() => setEditResult(null)}
-            title={t("labPanelDetail.editResultTitle")}
-            description={editResult?.biomarker.canonicalName}
+            open={editResult != null || addingResult}
+            onClose={closeResultDialog}
+            title={t(
+              addingResult ? "labPanelDetail.addResultTitle" : "labPanelDetail.editResultTitle",
+            )}
+            description={editResult?.rawLabel ?? undefined}
             onSubmit={() => void saveResultValue()}
             submitDisabled={!resultDraftValid}
             guardUnsaved
           >
             <div className="grid gap-3">
               <p className="text-xs text-muted-foreground">
-                {t("labPanelDetail.editResultDescription")}
+                {t(
+                  addingResult
+                    ? "labPanelDetail.addResultDescription"
+                    : "labPanelDetail.editResultDescription",
+                )}
               </p>
+              <Field label={t("labPanelDetail.tableColumns.biomarker")}>
+                <Combobox
+                  aria-label={t("labPanelDetail.tableColumns.biomarker")}
+                  value={resultDraft.biomarkerId || null}
+                  onChange={(v) => {
+                    const bio = data?.biomarkers.find((b) => String(b.id) === v);
+                    setResultError(null);
+                    setResultDraft({
+                      ...resultDraft,
+                      biomarkerId: v ?? "",
+                      // A fresh row starts in the marker's own unit.
+                      unit:
+                        addingResult && !resultDraft.unit && bio
+                          ? bio.defaultUnit
+                          : resultDraft.unit,
+                    });
+                  }}
+                  options={biomarkerOptions}
+                  placeholder={t("importWizard.notMapped")}
+                />
+              </Field>
               <Field label={t("labPanelDetail.tableColumns.value")}>
                 <Input
                   inputMode="decimal"
@@ -707,8 +872,23 @@ export function LabPanelDetail() {
                   onChange={(e) => setResultDraft({ ...resultDraft, unit: e.target.value })}
                 />
               </Field>
+              {addingResult && (
+                <Field label={t("labPanelDetail.labRangeField")}>
+                  <Input
+                    value={resultDraft.labRefRangeText}
+                    onChange={(e) =>
+                      setResultDraft({ ...resultDraft, labRefRangeText: e.target.value })
+                    }
+                  />
+                </Field>
+              )}
+              {resultError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {resultError}
+                </p>
+              )}
               <DialogActions
-                onClose={() => setEditResult(null)}
+                onClose={closeResultDialog}
                 onSubmit={() => void saveResultValue()}
                 submitLabel={t("common.save")}
                 disabled={!resultDraftValid}

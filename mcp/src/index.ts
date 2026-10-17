@@ -42,6 +42,7 @@ Domain rules you must follow:
 - All dates are ISO 8601 (YYYY-MM-DD). Medications have intake periods (startDate, endDate; endDate=null means currently taking) — when interpreting a biomarker, symptom or BP trend, correlate changes with overlapping medication periods returned by get_biomarker_trend / get_symptom_trend.
 - Trends: get_symptom_trend (severity over time + overlapping meds), get_weight_trend (kg vs target), get_bp_trend (systolic/diastolic with normal/stage2/crisis flags), get_lifestyle_trend (sleep/training/stress/energy per day).
 - Browse existing records before writing: list_medications, list_diagnoses, list_visits, list_lab_panels + get_lab_panel, list_vaccines, list_health_notes, list_imaging_records, list_retest_schedules. Never claim a record does or does not exist without checking the matching list tool first.
+- Lab panels are corrected in place: update_lab_result fixes a stored result's value, threshold operator, unit or biomarker mapping (keeping its row and source), add_lab_result / add_lab_finding append a missed row to an existing panel, and update_lab_finding edits a finding. Never re-create a panel with add_lab_panel to fix or extend it. create_custom_biomarker is only for an analyte the dictionary lacks and the user asked to track.
 - Records link together via visitId: add_diagnosis, add_imaging_record and log_symptom accept the id of a visit from add_visit/list_visits — pass it whenever the user says a finding came from a specific appointment.
 - Medications are periods, not events: add_medication starts an intake period (endDate=null means currently taking; a future startDate plans a course that has not begun), stop_medication closes an open period, update_medication edits any field of an existing row (correct a dose, fix a date, re-open a course — pass endDate=null to clear it), and delete_medication removes a mistaken row (with its adherence logs and its prescription document). Never add a second active row for the same drug — stop/update the old one or record a dose change as stop + add.
 - Writes are validated strictly: every add_*/log_*/update_*/set_*/stop_*/delete_* tool validates dates (future dates are refused except a planned medication startDate/endDate) and enums, refuses instead of guessing, and supports dryRun=true to preview the exact row. log_symptom reuses the existing spelling of a known symptom when it matches case-insensitively; log_lifestyle keeps one row per day and merges only the fields you pass. Write tools are disabled unless the user set SOMA_MCP_ALLOW_WRITES=1 for this server; if a write is refused for that reason, tell the user to enable it in their MCP client config rather than retrying.
@@ -685,6 +686,383 @@ server.registerTool(
     );
 
     return ok({ saved: true, panelId: panelInsert.lastInsertId, date, rows: review });
+  },
+);
+
+// ── editing stored lab panels ───────────────────────────────────────────────
+// A saved panel is corrected in place: a result keeps its row id, raw label,
+// source page and provenance when its value or biomarker changes, and rows the
+// import missed are appended to the panel instead of starting a second one.
+
+type BiomarkerRow = typeof biomarker.$inferSelect;
+const COMPARATOR = z.enum(["<", "<=", ">", ">="]);
+
+function ownedPanel(panelId: number, pid: number) {
+  const row = db.orm.select().from(labPanel).where(eq(labPanel.id, panelId)).get();
+  return row && row.profileId === pid ? row : null;
+}
+
+/** Another result of the panel already on this biomarker, if any. */
+function panelResultFor(panelId: number, biomarkerId: number, exceptId?: number): number | null {
+  const rows = db.orm
+    .select({ id: labResult.id })
+    .from(labResult)
+    .where(and(eq(labResult.panelId, panelId), eq(labResult.biomarkerId, biomarkerId)))
+    .all();
+  return rows.find((r) => r.id !== exceptId)?.id ?? null;
+}
+
+/** Biomarker by explicit id, or by label through the import's matcher. */
+function resolveBiomarker(
+  label: string | undefined,
+  biomarkerId: number | undefined,
+): { bio: BiomarkerRow; confidence: "manual" | "exact" | "fuzzy" } | { error: string } {
+  if (biomarkerId != null) {
+    const bio = db.orm.select().from(biomarker).where(eq(biomarker.id, biomarkerId)).get();
+    return bio
+      ? { bio, confidence: "manual" }
+      : { error: `biomarkerId ${biomarkerId} does not exist — resolve it via search_biomarkers.` };
+  }
+  if (!label) return { error: "Pass biomarkerId or label." };
+  const match = matchBiomarker(label, db.orm.select().from(biomarker).all());
+  if (match.kind === "exact" || match.kind === "fuzzy") {
+    return { bio: match.biomarker, confidence: match.kind };
+  }
+  return {
+    error: `"${label}": ${match.kind === "ambiguous" ? "ambiguous" : "no"} match — ${describeCandidates(
+      match.candidates,
+    )}. Resolve via search_biomarkers and pass biomarkerId.`,
+  };
+}
+
+/** Normalized value + flag, or why the unit can't be placed on the marker. */
+function normalizeResult(
+  bio: BiomarkerRow,
+  value: number,
+  unit: string,
+  comparator: z.infer<typeof COMPARATOR> | null,
+):
+  | {
+      valueNormalized: number;
+      unitNormalized: string;
+      outOfRange: boolean;
+      flag: "low" | "high" | "critical" | null;
+    }
+  | { error: string } {
+  const conversion = convertToDefaultUnit(value, unit, bio);
+  if (!conversion.ok) {
+    return {
+      error: `${bio.canonicalName}: cannot convert ${unit} → ${bio.defaultUnit}. Provide the value in ${bio.defaultUnit}.`,
+    };
+  }
+  const { outOfRange, flag } = computeResultFlag(conversion.value, comparator, bio);
+  return { valueNormalized: conversion.value, unitNormalized: conversion.unit, outOfRange, flag };
+}
+
+function resultSummary(r: typeof labResult.$inferSelect, bio: BiomarkerRow) {
+  return {
+    id: r.id,
+    panelId: r.panelId,
+    biomarkerId: bio.id,
+    biomarker: bio.canonicalName,
+    value: r.value,
+    comparator: r.comparator,
+    unit: r.unit,
+    valueNormalized: r.valueNormalized,
+    unitNormalized: r.unitNormalized,
+    outOfRange: r.outOfRange,
+    flag: r.flag,
+    labRefRangeText: r.labRefRangeText,
+    rawLabel: r.rawLabel,
+    sourcePage: r.sourcePage,
+    confidence: r.confidence,
+    reviewedAt: r.reviewedAt,
+  };
+}
+
+server.registerTool(
+  "add_lab_result",
+  {
+    title: "Add lab result to a panel",
+    description:
+      'Appends ONE numeric result to an existing lab panel (panelId from list_lab_panels) — for a value the import missed. Never creates a panel. The label must map unambiguously to a dictionary biomarker (or pass biomarkerId), the unit must convert to the biomarker\'s default unit, and the panel must not already have a result for that biomarker (edit it with update_lab_result instead). Use comparator for a threshold result printed like "<0.5". Set dryRun=true to preview. Only write values the user explicitly provided.',
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      panelId: z.number().int().describe("Id from list_lab_panels"),
+      label: z.string().min(1).optional().describe("Analyte name as written in the source"),
+      biomarkerId: z.number().int().optional().describe("Explicit dictionary id — skips matching"),
+      value: z.number().finite(),
+      comparator: COMPARATOR.optional().describe("Threshold operator; value is then the bound"),
+      unit: z.string().min(1),
+      labRefRangeText: z.string().optional().describe("The lab's reference range as printed"),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const w = beginWrite(input.profileId);
+    if (!w.ok) return w.result;
+    const panel = ownedPanel(input.panelId, w.pid);
+    if (!panel) return fail(`Panel ${input.panelId} not found — check list_lab_panels.`);
+    const resolved = resolveBiomarker(input.label, input.biomarkerId);
+    if ("error" in resolved) return fail(resolved.error);
+    const { bio, confidence } = resolved;
+    const normalized = normalizeResult(bio, input.value, input.unit, input.comparator ?? null);
+    if ("error" in normalized) return fail(normalized.error);
+
+    const row = {
+      panelId: panel.id,
+      biomarkerId: bio.id,
+      value: input.value,
+      comparator: input.comparator ?? null,
+      unit: input.unit,
+      labRefRangeText: input.labRefRangeText?.trim() || null,
+      ...normalized,
+      rawLabel: input.label ?? null,
+      confidence,
+      // A fuzzy label match is a guess the user should confirm in the app.
+      reviewedAt: confidence === "fuzzy" ? null : new Date().toISOString(),
+    };
+    const preview = { ...row, biomarker: bio.canonicalName };
+    const existing = panelResultFor(panel.id, bio.id);
+    if (existing) {
+      return fail(
+        `Panel ${panel.id} already has a ${bio.canonicalName} result (id ${existing}). Correct it with update_lab_result instead of adding a second one.`,
+      );
+    }
+    if (input.dryRun) return ok({ saved: false, dryRun: true, row: preview });
+
+    const id = writeAtomically(() => {
+      if (panelResultFor(panel.id, bio.id)) return null;
+      return db.orm.insert(labResult).values(row).returning({ id: labResult.id }).get().id;
+    });
+    if (id == null) return fail(`Panel ${panel.id} already has a ${bio.canonicalName} result.`);
+    return ok({ saved: true, resultId: id, row: preview });
+  },
+);
+
+server.registerTool(
+  "update_lab_result",
+  {
+    title: "Update lab result",
+    description:
+      "Corrects one stored lab result in place (resultId from get_lab_panel): its value, threshold operator, unit, lab reference range, or the biomarker it is mapped to. The row keeps its id, raw label, source page and panel; only the fields you pass change. Remapping to a biomarker the panel already has is refused. Normalization and flags are recalculated, and the row counts as reviewed afterwards. Pass comparator=null to make a threshold an exact value. Set dryRun=true to preview the before/after diff.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      resultId: z.number().int().describe("Result id from get_lab_panel"),
+      biomarkerId: z.number().int().optional().describe("Remap to this dictionary biomarker"),
+      value: z.number().finite().optional(),
+      comparator: COMPARATOR.nullable().optional().describe("null clears it (exact value)"),
+      unit: z.string().min(1).optional(),
+      labRefRangeText: z.string().nullable().optional().describe("null or empty clears it"),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const w = beginWrite(input.profileId);
+    if (!w.ok) return w.result;
+    const target = db.orm.select().from(labResult).where(eq(labResult.id, input.resultId)).get();
+    if (!target || !ownedPanel(target.panelId, w.pid)) {
+      return fail(`Result ${input.resultId} not found — check get_lab_panel.`);
+    }
+    const before = db.orm
+      .select()
+      .from(biomarker)
+      .where(eq(biomarker.id, target.biomarkerId))
+      .get()!;
+    let bio = before;
+    if (input.biomarkerId != null && input.biomarkerId !== target.biomarkerId) {
+      const resolved = resolveBiomarker(undefined, input.biomarkerId);
+      if ("error" in resolved) return fail(resolved.error);
+      bio = resolved.bio;
+      const existing = panelResultFor(target.panelId, bio.id, target.id);
+      if (existing) {
+        return fail(
+          `Panel ${target.panelId} already has a ${bio.canonicalName} result (id ${existing}).`,
+        );
+      }
+    }
+    const value = input.value ?? target.value;
+    const unit = input.unit ?? target.unit;
+    const comparator = input.comparator === undefined ? target.comparator : input.comparator;
+    const normalized = normalizeResult(bio, value, unit, comparator);
+    if ("error" in normalized) return fail(normalized.error);
+    const changes = {
+      biomarkerId: bio.id,
+      value,
+      comparator,
+      unit,
+      labRefRangeText:
+        input.labRefRangeText === undefined
+          ? target.labRefRangeText
+          : input.labRefRangeText?.trim() || null,
+      ...normalized,
+      confidence: bio.id !== target.biomarkerId ? ("manual" as const) : target.confidence,
+      reviewedAt: new Date().toISOString(),
+    };
+    const after = resultSummary({ ...target, ...changes }, bio);
+    if (input.dryRun) {
+      return ok({ saved: false, dryRun: true, before: resultSummary(target, before), after });
+    }
+    const conflict = writeAtomically(() => {
+      if (bio.id !== target.biomarkerId && panelResultFor(target.panelId, bio.id, target.id)) {
+        return true;
+      }
+      db.orm.update(labResult).set(changes).where(eq(labResult.id, target.id)).run();
+      return false;
+    });
+    if (conflict) return fail(`Panel ${target.panelId} already has a ${bio.canonicalName} result.`);
+    return ok({ saved: true, before: resultSummary(target, before), after });
+  },
+);
+
+server.registerTool(
+  "add_lab_finding",
+  {
+    title: "Add lab finding to a panel",
+    description:
+      'Appends one additional finding to an existing lab panel: a qualitative result ("negative", a titre like "1:160", "++") or an analyte that is not in the biomarker dictionary. Findings are kept with the panel but not trended. Refuses an exact repeat of a finding the panel already has. Set dryRun=true to preview. Only write what the user explicitly provided.',
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      panelId: z.number().int().describe("Id from list_lab_panels"),
+      rawLabel: z.string().min(1).describe("Analyte name as printed"),
+      nameEn: z.string().optional().describe("English name, when the label is in another language"),
+      valueText: z.string().min(1).describe("Result exactly as printed"),
+      unit: z.string().optional(),
+      refRangeText: z.string().optional().describe("Reference range as printed"),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const w = beginWrite(input.profileId);
+    if (!w.ok) return w.result;
+    const panel = ownedPanel(input.panelId, w.pid);
+    if (!panel) return fail(`Panel ${input.panelId} not found — check list_lab_panels.`);
+    const numeric = Number(input.valueText.trim().replace(",", "."));
+    const row = {
+      panelId: panel.id,
+      rawLabel: input.rawLabel.trim(),
+      nameEn: input.nameEn?.trim() || null,
+      valueText: input.valueText.trim(),
+      valueNumeric: Number.isFinite(numeric) ? numeric : null,
+      unit: input.unit?.trim() || null,
+      refRangeText: input.refRangeText?.trim() || null,
+    };
+    const isRepeat = () =>
+      db.orm
+        .select({ id: labFinding.id })
+        .from(labFinding)
+        .where(
+          and(
+            eq(labFinding.panelId, panel.id),
+            sql`lower(${labFinding.rawLabel}) = lower(${row.rawLabel})`,
+            eq(labFinding.valueText, row.valueText),
+          ),
+        )
+        .get();
+    const repeat = isRepeat();
+    if (repeat) {
+      return fail(`Panel ${panel.id} already has this finding (id ${repeat.id}).`);
+    }
+    if (input.dryRun) return ok({ saved: false, dryRun: true, row });
+    const id = writeAtomically(() =>
+      isRepeat()
+        ? null
+        : db.orm.insert(labFinding).values(row).returning({ id: labFinding.id }).get().id,
+    );
+    if (id == null) return fail(`Panel ${panel.id} already has this finding.`);
+    return ok({ saved: true, findingId: id, row });
+  },
+);
+
+server.registerTool(
+  "update_lab_finding",
+  {
+    title: "Update lab finding",
+    description:
+      "Corrects one stored lab finding (findingId from get_lab_panel). Only the fields you pass change; pass an empty string to clear nameEn, unit or refRangeText. Set dryRun=true to preview the before/after diff.",
+    inputSchema: {
+      profileId: z.number().int().optional(),
+      findingId: z.number().int().describe("Finding id from get_lab_panel"),
+      rawLabel: z.string().min(1).optional(),
+      nameEn: z.string().optional(),
+      valueText: z.string().min(1).optional(),
+      unit: z.string().optional(),
+      refRangeText: z.string().optional(),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const w = beginWrite(input.profileId);
+    if (!w.ok) return w.result;
+    const target = db.orm.select().from(labFinding).where(eq(labFinding.id, input.findingId)).get();
+    if (!target || !ownedPanel(target.panelId, w.pid)) {
+      return fail(`Finding ${input.findingId} not found — check get_lab_panel.`);
+    }
+    const optional = (v: string | undefined, current: string | null) =>
+      v === undefined ? current : v.trim() || null;
+    const valueText = input.valueText?.trim() ?? target.valueText;
+    const numeric = Number(valueText.replace(",", "."));
+    const changes = {
+      rawLabel: input.rawLabel?.trim() ?? target.rawLabel,
+      nameEn: optional(input.nameEn, target.nameEn),
+      valueText,
+      valueNumeric: Number.isFinite(numeric) ? numeric : null,
+      unit: optional(input.unit, target.unit),
+      refRangeText: optional(input.refRangeText, target.refRangeText),
+    };
+    const after = { ...target, ...changes };
+    if (input.dryRun) return ok({ saved: false, dryRun: true, before: target, after });
+    db.orm.update(labFinding).set(changes).where(eq(labFinding.id, target.id)).run();
+    return ok({ saved: true, before: target, after });
+  },
+);
+
+server.registerTool(
+  "create_custom_biomarker",
+  {
+    title: "Create custom biomarker",
+    description:
+      "Adds a user-defined biomarker to the dictionary, for an analyte search_biomarkers cannot find — so its results can be trended instead of kept as findings. Refuses a name or alias that already resolves to an existing biomarker. Only create one when the user asked for it; never to make an unmatched label fit. Set dryRun=true to preview.",
+    inputSchema: {
+      name: z.string().min(1).describe("Canonical English name"),
+      category: z.string().min(1).default("Custom"),
+      unit: z.string().min(1).describe("Default unit values are stored in"),
+      refLow: z.number().finite().optional(),
+      refHigh: z.number().finite().optional(),
+      direction: z.enum(["range", "higher_better", "lower_better"]).default("range"),
+      aliases: z.array(z.string().min(1)).default([]).describe("Other names, any language"),
+      dryRun: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const w = beginWrite();
+    if (!w.ok) return w.result;
+    if (input.refLow != null && input.refHigh != null && input.refLow > input.refHigh) {
+      return fail(`refLow ${input.refLow} is above refHigh ${input.refHigh}.`);
+    }
+    const dictionary = db.orm.select().from(biomarker).all();
+    const names = [input.name, ...input.aliases].map((n) => n.trim());
+    for (const name of names) {
+      const match = matchBiomarker(name, dictionary);
+      if (match.kind === "exact") {
+        return fail(
+          `"${name}" already resolves to ${match.biomarker.canonicalName} (id ${match.biomarker.id}). Use that biomarker.`,
+        );
+      }
+    }
+    const row = {
+      canonicalName: input.name.trim(),
+      category: input.category.trim(),
+      defaultUnit: input.unit.trim(),
+      refLow: input.refLow ?? null,
+      refHigh: input.refHigh ?? null,
+      direction: input.direction,
+      aliases: [...new Set(input.aliases.map((a) => a.trim()))],
+      isCustom: true,
+    };
+    if (input.dryRun) return ok({ saved: false, dryRun: true, biomarker: row });
+    const id = db.orm.insert(biomarker).values(row).returning({ id: biomarker.id }).get().id;
+    return ok({ saved: true, biomarkerId: id, biomarker: row });
   },
 );
 
@@ -2342,7 +2720,10 @@ server.registerTool(
 
     const results = db.orm
       .select({
+        id: labResult.id,
         biomarkerId: labResult.biomarkerId,
+        rawLabel: labResult.rawLabel,
+        reviewedAt: labResult.reviewedAt,
         name: biomarker.canonicalName,
         category: biomarker.category,
         value: labResult.value,
@@ -2365,6 +2746,7 @@ server.registerTool(
 
     const findings = db.orm
       .select({
+        id: labFinding.id,
         rawLabel: labFinding.rawLabel,
         nameEn: labFinding.nameEn,
         valueText: labFinding.valueText,

@@ -131,7 +131,9 @@ export function VerifyImport() {
   const [selectedId, setSelectedId] = useState<number | null>(
     () => Number(searchParams.get("result")) || null,
   );
-  const [onlyUncertain, setOnlyUncertain] = useState(true);
+  // `?all=1` reopens a fully reviewed panel (or a reviewed row) for remapping;
+  // the default list is only what still needs a look.
+  const [onlyUncertain, setOnlyUncertain] = useState(() => searchParams.get("all") !== "1");
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);

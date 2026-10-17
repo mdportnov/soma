@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Saved lab panels can be corrected and extended.** The result editor can
+  move a result to another biomarker while keeping its value, source page and
+  history. "Add result" and "Add finding" put a row the import missed into the
+  existing panel instead of a new one. "Review mappings" reopens the
+  verification screen even when every row is already reviewed. A second result
+  for a biomarker the panel already has is refused, so a trend never shows the
+  same draw twice.
+- **MCP can edit lab panels in place.** New tools `add_lab_result`,
+  `update_lab_result`, `add_lab_finding`, `update_lab_finding` and
+  `create_custom_biomarker`, each with `dryRun` and duplicate checks; writes
+  still require `SOMA_MCP_ALLOW_WRITES=1`. `get_lab_panel` now returns row ids.
+
 ### Fixed
 
 - **Threshold lab results keep their operator.** A report value like "<5.6"

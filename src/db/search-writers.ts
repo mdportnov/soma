@@ -52,6 +52,8 @@ export const INDEX_TOUCHING_WRITERS = [
   "updatePanel",
   "updateResultValue",
   "createPanelFindings",
+  "addResultToPanel",
+  "addFindingToPanel",
   "updateFinding",
   "deleteFinding",
   "deletePanel",

@@ -24,6 +24,7 @@ import type {
   LabExtraction,
   RawExtraction,
   RawQualitativeExtraction,
+  Specimen,
   SuggestedBiomarker,
 } from "../../types";
 import {
@@ -41,7 +42,7 @@ import {
   expectObject,
   isoDateOrNull,
   nullableStr,
-  numberOrNull,
+  readResultValue,
 } from "../validate";
 import { createPanelWithResults, findDuplicatePanelsForImport } from "@/db/repos";
 import type { PanelDuplicate } from "@/lib/import-duplicates";
@@ -65,8 +66,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CreateBiomarkerDialog } from "@/pages/Biomarkers";
-import { formatValue, todayISO } from "@/lib/utils";
-import { allKnownUnits } from "@/lib/units";
+import { cn, formatResult, todayISO } from "@/lib/utils";
+import { allKnownUnits, formatComparator, parseResultInput, type Comparator } from "@/lib/units";
 import { rememberUnit, recallUnit } from "@/lib/unit-memory";
 import { useI18n } from "@/lib/i18n";
 
@@ -284,12 +285,14 @@ function validateQualitative(parsed: unknown): RawQualitativeExtraction[] {
         typeof o.analyte_en === "string" ? o.analyte_en.trim().slice(0, 120) || null : null,
       result_text: resultText,
       ref_range_text:
-        typeof o.ref_range_text === "string" ? o.ref_range_text.trim().slice(0, 120) : null,
+        typeof o.ref_range_text === "string" ? o.ref_range_text.trim().slice(0, 300) : null,
       page: Number.isInteger(o.page) && (o.page as number) >= 1 ? (o.page as number) : null,
     });
   }
   return rows;
 }
+
+const SPECIMENS: readonly Specimen[] = ["blood", "urine", "stool", "other"];
 
 /**
  * Validate analyte rows. Rows with a real label but a non-numeric result
@@ -306,7 +309,7 @@ function validateExtractions(
     if (!o) continue;
     const rawLabel = typeof o.raw_label === "string" ? o.raw_label.trim().slice(0, 300) : "";
     if (!rawLabel) continue;
-    const value = numberOrNull(o.value);
+    const { value, comparator, valueText } = readResultValue(o);
     if (value == null) {
       if (skipped.length < MAX_SKIPPED_ROWS) {
         const rawValue =
@@ -319,10 +322,13 @@ function validateExtractions(
       raw_label: rawLabel,
       analyte_en:
         typeof o.analyte_en === "string" ? o.analyte_en.trim().slice(0, 120) || null : null,
+      specimen: SPECIMENS.includes(o.specimen as Specimen) ? (o.specimen as Specimen) : null,
       value,
+      comparator,
+      value_text: valueText,
       unit: typeof o.unit === "string" ? o.unit.trim().slice(0, 40) : "",
       ref_range_text:
-        typeof o.ref_range_text === "string" ? o.ref_range_text.trim().slice(0, 120) : null,
+        typeof o.ref_range_text === "string" ? o.ref_range_text.trim().slice(0, 300) : null,
       // Source page must be a positive integer — a 0/negative/NaN page would
       // break the "jump to source" verify workflow (a core safety feature).
       page: Number.isInteger(o.page) && (o.page as number) >= 1 ? (o.page as number) : null,
@@ -452,7 +458,10 @@ async function saveLabPanel(
   const results = included.map((r) => ({
     biomarkerId: r.biomarkerId!,
     value: r.raw.value,
+    comparator: r.raw.comparator ?? null,
+    rawValueText: r.raw.value_text ?? null,
     unit: r.raw.unit || byId.get(r.biomarkerId!)?.defaultUnit || "",
+    labRefRangeText: r.raw.ref_range_text,
     rawLabel: r.raw.raw_label,
     sourcePage: r.raw.page,
     // "none" only survives here when the user hand-picked the biomarker for a
@@ -493,8 +502,8 @@ async function saveLabPanel(
       .map((r) => ({
         rawLabel: r.raw.raw_label,
         nameEn: r.raw.analyte_en,
-        valueText: String(r.raw.value),
-        valueNumeric: r.raw.value,
+        valueText: r.raw.value_text || `${formatComparator(r.raw.comparator)}${r.raw.value}`,
+        valueNumeric: r.raw.comparator ? null : r.raw.value,
         unit: r.raw.unit || null,
         refRangeText: r.raw.ref_range_text,
         sourcePage: r.raw.page,
@@ -506,6 +515,43 @@ async function saveLabPanel(
   for (const res of results) rememberUnit(draft.meta.labName, res.biomarkerId, res.unit);
   await source.link(panelId);
   return `/labs/${panelId}`;
+}
+
+/**
+ * The extracted result, editable in place. Accepts a threshold ("<0.5") so a
+ * misread operator can be fixed — or a wrongly added one removed — before the
+ * row is saved; the edit commits on blur and only when it parses.
+ */
+function ResultValueInput({
+  value,
+  comparator,
+  onCommit,
+}: {
+  value: number;
+  comparator: Comparator | null;
+  onCommit: (value: number, comparator: Comparator | null) => void;
+}) {
+  const { t } = useI18n();
+  const shown = formatResult(value, comparator, 6);
+  const [text, setText] = React.useState(shown);
+  React.useEffect(() => setText(shown), [shown]);
+  const parsed = parseResultInput(text);
+  return (
+    <Input
+      inputMode="decimal"
+      aria-label={t("fields.value")}
+      title={comparator ? t("labPanelDetail.thresholdHint") : undefined}
+      className={cn("h-7 w-20 text-right tabular-nums", !parsed && "border-destructive")}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        if (!parsed) return setText(shown);
+        if (parsed.value !== value || parsed.comparator !== comparator) {
+          onCommit(parsed.value, parsed.comparator);
+        }
+      }}
+    />
+  );
 }
 
 function ConfidenceBadge({ confidence }: { confidence: MappedRow["confidence"] }) {
@@ -741,7 +787,27 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
                         )}
                       </TableCell>
                       <TableCell numeric className="whitespace-nowrap">
-                        {formatValue(row.raw.value)} {row.raw.unit}
+                        <div className="flex items-center justify-end gap-1">
+                          <ResultValueInput
+                            value={row.raw.value}
+                            comparator={row.raw.comparator ?? null}
+                            onCommit={(value, comparator) =>
+                              updateRows((rs) => {
+                                const r = rs.find((x) => x.key === row.key)!;
+                                r.raw = { ...r.raw, value, comparator };
+                                reconvertRow(r, index);
+                              })
+                            }
+                          />
+                          <span>{row.raw.unit}</span>
+                        </div>
+                        {row.raw.value_text &&
+                          row.raw.value_text.replace(/\s/g, "") !==
+                            formatResult(row.raw.value, row.raw.comparator) && (
+                            <p className="text-[10px] text-muted-foreground">
+                              {t("labPanelDetail.printedAs")}: {row.raw.value_text}
+                            </p>
+                          )}
                       </TableCell>
                       <TableCell className="min-w-52">
                         <Combobox
@@ -809,7 +875,8 @@ function LabReview({ draft, setDraft, ctx, onSave }: ReviewProps<LabDraft>) {
                           <span className="text-muted-foreground">—</span>
                         ) : row.conversion.ok ? (
                           <span className="text-muted-foreground">
-                            {formatValue(row.conversion.value)} {row.conversion.unit}
+                            {formatResult(row.conversion.value, row.raw.comparator)}{" "}
+                            {row.conversion.unit}
                           </span>
                         ) : (
                           <Badge

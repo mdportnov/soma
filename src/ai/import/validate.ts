@@ -9,6 +9,7 @@
  */
 
 import { AIProviderError } from "../types";
+import { isComparator, splitComparator, type Comparator } from "@/lib/units";
 
 /** Trimmed, length-bounded string or null (empty → null). */
 export function nullableStr(v: unknown, maxLen = 200): string | null {
@@ -100,4 +101,33 @@ export function expectArray(v: unknown, what: string): unknown[] {
     throw new AIProviderError(`${what} did not return a JSON array`, undefined, "bad_response");
   }
   return v;
+}
+
+/**
+ * Reads a result cell without losing a threshold. The model is asked for the
+ * bound in `value` and the operator in `comparator`, but the operator is also
+ * recovered from `value_text` ("<0,5") or a string `value` ("<5.6") — a model
+ * that skips the field must not turn "below 5.6" into an exact 5.6.
+ */
+export function readResultValue(o: Record<string, unknown>): {
+  value: number | null;
+  comparator: Comparator | null;
+  valueText: string | null;
+} {
+  const valueText =
+    typeof o.value_text === "string" || typeof o.value_text === "number"
+      ? String(o.value_text).trim().slice(0, 60) || null
+      : null;
+  const fromText = valueText ? splitComparator(valueText) : null;
+  const fromValue = typeof o.value === "string" ? splitComparator(o.value) : null;
+  let value = fromValue ? numberOrNull(fromValue.rest) : numberOrNull(o.value);
+  if (value == null && fromText) value = numberOrNull(fromText.rest);
+  const comparator = isComparator(o.comparator)
+    ? o.comparator
+    : (fromValue?.comparator ?? fromText?.comparator ?? null);
+  return {
+    value,
+    comparator,
+    valueText: valueText ?? (typeof o.value === "string" ? o.value.trim().slice(0, 60) : null),
+  };
 }

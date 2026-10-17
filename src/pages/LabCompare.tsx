@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDate, formatValue } from "@/lib/utils";
+import { formatDate, formatResult } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 export function LabCompare() {
@@ -145,14 +145,14 @@ export function LabCompare() {
                       </TableCell>
                       <TableCell numeric className="whitespace-nowrap">
                         {av ? (
-                          `${formatValue(av.value)} ${av.unit}`
+                          `${formatResult(av.value, av.comparator)} ${av.unit}`
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell numeric className="whitespace-nowrap">
                         {bv ? (
-                          `${formatValue(bv.value)} ${bv.unit}`
+                          `${formatResult(bv.value, bv.comparator)} ${bv.unit}`
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

@@ -43,6 +43,9 @@ export function normalizeUnit(u: string): string {
       .replace(/ме(?=\/|$)/g, "iu") // МЕ (междунар. единицы) = IU
       .replace(/ед(?=\/|$)/g, "u") // Ед = U
       .replace(/мин/g, "min")
+      // Body-surface area spelled out in Russian ("1,73 кв.м") → "m2", so eGFR
+      // reported as "мл/мин/1,73кв.м" meets the "/1.73m²" default unit.
+      .replace(/кв\.?\s*м/g, "m2")
       .replace(/мк/g, "µ")
       .replace(/ммоль/g, "mmol")
       .replace(/нмоль/g, "nmol")
@@ -66,6 +69,7 @@ export function normalizeUnit(u: string): string {
       // Squared/cubed meters lose the caret ("m^2" → "m2") so the eGFR
       // "/1.73m2", "/1.73 m²" and "/1.73m^2" spellings all normalize alike.
       .replace(/m\^([23])/g, "m$1")
+      .replace(/sq\.?m/g, "m2")
   );
 }
 
@@ -103,8 +107,40 @@ export function unitsEquivalent(a: string, b: string): boolean {
     "x10^6/ui": "x10^12/l",
     "mm/hour": "mm/h",
   };
-  const canon = (u: string) => synonyms[u] ?? u;
-  return canon(na) === canon(nb);
+  const canon = (u: string) => fieldOfView(u) ?? dimensionless(u) ?? synonyms[u] ?? u;
+  const ca = canon(na);
+  const cb = canon(nb);
+  if (ca === cb) return true;
+  const unitless = (c: string) => c === "sg" || c === "ph";
+  return (blankUnit(na) && unitless(cb)) || (blankUnit(nb) && unitless(ca));
+}
+
+/**
+ * Microscopy counts per field of view. Reports spell "/HPF" many ways —
+ * "cells/hpf", "в п/зр", "кл. в п.зр.", "в поле зрения" — and none of them
+ * reached the dictionary's "/hpf", so every urine sediment row showed "unit?".
+ * Takes a normalized unit (Cyrillic partly transliterated: "поле" → "поlе").
+ */
+function fieldOfView(n: string): string | null {
+  if (/lpf/.test(n)) return "/lpf";
+  if (/hpf|п[./]+з|поlе?зр/.test(n)) return "/hpf";
+  return null;
+}
+
+/**
+ * Dimensionless readings (specific gravity, pH) are printed with no unit, a
+ * dash, or the unit's own name. Specific gravity is also printed as a density
+ * in g/mL ("г/мл"), which is numerically the same number.
+ */
+function dimensionless(n: string): string | null {
+  if (n === "sg" || n === "g/ml" || n === "kg/l") return "sg";
+  if (n === "ph") return "ph";
+  return null;
+}
+
+/** A unit cell that says "no unit" — matches any dimensionless default. */
+function blankUnit(n: string): boolean {
+  return n === "" || n === "-" || n === "—" || n === "–" || n === "units";
 }
 
 /** Generic scale factors between unit pairs (same analyte mass basis). */
@@ -194,6 +230,11 @@ const MOLAR_FACTORS: Record<string, Record<string, number>> = {
   "2524-7": { "mg/dl->mmol/l": 0.111, "mmol/l->mg/dl": 9.01 },
   // Ammonia (MW 17.03)
   "1841-6": { "µg/dl->µmol/l": 0.5872, "µmol/l->µg/dl": 1.703 },
+  // Urine glucose (MW 180.16) — Russian and EU reports use mmol/L, the
+  // dictionary entry mg/dL; without this every such row showed "unit?".
+  "5792-7": { "mg/dl->mmol/l": 0.0555, "mmol/l->mg/dl": 18.016 },
+  // Urine ketones, reported as acetoacetate (MW 102.09) by test strips.
+  "5797-6": { "mg/dl->mmol/l": 0.09795, "mmol/l->mg/dl": 10.209 },
   // Urine creatinine (MW 113.12) — distinct code from serum creatinine
   "2161-8": { "mg/dl->mmol/l": 0.0884, "mmol/l->mg/dl": 11.31 },
   // Aldosterone (MW 360.44)
@@ -614,4 +655,107 @@ export function computeFlag(
     return { outOfRange: true, flag: critical ? "critical" : "high" };
   }
   return { outOfRange: false, flag: null };
+}
+
+/** How a reported threshold relates to its bound: "<0.5" = below 0.5. */
+export type Comparator = "<" | "<=" | ">" | ">=";
+
+export const COMPARATORS: readonly Comparator[] = ["<", "<=", ">", ">="];
+
+export function isComparator(v: unknown): v is Comparator {
+  return typeof v === "string" && (COMPARATORS as readonly string[]).includes(v);
+}
+
+/**
+ * Flag for a result that may be a threshold rather than a measurement.
+ * "<5.6" says only that the true value is below 5.6: it is out of range when
+ * even the bound sits below the low limit, and otherwise nothing can be
+ * claimed — not "high" because 5.6 > refHigh, and not "normal" either. A plain
+ * measurement (no comparator) goes through `computeFlag` unchanged.
+ */
+export function computeResultFlag(
+  value: number,
+  comparator: Comparator | null | undefined,
+  bio: Pick<Biomarker, "refLow" | "refHigh">,
+  policy?: Pick<Biomarker, "code" | "direction">,
+): { outOfRange: boolean; flag: "low" | "high" | "critical" | null } {
+  if (!comparator) return computeFlag(value, bio, policy);
+  const none = { outOfRange: false, flag: null };
+  if (!Number.isFinite(value)) return none;
+  const { refLow, refHigh } = bio;
+  if (comparator === "<" || comparator === "<=") {
+    if (refLow == null) return none;
+    if (value < refLow) return computeFlag(value, bio, policy);
+    return comparator === "<" && value === refLow ? { outOfRange: true, flag: "low" } : none;
+  }
+  if (refHigh == null) return none;
+  if (value > refHigh) return computeFlag(value, bio, policy);
+  return comparator === ">" && value === refHigh ? { outOfRange: true, flag: "high" } : none;
+}
+
+/** "<0.5", "≥90" — a stored value as the lab reported it. */
+export function formatComparator(comparator: Comparator | null | undefined): string {
+  switch (comparator) {
+    case "<":
+      return "<";
+    case "<=":
+      return "≤";
+    case ">":
+      return ">";
+    case ">=":
+      return "≥";
+    default:
+      return "";
+  }
+}
+
+/**
+ * Pulls a leading comparison operator off a printed result: "<0,5" → ["<", "0,5"],
+ * "≥ 90" → [">=", "90"], "менее 5" → ["<", "5"]. Returns a null comparator when
+ * the text is a plain number.
+ */
+export function splitComparator(text: string): { comparator: Comparator | null; rest: string } {
+  const t = text.trim();
+  const m = t.match(
+    /^(<=|>=|≤|≥|=<|=>|<|>|менее|меньше|не более|более|больше|свыше|less than|below|under|more than|above|over)\s*/i,
+  );
+  if (!m) return { comparator: null, rest: t };
+  const op = m[1].toLowerCase();
+  const map: Record<string, Comparator> = {
+    "<": "<",
+    "<=": "<=",
+    "=<": "<=",
+    "≤": "<=",
+    ">": ">",
+    ">=": ">=",
+    "=>": ">=",
+    "≥": ">=",
+    менее: "<",
+    меньше: "<",
+    "не более": "<=",
+    более: ">",
+    больше: ">",
+    свыше: ">",
+    "less than": "<",
+    below: "<",
+    under: "<",
+    "more than": ">",
+    above: ">",
+    over: ">",
+  };
+  return { comparator: map[op] ?? null, rest: t.slice(m[0].length) };
+}
+
+/**
+ * Parses a hand-typed result: "4.2", "4,2", "<0.5", "≥ 90". Null when the
+ * text after the operator is not a number.
+ */
+export function parseResultInput(
+  text: string,
+): { value: number; comparator: Comparator | null } | null {
+  const { comparator, rest } = splitComparator(text);
+  const s = rest.replace(/\s/g, "").replace(",", ".");
+  if (!/^-?\d*\.?\d+(e-?\d+)?$/i.test(s)) return null;
+  const value = Number(s);
+  return Number.isFinite(value) ? { value, comparator } : null;
 }

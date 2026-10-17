@@ -27,7 +27,7 @@ import { Dialog, DialogActions } from "@/components/ui/dialog";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import { formatDate, formatValue } from "@/lib/utils";
+import { formatDate, formatResult } from "@/lib/utils";
 import {
   SORTS,
   STATUS_FILTERS,
@@ -190,7 +190,7 @@ export function Biomarkers() {
         value={
           latest ? (
             <p className="text-base font-semibold leading-none tabular-nums selectable">
-              {formatValue(latest.value)}{" "}
+              {formatResult(latest.value, latest.comparator)}{" "}
               <span className="text-xs font-normal text-muted-foreground">{latest.unit}</span>
             </p>
           ) : (

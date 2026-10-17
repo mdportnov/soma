@@ -9,7 +9,7 @@ export const EXTRACTION_PROMPT = `You are a data-extraction engine for laborator
 
 Extract the panel metadata and EVERY quantitative analyte row, and return ONLY a single JSON object:
 
-{"collection_date": string | null, "lab_name": string | null, "city": string | null, "country": string | null, "fasting": boolean | null, "results": [{"raw_label": string, "analyte_en": string | null, "value": number, "unit": string, "ref_range_text": string | null, "page": number | null}], "qualitative": [{"raw_label": string, "analyte_en": string | null, "result_text": string, "ref_range_text": string | null, "page": number | null}]}
+{"collection_date": string | null, "lab_name": string | null, "city": string | null, "country": string | null, "fasting": boolean | null, "results": [{"raw_label": string, "analyte_en": string | null, "specimen": "blood" | "urine" | "stool" | "other" | null, "value": number, "comparator": "<" | "<=" | ">" | ">=" | null, "value_text": string, "unit": string, "ref_range_text": string | null, "page": number | null}], "qualitative": [{"raw_label": string, "analyte_en": string | null, "result_text": string, "ref_range_text": string | null, "page": number | null}]}
 
 Strict rules:
 - "collection_date" is the date the sample was COLLECTED/DRAWN as ISO "YYYY-MM-DD" (prefer the collection/sampling date over the print/report date if both are shown). If the day/month/year is not fully legible, use null. Never guess.
@@ -19,9 +19,12 @@ Strict rules:
 - "results" contains one object per analyte row.
 - "raw_label" must be the analyte name EXACTLY as printed (original language, original wording). Do NOT translate, rename, normalize, or map it to any standard nomenclature.
 - "analyte_en" is the SAME analyte's standard English name, translated from "raw_label" so it can be matched against an English dictionary — e.g. "Colesterol total" → "Total cholesterol", "Глюкоза" → "Glucose", "Erythrozyten" → "Red blood cells", "Hierro" → "Iron", "Hémoglobine" → "Hemoglobin". If the label is already English, repeat it verbatim. Use the common clinical English term; never invent an analyte that is not in the document; use null only if you genuinely cannot tell what it is.
-- "value" must be the numeric result. Use "." as decimal separator. For values printed like "<0.5" use the number (0.5).
+- "specimen" is the material the row was measured in, from the section header or the row itself: "urine" for urinalysis / "Общий анализ мочи" / urine microscopy rows, "blood" for blood/serum/plasma, "stool" for stool, "other" for anything else, null if the report does not say. A urine row's "analyte_en" names the specimen too ("Глюкоза" under a urine header → "Urine glucose").
+- "value" must be the numeric result. Use "." as decimal separator.
+- "comparator" captures a threshold result. If the result is printed with an operator — "<0.5", "> 90", "≤1", "≥60", "менее 5", "less than 1" — put the bound in "value" and the operator in "comparator" ("<", "<=", ">", ">="). For an exact measurement use null. NEVER drop the operator: "<5.6" is not the same result as 5.6.
+- "value_text" is the result cell exactly as printed, operator included ("<0,5", "1.015").
 - "unit" is the unit string exactly as printed, or "" if no unit is printed.
-- "ref_range_text" is the reference range exactly as printed, or null.
+- "ref_range_text" is the reference range exactly as printed, or null. When the report gives interpretation categories instead of one interval (e.g. "optimal <2.6; borderline 3.4–4.1; high >4.1"), copy them all.
 - "page" is the 1-based page number the row appears on, or null for images.
 - "qualitative" collects every row whose result is NOT numeric: qualitative readings ("negative", "positive", "not detected", "обнаружено"), antibody titres ("1:160"), trace/+/++ grades, and similar. "result_text" is the result exactly as printed (original language). Same rules for "raw_label", "analyte_en", "ref_range_text" and "page" as above. Use [] when there are none. Never invent a result.
 - Do not add analytes that are not in the document. Do not deduplicate rows.

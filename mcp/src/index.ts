@@ -21,7 +21,7 @@ import {
   visit,
   weightLog,
 } from "../../src/db/schema";
-import { computeFlag, convertToDefaultUnit } from "../../src/lib/units";
+import { computeResultFlag, convertToDefaultUnit } from "../../src/lib/units";
 import { antigenIdsOf, certificateReminderKey, isSuperseded } from "../../src/lib/vaccine-schedule";
 import {
   ATTACHMENT_ENTITY_TYPES,
@@ -189,6 +189,7 @@ server.registerTool(
       .select({
         date: labPanel.date,
         value: labResult.value,
+        comparator: labResult.comparator,
         unit: labResult.unit,
         valueNormalized: labResult.valueNormalized,
         unitNormalized: labResult.unitNormalized,
@@ -234,6 +235,8 @@ server.registerTool(
       points: series.map((r) => ({
         date: r.date,
         value: r.valueNormalized ?? r.value,
+        // "<": the lab reported only that the true value is below `value`.
+        comparator: r.comparator,
         unit: r.unitNormalized ?? r.unit,
         outOfRange: r.outOfRange,
         flag: r.flag,
@@ -526,6 +529,10 @@ server.registerTool(
 const labResultInput = z.object({
   label: z.string().min(1).describe("Biomarker name exactly as written in the source"),
   value: z.number().finite(),
+  comparator: z
+    .enum(["<", "<=", ">", ">="])
+    .optional()
+    .describe('Threshold operator when the source printed e.g. "<0.5": value is then the bound'),
   unit: z.string().min(1),
   biomarkerId: z
     .number()
@@ -611,7 +618,7 @@ server.registerTool(
         continue;
       }
 
-      const { outOfRange, flag } = computeFlag(conversion.value, bio);
+      const { outOfRange, flag } = computeResultFlag(conversion.value, row.comparator, bio);
       prepared.push({
         bio,
         raw: row,
@@ -636,6 +643,7 @@ server.registerTool(
       biomarkerId: p.bio.id,
       confidence: p.confidence,
       value: p.normalized.value,
+      comparator: p.raw.comparator ?? null,
       unit: p.normalized.unit,
       outOfRange: p.outOfRange,
       flag: p.flag,
@@ -664,6 +672,7 @@ server.registerTool(
         prepared.map((p) => ({
           biomarkerId: p.bio.id,
           value: p.raw.value,
+          comparator: p.raw.comparator ?? null,
           unit: p.raw.unit,
           valueNormalized: p.normalized.value,
           unitNormalized: p.normalized.unit,
@@ -2337,7 +2346,9 @@ server.registerTool(
         name: biomarker.canonicalName,
         category: biomarker.category,
         value: labResult.value,
+        comparator: labResult.comparator,
         unit: labResult.unit,
+        labRefRangeText: labResult.labRefRangeText,
         valueNormalized: labResult.valueNormalized,
         unitNormalized: labResult.unitNormalized,
         outOfRange: labResult.outOfRange,

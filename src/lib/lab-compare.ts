@@ -11,9 +11,12 @@
 
 import type { Biomarker } from "@/db/schema";
 import { changeBetween, pointFromResult, type BiomarkerChange } from "@/lib/insights";
+import type { Comparator } from "@/lib/units";
 
 export type CompareReading = {
   value: number;
+  /** Threshold operator ("<0.5"); such a reading never yields a change. */
+  comparator?: Comparator | null;
   unit: string;
   valueNormalized: number | null;
   unitNormalized: string | null;
@@ -50,6 +53,7 @@ function toReading(r: CompareResult | undefined): CompareReading | null {
   if (!r) return null;
   return {
     value: r.value,
+    comparator: r.comparator ?? null,
     unit: r.unit,
     valueNormalized: r.valueNormalized,
     unitNormalized: r.unitNormalized,
@@ -59,9 +63,14 @@ function toReading(r: CompareResult | undefined): CompareReading | null {
 }
 
 /** The value/unit to display and compare on — the normalized pair when present. */
-export function displayValue(reading: CompareReading): { value: number; unit: string } {
+export function displayValue(reading: CompareReading): {
+  value: number;
+  comparator: Comparator | null;
+  unit: string;
+} {
   return {
     value: reading.valueNormalized ?? reading.value,
+    comparator: reading.comparator ?? null,
     unit: reading.unitNormalized ?? reading.unit,
   };
 }

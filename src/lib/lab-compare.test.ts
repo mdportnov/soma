@@ -105,7 +105,7 @@ describe("displayValue", () => {
         outOfRange: false,
         flag: null,
       }),
-    ).toEqual({ value: 5, unit: "mmol/L" });
+    ).toEqual({ value: 5, comparator: null, unit: "mmol/L" });
   });
 
   it("falls back to the raw value/unit", () => {
@@ -118,6 +118,6 @@ describe("displayValue", () => {
         outOfRange: false,
         flag: null,
       }),
-    ).toEqual({ value: 7, unit: "mmol/L" });
+    ).toEqual({ value: 7, comparator: null, unit: "mmol/L" });
   });
 });

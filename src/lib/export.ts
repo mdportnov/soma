@@ -107,12 +107,17 @@ export async function exportLabsCsv(profileId: number): Promise<boolean> {
       cycleDay: labPanel.menstrualCycleDay,
       biomarker: biomarker.canonicalName,
       category: biomarker.category,
+      // A threshold keeps its operator in its own column so `value` stays a
+      // plain number: comparator "<" + value 0.5 reads "<0.5", not 0.5.
+      comparator: labResult.comparator,
       value: labResult.value,
       unit: labResult.unit,
       valueNormalized: labResult.valueNormalized,
       unitNormalized: labResult.unitNormalized,
       outOfRange: labResult.outOfRange,
       flag: labResult.flag,
+      rawValueText: labResult.rawValueText,
+      labRefRangeText: labResult.labRefRangeText,
       rawLabel: labResult.rawLabel,
     })
     .from(labResult)

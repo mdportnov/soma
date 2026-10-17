@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { formatComparator, type Comparator } from "@/lib/units";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -81,6 +82,16 @@ export function formatTime(iso: string | null | undefined): string {
 export function formatValue(v: number | null | undefined, digits = 2): string {
   if (v == null) return "—";
   return Number.isInteger(v) ? String(v) : v.toFixed(digits).replace(/\.?0+$/, "");
+}
+
+/** A lab value with its threshold operator, if any: "<0.5", "≥90", "4.2". */
+export function formatResult(
+  v: number | null | undefined,
+  comparator: Comparator | null | undefined,
+  digits = 2,
+): string {
+  if (v == null) return "—";
+  return `${formatComparator(comparator)}${formatValue(v, digits)}`;
 }
 
 /**

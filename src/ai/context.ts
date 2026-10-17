@@ -9,7 +9,7 @@
  * sent to the provider, and only when the user invokes an AI feature.
  */
 
-import { ageYearsFrom } from "@/lib/units";
+import { ageYearsFrom, formatComparator } from "@/lib/units";
 import {
   getLatestResults,
   getProfile,
@@ -222,7 +222,7 @@ export async function buildHealthContext(profileId: number): Promise<string> {
     const bio = bioById.get(biomarkerId);
     if (!bio) continue;
     abnormal.push(
-      `${bio.canonicalName} ${r.value} ${r.unit} (${r.flag ?? "out of range"}, ${r.date})`,
+      `${bio.canonicalName} ${formatComparator(r.comparator)}${r.value} ${r.unit} (${r.flag ?? "out of range"}, ${r.date})`,
     );
     if (abnormal.length >= MAX_ABNORMAL) break;
   }

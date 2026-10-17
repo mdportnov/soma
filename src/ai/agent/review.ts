@@ -36,7 +36,7 @@ import {
 } from "@/lib/insights";
 import { matchDrugAllergies } from "@/lib/drug-allergy";
 import { retestDueDate } from "@/lib/notifications";
-import { ageYearsFrom, resolveRange, type DemographicRange } from "@/lib/units";
+import { ageYearsFrom, resolveRange, type Comparator, type DemographicRange } from "@/lib/units";
 import { bpStage, type BpStage } from "@/lib/vitals";
 
 /** One stored lab result joined with its panel — the raw material of the review. */
@@ -47,6 +47,8 @@ export type ReviewResultRow = {
   date: string;
   labName: string | null;
   value: number;
+  /** Threshold operator ("<0.5"): `value` is the bound, not a measurement. */
+  comparator?: Comparator | null;
   unit: string;
   valueNormalized: number | null;
   unitNormalized: string | null;
@@ -86,6 +88,8 @@ export type MarkerFinding = {
   };
   latest: {
     value: number;
+    /** Set when the reading is a threshold ("<0.5") — `value` is its bound. */
+    comparator: Comparator | null;
     unit: string;
     date: string;
     flag: ReviewResultRow["flag"];
@@ -291,6 +295,7 @@ function point(row: ReviewResultRow): ValuePoint {
     date: row.date,
     outOfRange: row.outOfRange,
     flag: row.flag,
+    comparator: row.comparator ?? null,
   };
 }
 
@@ -340,6 +345,8 @@ export function buildHealthReview(input: ReviewInput): HealthReview {
     const suboptimal =
       !latest.outOfRange &&
       latest.valueNormalized != null &&
+      // "<0.5" says nothing about where inside the range the value sits.
+      !latest.comparator &&
       ((range.optimalLow != null && latestPoint.value < range.optimalLow) ||
         (range.optimalHigh != null && latestPoint.value > range.optimalHigh));
     const change = previous
@@ -355,6 +362,7 @@ export function buildHealthReview(input: ReviewInput): HealthReview {
       },
       latest: {
         value: latestPoint.value,
+        comparator: latest.comparator ?? null,
         unit: latestPoint.unit,
         date: latest.date,
         flag: latest.flag,

@@ -13,7 +13,7 @@ import {
 import type { Biomarker } from "@/db/schema";
 import type { SeriesPoint } from "@/db/repos";
 import { useI18n } from "@/lib/i18n";
-import { formatDate, formatValue } from "@/lib/utils";
+import { formatDate, formatResult, formatValue } from "@/lib/utils";
 
 export type MedOverlay = {
   id: number;
@@ -272,8 +272,11 @@ export function TrendChart({
                 return (
                   <div className="rounded-lg border bg-card px-3 py-2 text-xs shadow-md">
                     <p className="font-medium">
-                      {formatValue(p.value)} {p.unit}
+                      {formatResult(p.value, p.comparator)} {p.unit}
                     </p>
+                    {p.comparator && (
+                      <p className="max-w-56 text-muted-foreground">{t("trendChart.threshold")}</p>
+                    )}
                     <p className="text-muted-foreground">{formatDate(p.date)}</p>
                     {p.labName && <p className="text-muted-foreground">{p.labName}</p>}
                     {p.outOfRange && (
@@ -293,14 +296,17 @@ export function TrendChart({
               strokeWidth={2}
               dot={(props: any) => {
                 const { cx, cy, payload, index } = props;
+                const color = payload.outOfRange ? "var(--destructive)" : "var(--primary)";
+                // A threshold ("<0.5") is drawn hollow at its bound: the point
+                // marks a limit the true value lies beyond, not a measurement.
                 return (
                   <circle
                     key={`dot-${index}`}
                     cx={cx}
                     cy={cy}
                     r={4}
-                    fill={payload.outOfRange ? "var(--destructive)" : "var(--primary)"}
-                    stroke="var(--card)"
+                    fill={payload.comparator ? "var(--card)" : color}
+                    stroke={payload.comparator ? color : "var(--card)"}
                     strokeWidth={1.5}
                   />
                 );

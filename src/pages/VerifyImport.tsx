@@ -37,7 +37,8 @@ import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/app/Field";
 import { resultReviewReason } from "@/lib/result-review";
-import { cn, formatDate, formatValue } from "@/lib/utils";
+import { cn, formatDate, formatResult } from "@/lib/utils";
+import { parseResultInput, type Comparator } from "@/lib/units";
 import { useToast } from "@/components/app/Toast";
 import { useI18n } from "@/lib/i18n";
 
@@ -51,22 +52,29 @@ function ResultEditor({
   result: ResultWithBiomarker;
   options: ComboboxOption[];
   busy: boolean;
-  onSave: (patch: { value: number; unit: string; biomarkerId: number }) => Promise<void>;
+  onSave: (patch: {
+    value: number;
+    comparator: Comparator | null;
+    unit: string;
+    biomarkerId: number;
+  }) => Promise<void>;
   onCancel: () => void;
 }) {
   const { t } = useI18n();
-  const [value, setValue] = useState(String(result.value));
+  const [value, setValue] = useState(formatResult(result.value, result.comparator, 6));
   const [unit, setUnit] = useState(result.unit);
   const [biomarkerId, setBiomarkerId] = useState(String(result.biomarkerId));
-  const valid = value.trim() !== "" && Number.isFinite(Number(value)) && unit.trim() !== "";
+  const parsed = parseResultInput(value);
+  const valid = parsed != null && unit.trim() !== "";
   return (
     <form
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
-        if (valid && !busy)
+        if (valid && parsed && !busy)
           void onSave({
-            value: Number(value),
+            value: parsed.value,
+            comparator: parsed.comparator,
             unit: unit.trim(),
             biomarkerId: Number(biomarkerId),
           });
@@ -84,9 +92,8 @@ function ResultEditor({
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("labPanelDetail.tableColumns.value")}>
           <Input
-            type="number"
+            inputMode="decimal"
             aria-label={t("labPanelDetail.tableColumns.value")}
-            step="any"
             value={value}
             onChange={(event) => setValue(event.target.value)}
             disabled={busy}
@@ -371,7 +378,7 @@ export function VerifyImport() {
                         </span>
                       </span>
                       <span className="shrink-0 text-sm tabular-nums">
-                        {formatValue(result.value)} {result.unit}
+                        {formatResult(result.value, result.comparator)} {result.unit}
                       </span>
                       <ChevronDown
                         className={cn(
@@ -419,7 +426,7 @@ export function VerifyImport() {
                                   {t("labPanelDetail.tableColumns.value")}
                                 </p>
                                 <p className="mt-1 text-lg font-medium tabular-nums">
-                                  {formatValue(result.value)} {result.unit}
+                                  {formatResult(result.value, result.comparator)} {result.unit}
                                 </p>
                               </div>
                             </div>

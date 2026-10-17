@@ -527,7 +527,16 @@ export const labResult = sqliteTable(
       .notNull()
       .references(() => biomarker.id),
     value: real("value").notNull(),
+    /** Set when the lab reported a threshold, not a measurement ("<0.5", ">90"):
+     *  `value` is then the bound, and the true result lies on this side of it. */
+    comparator: text("comparator", { enum: ["<", "<=", ">", ">="] }),
+    /** The result exactly as printed ("<0,5", "> 90") — audit trail for review. */
+    rawValueText: text("raw_value_text"),
     unit: text("unit").notNull(),
+    /** The laboratory's own reference range as printed on the report. Kept apart
+     *  from the dictionary range: flags still use Soma's range (one consistent
+     *  policy across labs), but the lab's interval is shown next to the value. */
+    labRefRangeText: text("lab_ref_range_text"),
     /** Value converted to the biomarker's default unit (when conversion is known). */
     unitNormalized: text("unit_normalized"),
     valueNormalized: real("value_normalized"),

@@ -33,7 +33,7 @@ import {
   type MedOverlay,
   type SymptomOverlay,
 } from "@/components/charts/TrendChart";
-import { cn, formatDate, formatValue } from "@/lib/utils";
+import { cn, formatDate, formatResult, formatValue } from "@/lib/utils";
 
 export function BiomarkerDetail() {
   const { id } = useParams();
@@ -194,6 +194,7 @@ function BiomarkerReadings({
     date: p.date,
     outOfRange: p.outOfRange,
     flag: p.flag as ValuePoint["flag"],
+    comparator: p.comparator,
   });
   // change[i] = move from the prior reading into series[i] (null for the first).
   const seriesChanges = series.map((p, i) =>
@@ -336,7 +337,7 @@ function BiomarkerReadings({
                       </Link>
                     </TableCell>
                     <TableCell numeric className="whitespace-nowrap font-medium">
-                      {formatValue(p.value)} {p.unit}
+                      {formatResult(p.value, p.comparator)} {p.unit}
                     </TableCell>
                     <TableCell numeric>
                       {change ? (

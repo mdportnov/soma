@@ -2003,9 +2003,55 @@ const EXTRA_ALIASES: Record<string, string[]> = {
 };
 
 /** Canonical SEED aliases plus any multilingual enrichment for that entry. */
+/**
+ * Urinalysis and kidney names as printed on Russian-language reports, plus the
+ * English spellings models produce for them. Urine rows are matched inside the
+ * urinalysis section by their specimen-less name (see `pipeline/map.ts`), so
+ * "Лейкоциты в моче" also covers a bare "Лейкоциты" under a urine header.
+ */
+const URINALYSIS_ALIASES: Record<string, string[]> = {
+  eGFR: [
+    "estimated glomerular filtration rate",
+    "estimated gfr ckd-epi",
+    "egfr ckd-epi",
+    "gfr ckd-epi",
+    "ckd-epi",
+    "скф ckd-epi",
+    "скф по ckd-epi",
+    "рскф",
+  ],
+  "Urine Specific Gravity": [
+    "relative density",
+    "urine density",
+    "удельный вес",
+    "относительная плотность",
+    "плотность мочи",
+  ],
+  "Urine pH": ["реакция мочи", "ph мочи"],
+  "Urine Protein": ["белок в моче", "белок мочи"],
+  "Urine Glucose": ["глюкоза в моче", "глюкоза мочи"],
+  "Urine Ketones": ["ketone bodies", "ketones", "кетоновые тела", "кетоны в моче", "ацетон в моче"],
+  "Urine Urobilinogen": ["уробилиноген"],
+  "Urine Bilirubin": ["билирубин в моче"],
+  "Urine Nitrite": ["нитриты в моче"],
+  "Urine RBC (microscopy)": ["эритроциты в моче", "red blood cells in urine"],
+  "Urine WBC (microscopy)": ["лейкоциты в моче", "white blood cells in urine"],
+  "Urine Epithelial Cells": [
+    "squamous epithelium",
+    "squamous epithelial cells",
+    "epithelium",
+    "эпителий плоский",
+    "плоский эпителий",
+    "эпителий в моче",
+  ],
+  "Urine Casts (hyaline)": ["hyaline casts", "цилиндры гиалиновые", "гиалиновые цилиндры"],
+  "Urine Leukocyte Esterase": ["лейкоцитарная эстераза"],
+};
+
 function aliasesFor(b: SeedBiomarker): string[] {
   const extra = EXTRA_ALIASES[b.name] ?? [];
-  return [...new Set([...b.aliases, ...extra])];
+  const urinalysis = URINALYSIS_ALIASES[b.name] ?? [];
+  return [...new Set([...b.aliases, ...extra, ...urinalysis])];
 }
 
 /**

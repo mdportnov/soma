@@ -209,6 +209,130 @@ function preferUnitCompatibleSibling(row: MappedRow, index: BiomarkerIndex): voi
   }
 }
 
+// `\b` is ASCII-only in JS, so Cyrillic words get explicit letter boundaries
+// ("мочи" must match, "мочевина" — urea, a blood marker — must not).
+const word = (alts: string) => new RegExp(`(?<![\\p{L}\\p{N}])(?:${alts})(?![\\p{L}\\p{N}])`, "gu");
+
+/** Words that name the urine specimen in a label, in the languages we see. */
+const URINE_WORD = word("urine|urinary|urinalysis|orina|urin|harn|моча|мочи|моче|мочу");
+/** Microscopy units only urine sediment is reported in. */
+const URINE_UNIT = /hpf|lpf|п\s*[./]+\s*з|поле зрения/i;
+/** Specimen words and qualifiers stripped before matching inside urinalysis. */
+const URINE_STRIP = word(
+  "urine|urinary|urinalysis|in|en|de|la|orina|microscopy|dipstick|в|моча|мочи|моче|мочу",
+);
+
+function hasUrineWord(normalized: string): boolean {
+  URINE_WORD.lastIndex = 0;
+  return URINE_WORD.test(normalized);
+}
+
+function stripSpecimen(normalized: string): string {
+  return normalized.replace(URINE_STRIP, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * A row measured in urine. The model tags the specimen from the section header;
+ * failing that, a urine word in the label or a microscopy unit gives it away.
+ * Without this, "Глюкоза" under "Общий анализ мочи" matched fasting blood
+ * glucose and "Лейкоциты" matched the blood WBC count (then failed on "/HPF").
+ */
+function isUrineRow(raw: RawExtraction): boolean {
+  if (raw.specimen === "urine") return true;
+  if (raw.specimen) return false;
+  const label = normalizeLabel(`${raw.raw_label} ${raw.analyte_en ?? ""}`);
+  return hasUrineWord(label) || URINE_UNIT.test(raw.unit);
+}
+
+/** Urinalysis entries renamed without their specimen words ("Urine Glucose" →
+ *  "glucose"), so a bare "Glucose" from a urine section can find them. */
+function urineDictionary(biomarkers: Biomarker[]): Biomarker[] {
+  return biomarkers
+    .filter((b) => b.category === "Urinalysis" || hasUrineWord(normalizeLabel(b.canonicalName)))
+    .map((b) => ({
+      ...b,
+      canonicalName: stripSpecimen(normalizeLabel(b.canonicalName)),
+      aliases: (b.aliases ?? []).map((a) => stripSpecimen(normalizeLabel(a))),
+    }));
+}
+
+function labelForms(raw: RawExtraction, strip: boolean) {
+  // Match on the printed label AND its English translation, so a Spanish/
+  // German/etc. report resolves against the English-centric dictionary. The
+  // printed label is checked first (verbatim is authoritative); identical
+  // normalized forms (English reports repeat the label) are de-duplicated.
+  const seen = new Set<string>();
+  const forms: { normalized: string; verbatim: boolean }[] = [];
+  for (const f of [
+    { label: raw.raw_label, verbatim: true },
+    { label: raw.analyte_en, verbatim: false },
+  ]) {
+    if (!f.label) continue;
+    let normalized = normalizeLabel(f.label);
+    if (strip) normalized = stripSpecimen(normalized);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    forms.push({ normalized, verbatim: f.verbatim });
+  }
+  return forms;
+}
+
+/** Exact → fuzzy match of one row; `conversion` is filled in by the caller. */
+function matchRow(
+  raw: RawExtraction,
+  index: BiomarkerIndex,
+  urineIndex: BiomarkerIndex,
+): MappedRow {
+  const urine = isUrineRow(raw);
+  const unmatched = (candidates: Candidate[]): MappedRow => ({
+    raw,
+    biomarkerId: null,
+    confidence: "none",
+    candidates,
+    conversion: null,
+    duplicate: false,
+  });
+  const hit = (biomarkerId: number, confidence: Confidence, candidates: Candidate[]) => ({
+    ...unmatched(candidates),
+    biomarkerId,
+    confidence,
+  });
+
+  // 1–2. Exact / alias match — the priority path, no AI involved. A hit on the
+  // verbatim label is "exact"; a hit only via the translation is "translated".
+  // A urine row keeps a full-dictionary hit only when it IS a urine entry.
+  for (const f of labelForms(raw, false)) {
+    const exactId = index.exact.get(f.normalized);
+    if (exactId != null && (!urine || urineIndex.byId.has(exactId))) {
+      return hit(exactId, f.verbatim ? "exact" : "translated", [
+        { biomarkerId: exactId, score: 1 },
+      ]);
+    }
+  }
+
+  // A urine row is matched inside urinalysis only, by its specimen-less name.
+  // Reaching an entry this way relied on the specimen tag, so it is never
+  // "exact" — the row goes to review instead of being trusted silently.
+  const target = urine ? urineIndex : index;
+  const forms = labelForms(raw, urine);
+  if (urine) {
+    for (const f of forms) {
+      const exactId = target.exact.get(f.normalized);
+      if (exactId != null) {
+        return hit(exactId, "translated", [{ biomarkerId: exactId, score: 1 }]);
+      }
+    }
+  }
+
+  // 3. Fuzzy match for OCR typos, word-order and cross-language variations.
+  // Auto-accept is decided per label (so the ambiguity gap means what it
+  // should); candidates are merged only for the dropdown and AI fallback.
+  const perLabel = forms.map((f) => fuzzyCandidates(f.normalized, target));
+  const candidates = mergeCandidates(perLabel);
+  const accepted = autoAcceptCandidate(perLabel);
+  return accepted ? hit(accepted.biomarkerId, "fuzzy", candidates) : unmatched(candidates);
+}
+
 /**
  * Maps extracted rows onto the biomarker dictionary.
  * `provider` is optional — without AI the pipeline still works, leaving
@@ -221,64 +345,12 @@ export async function mapExtractions(
 ): Promise<MappedRow[]> {
   const index = buildBiomarkerIndex(biomarkers);
 
+  const urineIndex = buildBiomarkerIndex(urineDictionary(biomarkers));
+
   const rows: MappedRow[] = raws.map((raw) => {
-    // Match on the printed label AND its English translation, so a Spanish/
-    // German/etc. report resolves against the English-centric dictionary. The
-    // printed label is checked first (verbatim is authoritative); identical
-    // normalized forms (English reports repeat the label) are de-duplicated.
-    const seen = new Set<string>();
-    const forms: { normalized: string; verbatim: boolean }[] = [];
-    for (const f of [
-      { label: raw.raw_label, verbatim: true },
-      { label: raw.analyte_en, verbatim: false },
-    ]) {
-      if (!f.label) continue;
-      const normalized = normalizeLabel(f.label);
-      if (!normalized || seen.has(normalized)) continue;
-      seen.add(normalized);
-      forms.push({ normalized, verbatim: f.verbatim });
-    }
-
-    // 1–2. Exact / alias match — the priority path, no AI involved. A hit on the
-    // verbatim label is "exact"; a hit only via the translation is "translated".
-    for (const f of forms) {
-      const exactId = index.exact.get(f.normalized);
-      if (exactId != null) {
-        return {
-          raw,
-          biomarkerId: exactId,
-          confidence: f.verbatim ? ("exact" as const) : ("translated" as const),
-          candidates: [{ biomarkerId: exactId, score: 1 }],
-          conversion: conversionFor(raw, exactId, index),
-          duplicate: false,
-        };
-      }
-    }
-
-    // 3. Fuzzy match for OCR typos, word-order and cross-language variations.
-    // Auto-accept is decided per label (so the ambiguity gap means what it
-    // should); candidates are merged only for the dropdown and AI fallback.
-    const perLabel = forms.map((f) => fuzzyCandidates(f.normalized, index));
-    const candidates = mergeCandidates(perLabel);
-    const accepted = autoAcceptCandidate(perLabel);
-    if (accepted) {
-      return {
-        raw,
-        biomarkerId: accepted.biomarkerId,
-        confidence: "fuzzy" as const,
-        candidates,
-        conversion: conversionFor(raw, accepted.biomarkerId, index),
-        duplicate: false,
-      };
-    }
-    return {
-      raw,
-      biomarkerId: null,
-      confidence: "none" as const,
-      candidates,
-      conversion: null,
-      duplicate: false,
-    };
+    const row = matchRow(raw, index, urineIndex);
+    row.conversion = conversionFor(raw, row.biomarkerId, index);
+    return row;
   });
 
   // 3b. Unit-aware re-route: a label that resolved to the "%" variant but carries

@@ -5,7 +5,7 @@ import regularUrl from "@/assets/fonts/PTSans-Regular.ttf?url";
 import boldUrl from "@/assets/fonts/PTSans-Bold.ttf?url";
 import type { DoctorReportData } from "@/db/repos";
 import type { Biomarker, Profile } from "@/db/schema";
-import { formatDateIn, formatValue } from "@/lib/utils";
+import { formatDateIn, formatResult, formatValue } from "@/lib/utils";
 
 const FONT_FAMILY = "PTSans";
 const PAGE_BOTTOM = 270; // mm; trigger a page break past this y-cursor
@@ -316,7 +316,7 @@ export async function generateDoctorReportPdf(
         const flag = a.flag ? t(`doctorReport.pdf.flags.${a.flag}`) : "";
         const meta = [flag, fd(a.date)].filter(Boolean).join(", ");
         const unit = a.unit ? ` ${a.unit}` : "";
-        const line = `${a.biomarker.canonicalName} ${formatValue(a.value)}${unit}${meta ? ` (${meta})` : ""}`;
+        const line = `${a.biomarker.canonicalName} ${formatResult(a.value, a.comparator)}${unit}${meta ? ` (${meta})` : ""}`;
         writeText(line, { color: FLAG });
       }
     }
@@ -343,8 +343,9 @@ export async function generateDoctorReportPdf(
           const unit = r.unit ? ` ${r.unit}` : "";
           const parts = [
             r.biomarker.canonicalName,
-            `${formatValue(r.value)}${unit}`,
+            `${formatResult(r.value, r.comparator)}${unit}`,
             ref ?? "",
+            r.labRefRangeText ? `lab: ${r.labRefRangeText}` : "",
             flag,
           ].filter(Boolean);
           if (r.outOfRange) parts.push(t("doctorReport.pdf.labs.outOfRange"));

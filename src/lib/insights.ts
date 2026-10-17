@@ -1,5 +1,5 @@
 import type { Biomarker } from "@/db/schema";
-import { unitsEquivalent } from "@/lib/units";
+import { unitsEquivalent, type Comparator } from "@/lib/units";
 
 /**
  * Change-analysis engine — the "what changed since last time" layer.
@@ -31,6 +31,8 @@ export type ValuePoint = {
   date: string;
   outOfRange: boolean;
   flag: "low" | "high" | "critical" | null;
+  /** Set when the reading is a threshold ("<0.5"), not a measured value. */
+  comparator?: Comparator | null;
 };
 
 export type BiomarkerChange = {
@@ -199,6 +201,7 @@ export function pointFromResult(r: {
   outOfRange: boolean;
   flag: "low" | "high" | "critical" | null;
   date: string;
+  comparator?: Comparator | null;
 }): ValuePoint {
   return {
     value: r.valueNormalized ?? r.value,
@@ -206,12 +209,14 @@ export function pointFromResult(r: {
     date: r.date,
     outOfRange: r.outOfRange,
     flag: r.flag,
+    comparator: r.comparator ?? null,
   };
 }
 
 /**
  * Computes a change only when the two readings are on the same unit basis —
- * comparing across an unknown unit conversion would be meaningless.
+ * comparing across an unknown unit conversion would be meaningless. A
+ * threshold ("<0.5") has no value to subtract, so it never yields a change.
  */
 export function changeBetween(
   prev: ValuePoint,
@@ -219,6 +224,7 @@ export function changeBetween(
   bio: RangeBounds,
 ): BiomarkerChange | null {
   if (!unitsEquivalent(prev.unit, cur.unit)) return null;
+  if (prev.comparator || cur.comparator) return null;
   return analyzeChange(prev, cur, bio);
 }
 

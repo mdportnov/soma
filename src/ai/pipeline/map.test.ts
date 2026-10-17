@@ -250,3 +250,65 @@ describe("buildBiomarkerIndex / markDuplicates", () => {
     expect(rows.map((r) => r.duplicate)).toEqual([true, true, false, false]);
   });
 });
+
+describe("mapExtractions — urine rows stay in urinalysis", () => {
+  const bios: Biomarker[] = [
+    { ...makeBio(1, "Glucose (fasting)", "mmol/L", ["глюкоза", "glucose"], "1558-6") },
+    { ...makeBio(2, "White Blood Cells", "x10^9/L", ["лейкоциты", "leukocytes"]) },
+    { ...makeBio(3, "Urea", "mmol/L", ["мочевина", "urea"]) },
+    {
+      ...makeBio(10, "Urine Glucose", "mg/dL", ["urine glucose", "глюкоза в моче"], "5792-7"),
+      category: "Urinalysis",
+    },
+    {
+      ...makeBio(11, "Urine WBC (microscopy)", "/hpf", ["leukocytes urine", "лейкоциты в моче"]),
+      category: "Urinalysis",
+    },
+  ];
+
+  it("routes a bare label from a urine section to the urine entry, for review", async () => {
+    const [glucose, wbc] = await mapExtractions(
+      [
+        raw({ raw_label: "Глюкоза", analyte_en: "Glucose", specimen: "urine", unit: "ммоль/л" }),
+        raw({
+          raw_label: "Лейкоциты",
+          analyte_en: "Leukocytes",
+          specimen: "urine",
+          unit: "в п/зр",
+        }),
+      ],
+      bios,
+      null,
+    );
+    expect(glucose.biomarkerId).toBe(10);
+    expect(glucose.confidence).toBe("translated");
+    expect(wbc.biomarkerId).toBe(11);
+    expect(wbc.conversion?.ok).toBe(true);
+  });
+
+  it("infers urine from the label or a microscopy unit when the specimen is missing", async () => {
+    const [byLabel, byUnit] = await mapExtractions(
+      [
+        raw({ raw_label: "Глюкоза", analyte_en: "Urine glucose" }),
+        raw({ raw_label: "Лейкоциты", analyte_en: "Leukocytes", unit: "/HPF" }),
+      ],
+      bios,
+      null,
+    );
+    expect(byLabel.biomarkerId).toBe(10);
+    expect(byUnit.biomarkerId).toBe(11);
+  });
+
+  it("leaves blood rows — and urea, whose Russian name starts like urine — alone", async () => {
+    const [glucose, urea] = await mapExtractions(
+      [
+        raw({ raw_label: "Глюкоза", analyte_en: "Glucose", specimen: "blood" }),
+        raw({ raw_label: "Мочевина", analyte_en: "Urea" }),
+      ],
+      bios,
+      null,
+    );
+    expect(glucose.biomarkerId).toBe(1);
+    expect(urea.biomarkerId).toBe(3);
+  });
+});

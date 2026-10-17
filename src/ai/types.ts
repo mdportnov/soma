@@ -1,5 +1,7 @@
 /** Shared types for the AI provider abstraction (§5) and import pipeline (§4). */
 
+import type { Comparator } from "@/lib/units";
+
 export type DocumentInput = {
   /** Base64-encoded file content (no data: prefix). */
   base64: string;
@@ -16,12 +18,22 @@ export type RawExtraction = {
    * `raw_label` stays verbatim for the audit trail; this is the matching key.
    */
   analyte_en: string | null;
+  /** The number of the result; for a threshold ("<0.5") it is the bound. */
   value: number;
+  /** Set when the lab printed a threshold instead of a measurement. */
+  comparator?: Comparator | null;
+  /** The result exactly as printed ("<0,5") — shown on review, kept on save. */
+  value_text?: string | null;
+  /** Specimen the row was measured in, when the report says so. Routes
+   *  "Глюкоза" under a urinalysis header to Urine Glucose, not blood glucose. */
+  specimen?: Specimen | null;
   /** Unit string exactly as printed in the document ("" if absent). */
   unit: string;
   ref_range_text: string | null;
   page: number | null;
 };
+
+export type Specimen = "blood" | "urine" | "stool" | "other";
 
 /**
  * Qualitative lab row (non-numeric): "negative", "positive", titres, +/++

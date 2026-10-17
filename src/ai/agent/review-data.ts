@@ -35,6 +35,7 @@ export async function listAllResults(profileId: number): Promise<ReviewResultRow
       date: labPanel.date,
       labName: labPanel.labName,
       value: labResult.value,
+      comparator: labResult.comparator,
       unit: labResult.unit,
       valueNormalized: labResult.valueNormalized,
       unitNormalized: labResult.unitNormalized,

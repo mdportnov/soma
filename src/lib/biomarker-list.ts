@@ -5,6 +5,7 @@
  */
 
 import { normalizeLabel } from "@/lib/fuzzy";
+import type { Comparator } from "@/lib/units";
 
 /** Where the latest reading sits relative to the biomarker's two bands. */
 export type RangeStatus = "optimal" | "in_range" | "out_of_range" | "not_evaluated";
@@ -25,6 +26,8 @@ export type BandedBiomarker = {
 export type LatestReading = {
   date: string;
   value: number;
+  /** Threshold operator ("<0.5") when the reading is a bound, not a value. */
+  comparator?: Comparator | null;
   unit: string;
   outOfRange: boolean | number;
   flag: string | null;

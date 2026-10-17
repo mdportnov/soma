@@ -1117,8 +1117,13 @@ export const en = {
     editFindingTitle: "Edit finding",
     editResultTitle: "Edit result",
     editResultDescription:
-      "Correct the measured value or its unit. Normalization and range flags are recalculated; an unrecognized unit keeps the value raw and unflagged.",
+      'Correct the measured value or its unit. Normalization and range flags are recalculated; an unrecognized unit keeps the value raw and unflagged. Keep the operator for a threshold result: "<0.5", ">90".',
     resultUpdatedToast: "Result updated.",
+    thresholdHint:
+      "Threshold result: the lab reported only that the value is past this bound, not an exact measurement.",
+    labRange: "lab",
+    labRangeHint: "Reference range as printed by the lab. Flags use Soma's range.",
+    printedAs: "printed",
     editPanel: "Edit panel",
     editPanelTitle: "Edit panel",
     editPanelDescription:
@@ -1661,6 +1666,8 @@ export const en = {
     pointsHidden:
       "{{count}} point(s) hidden: measured in a unit that does not belong on this scale.",
     outOfRange: "out of range ({{flag}})",
+    threshold:
+      "Threshold result — drawn hollow at the reported bound; the true value lies beyond it.",
     severityShort: "severity {{value}}/10",
     symptomLegend:
       "Vertical marks are logged symptoms; the number is severity on a 1–10 scale (color = intensity). Hover a mark for details.",

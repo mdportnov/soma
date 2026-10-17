@@ -149,12 +149,15 @@ export function panelInsertPlan(
       minRowsAffected: 1,
     },
     ...results.map((r) => ({
-      sql: `INSERT INTO lab_result (panel_id, biomarker_id, value, unit, unit_normalized, value_normalized, out_of_range, flag, raw_label, source_page, confidence, reviewed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO lab_result (panel_id, biomarker_id, value, comparator, raw_value_text, unit, lab_ref_range_text, unit_normalized, value_normalized, out_of_range, flag, raw_label, source_page, confidence, reviewed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       params: [
         panelRef,
         r.biomarkerId,
         r.value,
+        r.comparator ?? null,
+        r.rawValueText ?? null,
         r.unit,
+        r.labRefRangeText ?? null,
         r.unitNormalized ?? null,
         r.valueNormalized ?? null,
         r.outOfRange ?? false,

@@ -82,12 +82,13 @@ import {
 } from "./schema";
 import {
   ageYearsFrom,
-  computeFlag,
+  computeResultFlag,
   convertToAlternateScale,
   convertToDefaultUnit,
   resolveRange,
   type DemographicRange,
   type ProfileContext,
+  type Comparator,
 } from "@/lib/units";
 import {
   findDuplicatePanels,
@@ -200,11 +201,14 @@ function normalizeResultValue(
   bio: Biomarker,
   ranges: DemographicRange[] | undefined,
   ctx: ProfileContext,
+  comparator: Comparator | null = null,
 ): NormalizedResult {
+  // Every conversion is a positive scale factor, so a threshold keeps its
+  // direction: "<5.6 mmol/L" is still "<" after it becomes mg/dL.
   const conv = convertToDefaultUnit(value, unit, bio);
   if (conv.ok) {
     const effective = resolveRange(bio, ranges, ctx);
-    const { outOfRange, flag } = computeFlag(conv.value, effective, bio);
+    const { outOfRange, flag } = computeResultFlag(conv.value, comparator, effective, bio);
     return {
       unitNormalized: conv.unit,
       valueNormalized: conv.value,
@@ -219,7 +223,7 @@ function normalizeResultValue(
     // default unit and would be nonsense here, but the generic "twice past the
     // dangerous edge" rule holds on any scale, so a mass-unit Lp(a) escalates
     // like a molar one instead of silently capping at "high".
-    const { outOfRange, flag } = computeFlag(alt.value, alt, {
+    const { outOfRange, flag } = computeResultFlag(alt.value, comparator, alt, {
       code: null,
       direction: bio.direction,
     });
@@ -258,6 +262,7 @@ export async function recomputeFlagsForProfile(profileId: number): Promise<void>
       id: labResult.id,
       biomarkerId: labResult.biomarkerId,
       value: labResult.value,
+      comparator: labResult.comparator,
       unit: labResult.unit,
       date: labPanel.date,
     })
@@ -278,7 +283,14 @@ export async function recomputeFlagsForProfile(profileId: number): Promise<void>
         sex: prof.sex ?? null,
         ageYears: ageYearsFrom(prof.birthDate, new Date(`${r.date.slice(0, 10)}T00:00:00Z`)),
       };
-      normalized = normalizeResultValue(r.value, r.unit, bio, ranges.get(r.biomarkerId), ctx);
+      normalized = normalizeResultValue(
+        r.value,
+        r.unit,
+        bio,
+        ranges.get(r.biomarkerId),
+        ctx,
+        r.comparator,
+      );
     }
     const { unitNormalized, valueNormalized, outOfRange, flag } = normalized;
     await db
@@ -439,7 +451,13 @@ export type ResultConfidence = "exact" | "translated" | "fuzzy" | "ai" | "manual
 export type ResultInput = {
   biomarkerId: number;
   value: number;
+  /** Threshold operator when the lab reported "<x"/">x" rather than a value. */
+  comparator?: Comparator | null;
+  /** The result as printed, operator included. */
+  rawValueText?: string | null;
   unit: string;
+  /** The lab's own printed reference range. */
+  labRefRangeText?: string | null;
   rawLabel?: string | null;
   /** 1-based source-document page, carried for "open original → jump to page". */
   sourcePage?: number | null;
@@ -476,7 +494,14 @@ async function buildResultRows(
   return results.map((r) => {
     const bio = biomarkersById.get(r.biomarkerId);
     const { unitNormalized, valueNormalized, outOfRange, flag, convertible } = bio
-      ? normalizeResultValue(r.value, r.unit, bio, rangesByBiomarker.get(r.biomarkerId), ctx)
+      ? normalizeResultValue(
+          r.value,
+          r.unit,
+          bio,
+          rangesByBiomarker.get(r.biomarkerId),
+          ctx,
+          r.comparator ?? null,
+        )
       : {
           unitNormalized: null,
           valueNormalized: null,
@@ -493,7 +518,10 @@ async function buildResultRows(
     return {
       biomarkerId: r.biomarkerId,
       value: r.value,
+      comparator: r.comparator ?? null,
+      rawValueText: r.rawValueText ?? null,
       unit: r.unit,
+      labRefRangeText: r.labRefRangeText ?? null,
       unitNormalized,
       valueNormalized,
       outOfRange,
@@ -572,7 +600,12 @@ export async function updatePanel(panelId: number, patch: PanelMetaPatch): Promi
   for (const r of results) {
     if (r.valueNormalized == null) continue;
     const effective = resolveRange(r.biomarker, rangesByBiomarker.get(r.biomarkerId), ctx);
-    const { outOfRange, flag } = computeFlag(r.valueNormalized, effective, r.biomarker);
+    const { outOfRange, flag } = computeResultFlag(
+      r.valueNormalized,
+      r.comparator,
+      effective,
+      r.biomarker,
+    );
     if (outOfRange === r.outOfRange && flag === r.flag) continue;
     await db.update(labResult).set({ outOfRange, flag }).where(eq(labResult.id, r.id));
   }
@@ -586,12 +619,13 @@ export async function updatePanel(panelId: number, patch: PanelMetaPatch): Promi
  */
 export async function updateResultValue(
   resultId: number,
-  patch: { value: number; unit: string; biomarkerId?: number },
+  patch: { value: number; unit: string; biomarkerId?: number; comparator?: Comparator | null },
 ): Promise<void> {
   markSearchIndexStale();
   const rows = await db
     .select({
       biomarkerId: labResult.biomarkerId,
+      comparator: labResult.comparator,
       date: labPanel.date,
       profileId: labPanel.profileId,
     })
@@ -612,12 +646,15 @@ export async function updateResultValue(
     sex: prof?.sex ?? null,
     ageYears: ageYearsFrom(prof?.birthDate, new Date(`${row.date.slice(0, 10)}T00:00:00Z`)),
   };
+  // Omitting the comparator keeps the stored one; null makes it exact.
+  const comparator = patch.comparator !== undefined ? patch.comparator : row.comparator;
   const { unitNormalized, valueNormalized, outOfRange, flag } = normalizeResultValue(
     patch.value,
     patch.unit,
     bio,
     rangesByBiomarker.get(biomarkerId),
     ctx,
+    comparator,
   );
   await db
     .update(labResult)
@@ -625,6 +662,7 @@ export async function updateResultValue(
       biomarkerId,
       ...(biomarkerId !== row.biomarkerId ? { confidence: "manual" as const } : {}),
       value: patch.value,
+      comparator,
       unit: patch.unit,
       unitNormalized,
       valueNormalized,
@@ -882,6 +920,8 @@ export async function deletePanel(panelId: number) {
 export type SeriesPoint = {
   date: string;
   value: number;
+  /** Threshold operator ("<0.5"): `value` is the bound, not a measurement. */
+  comparator: Comparator | null;
   unit: string;
   outOfRange: boolean;
   flag: string | null;
@@ -900,6 +940,7 @@ export async function getBiomarkerSeries(
     .select({
       date: labPanel.date,
       value: sql<number>`coalesce(${labResult.valueNormalized}, ${labResult.value})`,
+      comparator: labResult.comparator,
       unit: sql<string>`coalesce(${labResult.unitNormalized}, ${labResult.unit})`,
       outOfRange: labResult.outOfRange,
       flag: labResult.flag,
@@ -925,6 +966,7 @@ export async function getLatestResults(profileId: number) {
       biomarkerId: labResult.biomarkerId,
       date: labPanel.date,
       value: sql<number>`coalesce(${labResult.valueNormalized}, ${labResult.value})`,
+      comparator: labResult.comparator,
       unit: sql<string>`coalesce(${labResult.unitNormalized}, ${labResult.unit})`,
       outOfRange: labResult.outOfRange,
       flag: labResult.flag,
@@ -968,6 +1010,7 @@ export async function getPanelChanges(panelId: number): Promise<PanelChange[]> {
       panelId: labPanel.id,
       date: labPanel.date,
       value: labResult.value,
+      comparator: labResult.comparator,
       unit: labResult.unit,
       valueNormalized: labResult.valueNormalized,
       unitNormalized: labResult.unitNormalized,
@@ -1032,6 +1075,7 @@ export async function getPanelShiftSeverities(profileId: number): Promise<Map<nu
       date: labPanel.date,
       biomarkerId: labResult.biomarkerId,
       value: labResult.value,
+      comparator: labResult.comparator,
       unit: labResult.unit,
       valueNormalized: labResult.valueNormalized,
       unitNormalized: labResult.unitNormalized,
@@ -1838,6 +1882,7 @@ export type DoctorReportPanel = { panel: LabPanel; results: ResultWithBiomarker[
 export type DoctorReportAbnormal = {
   biomarker: Biomarker;
   value: number;
+  comparator: Comparator | null;
   unit: string;
   flag: string | null;
   date: string;
@@ -1926,6 +1971,7 @@ export async function getDoctorReportData(
     abnormalLatest.push({
       biomarker: bio,
       value: r.value,
+      comparator: r.comparator,
       unit: r.unit,
       flag: r.flag,
       date: r.date,

@@ -24,7 +24,7 @@ import { SourceFileButton, SourcePageLink } from "@/components/app/SourceFile";
 import { useToast } from "@/components/app/Toast";
 import { useConfirm } from "@/components/app/Confirm";
 import { undoToastCaveat, type UndoCaveat } from "@/lib/undo-scope";
-import { convertToAlternateScale } from "@/lib/units";
+import { convertToAlternateScale, parseResultInput } from "@/lib/units";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Loading } from "@/components/app/Loading";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -53,7 +53,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn, formatDate, formatValue } from "@/lib/utils";
+import { cn, formatDate, formatResult, formatValue } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 /** Editable panel metadata, held as strings while the dialog is open. */
@@ -125,10 +125,8 @@ export function LabPanelDetail() {
     return { panel, results, changes, source, findings, profile };
   }, [panelId, profileId]);
 
-  const resultDraftValid =
-    resultDraft.valueText.trim() !== "" &&
-    Number.isFinite(Number(resultDraft.valueText)) &&
-    resultDraft.unit.trim() !== "";
+  const parsedResult = parseResultInput(resultDraft.valueText);
+  const resultDraftValid = parsedResult != null && resultDraft.unit.trim() !== "";
 
   const saveFinding = async () => {
     if (!editFinding || !editDraft.valueText.trim()) return;
@@ -161,9 +159,10 @@ export function LabPanelDetail() {
   };
 
   const saveResultValue = async () => {
-    if (!editResult || !resultDraftValid) return;
+    if (!editResult || !resultDraftValid || !parsedResult) return;
     await updateResultValue(editResult.id, {
-      value: Number(resultDraft.valueText),
+      value: parsedResult.value,
+      comparator: parsedResult.comparator,
       unit: resultDraft.unit.trim(),
     });
     setEditResult(null);
@@ -214,7 +213,10 @@ export function LabPanelDetail() {
     const resultInputs = results.map((r) => ({
       biomarkerId: r.biomarkerId,
       value: r.value,
+      comparator: r.comparator,
+      rawValueText: r.rawValueText,
       unit: r.unit,
+      labRefRangeText: r.labRefRangeText,
       rawLabel: r.rawLabel,
       sourcePage: r.sourcePage,
       confidence: r.confidence,
@@ -413,12 +415,25 @@ export function LabPanelDetail() {
                           </p>
                         </TableCell>
                         <TableCell numeric className="whitespace-nowrap">
-                          {formatValue(r.value)} {r.unit}
+                          <span
+                            className={cn(r.comparator && "underline decoration-dotted")}
+                            title={r.comparator ? t("labPanelDetail.thresholdHint") : undefined}
+                          >
+                            {formatResult(r.value, r.comparator)}
+                          </span>{" "}
+                          {r.unit}
                           {r.valueNormalized != null && r.unitNormalized !== r.unit && (
                             <p className="text-[11px] text-muted-foreground">
-                              {formatValue(r.valueNormalized)} {r.unitNormalized}
+                              {formatResult(r.valueNormalized, r.comparator)} {r.unitNormalized}
                             </p>
                           )}
+                          {r.rawValueText &&
+                            r.rawValueText.replace(/\s/g, "") !==
+                              formatResult(r.value, r.comparator) && (
+                              <p className="text-[11px] text-muted-foreground">
+                                {t("labPanelDetail.printedAs")}: {r.rawValueText}
+                              </p>
+                            )}
                         </TableCell>
                         <TableCell numeric>
                           {(() => {
@@ -457,8 +472,23 @@ export function LabPanelDetail() {
                                   refHigh: r.biomarker.refHigh,
                                   unit: r.biomarker.defaultUnit,
                                 };
-                            if (refLow == null && refHigh == null) return "—";
-                            return `${refLow != null ? formatValue(refLow) : ""}–${refHigh != null ? formatValue(refHigh) : ""} ${unit}`;
+                            const soma =
+                              refLow == null && refHigh == null
+                                ? "—"
+                                : `${refLow != null ? formatValue(refLow) : ""}–${refHigh != null ? formatValue(refHigh) : ""} ${unit}`;
+                            return (
+                              <>
+                                {soma}
+                                {r.labRefRangeText && (
+                                  <p
+                                    className="max-w-48 truncate text-[11px]"
+                                    title={`${t("labPanelDetail.labRangeHint")}\n${r.labRefRangeText}`}
+                                  >
+                                    {t("labPanelDetail.labRange")}: {r.labRefRangeText}
+                                  </p>
+                                )}
+                              </>
+                            );
                           })()}
                         </TableCell>
                         <TableCell>
@@ -479,7 +509,10 @@ export function LabPanelDetail() {
                                 aria-label={t("common.edit")}
                                 onClick={() => {
                                   setEditResult(r);
-                                  setResultDraft({ valueText: String(r.value), unit: r.unit });
+                                  setResultDraft({
+                                    valueText: formatResult(r.value, r.comparator, 6),
+                                    unit: r.unit,
+                                  });
                                 }}
                               >
                                 <Pencil />
@@ -663,8 +696,7 @@ export function LabPanelDetail() {
               </p>
               <Field label={t("labPanelDetail.tableColumns.value")}>
                 <Input
-                  type="number"
-                  step="any"
+                  inputMode="decimal"
                   value={resultDraft.valueText}
                   onChange={(e) => setResultDraft({ ...resultDraft, valueText: e.target.value })}
                 />

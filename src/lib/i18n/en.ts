@@ -1124,6 +1124,22 @@ export const en = {
     labRange: "lab",
     labRangeHint: "Reference range as printed by the lab. Flags use Soma's range.",
     printedAs: "printed",
+    addResult: "Add result",
+    addResultTitle: "Add result",
+    addResultDescription:
+      'Add a value the import missed. It is normalized and flagged like any other result. Keep the operator for a threshold: "<0.5".',
+    resultAddedToast: "Result added.",
+    duplicateResult:
+      "This panel already has a result for that biomarker. Edit that row instead, or pick another biomarker.",
+    addFinding: "Add finding",
+    addFindingTitle: "Add finding",
+    addFindingDescription:
+      "A result without a biomarker: a qualitative reading, a titre, or a marker you don't track.",
+    findingAddedToast: "Finding added.",
+    findingLabel: "Name as printed",
+    labRangeField: "Lab reference range (optional)",
+    reviewMappings: "Review mappings",
+    recheck: "re-check",
     editPanel: "Edit panel",
     editPanelTitle: "Edit panel",
     editPanelDescription:

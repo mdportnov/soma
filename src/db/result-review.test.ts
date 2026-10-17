@@ -3,8 +3,21 @@ import { readFileSync, readdirSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "./client";
-import { biomarker, biomarkerReferenceRange, labPanel, labResult, profile } from "./schema";
-import { updateResultValue, recomputeFlagsForProfile } from "./repos";
+import {
+  biomarker,
+  biomarkerReferenceRange,
+  labFinding,
+  labPanel,
+  labResult,
+  profile,
+} from "./schema";
+import {
+  addFindingToPanel,
+  addResultToPanel,
+  DuplicateResultError,
+  updateResultValue,
+  recomputeFlagsForProfile,
+} from "./repos";
 
 const state = vi.hoisted(() => ({ sqlite: null as DatabaseSync | null }));
 
@@ -36,7 +49,14 @@ beforeAll(() => {
 afterAll(() => state.sqlite?.close());
 
 beforeEach(async () => {
-  for (const table of [labResult, labPanel, biomarkerReferenceRange, biomarker, profile]) {
+  for (const table of [
+    labResult,
+    labFinding,
+    labPanel,
+    biomarkerReferenceRange,
+    biomarker,
+    profile,
+  ]) {
     await db.delete(table);
   }
   await db.insert(profile).values({ id: 1, name: "Review fixture", sex: "male" });
@@ -118,4 +138,60 @@ it("backfills supported unit spellings without changing source data or review st
   expect(result.rawLabel).toBe("Source label");
   expect(result.confidence).toBe("ai");
   expect(result.reviewedAt).toBeNull();
+});
+
+describe("correcting and extending a saved panel", () => {
+  it("refuses to remap a result onto a biomarker the panel already has", async () => {
+    await db
+      .insert(labResult)
+      .values({ id: 2, panelId: 1, biomarkerId: 2, value: 5, unit: "mmol/L" });
+    await expect(
+      updateResultValue(1, { value: 90, unit: "mg/dL", biomarkerId: 2 }),
+    ).rejects.toBeInstanceOf(DuplicateResultError);
+    const [result] = await db.select().from(labResult).where(eq(labResult.id, 1));
+    expect(result.biomarkerId).toBe(1);
+  });
+
+  it("appends a missed result, normalized, flagged and already reviewed", async () => {
+    const id = await addResultToPanel(1, {
+      biomarkerId: 2,
+      value: 90,
+      unit: "mg/dL",
+      labRefRangeText: "70-99",
+    });
+    const [result] = await db.select().from(labResult).where(eq(labResult.id, id));
+    expect(result.panelId).toBe(1);
+    expect(result.valueNormalized).toBeCloseTo(5, 1);
+    expect(result.flag).toBe("high");
+    expect(result.confidence).toBe("manual");
+    expect(result.reviewedAt).toBeTruthy();
+    expect(result.labRefRangeText).toBe("70-99");
+  });
+
+  it("keeps a threshold operator on an appended result", async () => {
+    const id = await addResultToPanel(1, {
+      biomarkerId: 2,
+      value: 9,
+      comparator: "<",
+      unit: "mmol/L",
+    });
+    const [result] = await db.select().from(labResult).where(eq(labResult.id, id));
+    expect(result.comparator).toBe("<");
+    expect(result.outOfRange).toBe(false);
+  });
+
+  it("refuses a second result for a biomarker the panel already has", async () => {
+    await expect(
+      addResultToPanel(1, { biomarkerId: 1, value: 3, unit: "mg/dL" }),
+    ).rejects.toBeInstanceOf(DuplicateResultError);
+    expect(await db.select().from(labResult)).toHaveLength(1);
+  });
+
+  it("appends a finding without touching the panel's other rows", async () => {
+    const id = await addFindingToPanel(1, { rawLabel: "HBsAg", valueText: "negative" });
+    const [finding] = await db.select().from(labFinding).where(eq(labFinding.id, id));
+    expect(finding.panelId).toBe(1);
+    expect(finding.valueText).toBe("negative");
+    expect(await db.select().from(labResult)).toHaveLength(1);
+  });
 });

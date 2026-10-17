@@ -625,6 +625,7 @@ export async function updateResultValue(
   const rows = await db
     .select({
       biomarkerId: labResult.biomarkerId,
+      panelId: labResult.panelId,
       comparator: labResult.comparator,
       date: labPanel.date,
       profileId: labPanel.profileId,
@@ -635,6 +636,10 @@ export async function updateResultValue(
   const row = rows[0];
   if (!row) return;
   const biomarkerId = patch.biomarkerId ?? row.biomarkerId;
+  if (biomarkerId !== row.biomarkerId) {
+    const taken = await findPanelResultFor(row.panelId, biomarkerId, resultId);
+    if (taken) throw new DuplicateResultError(biomarkerId, taken);
+  }
   const [bioRows, prof, rangesByBiomarker] = await Promise.all([
     db.select().from(biomarker).where(eq(biomarker.id, biomarkerId)),
     getProfile(row.profileId),
@@ -671,6 +676,76 @@ export async function updateResultValue(
       reviewedAt: new Date().toISOString(),
     })
     .where(eq(labResult.id, resultId));
+}
+
+/** A panel already holds a result for this biomarker — a second row would
+ *  double the point in every trend, so adding or remapping onto it is refused. */
+export class DuplicateResultError extends Error {
+  constructor(
+    readonly biomarkerId: number,
+    readonly existingResultId: number,
+  ) {
+    super(`This panel already has a result for biomarker ${biomarkerId}`);
+    this.name = "DuplicateResultError";
+  }
+}
+
+/** The result of `panelId` already mapped to `biomarkerId`, if any. */
+async function findPanelResultFor(
+  panelId: number,
+  biomarkerId: number,
+  exceptResultId?: number,
+): Promise<number | null> {
+  const rows = await db
+    .select({ id: labResult.id })
+    .from(labResult)
+    .where(and(eq(labResult.panelId, panelId), eq(labResult.biomarkerId, biomarkerId)));
+  return rows.find((r) => r.id !== exceptResultId)?.id ?? null;
+}
+
+/**
+ * Adds one result to an already-stored panel — a row the import missed or the
+ * user typed in later. Normalized and flagged exactly like an imported row;
+ * entered by hand it is author-trusted, so it starts reviewed unless the
+ * caller says otherwise. Refuses a biomarker the panel already has.
+ */
+export async function addResultToPanel(panelId: number, input: ResultInput): Promise<number> {
+  const panel = await getPanel(panelId);
+  if (!panel) throw new Error(`Panel ${panelId} not found`);
+  const taken = await findPanelResultFor(panelId, input.biomarkerId);
+  if (taken) throw new DuplicateResultError(input.biomarkerId, taken);
+  const bioRows = await db.select().from(biomarker).where(eq(biomarker.id, input.biomarkerId));
+  if (!bioRows[0]) throw new Error("Biomarker not found");
+  markSearchIndexStale();
+  const [row] = await buildResultRows(
+    { ...panel, importMethod: "manual" },
+    [{ ...input, confidence: input.confidence ?? "manual" }],
+    new Map([[bioRows[0].id, bioRows[0]]]),
+  );
+  const [inserted] = await db
+    .insert(labResult)
+    .values({ ...row, panelId })
+    .returning({ id: labResult.id });
+  return inserted.id;
+}
+
+/**
+ * Adds one finding to an already-stored panel. Unlike `createPanelFindings`
+ * (the second step of an import), a failure here must never take the panel
+ * down with it — the panel predates this call and owns other data.
+ */
+export async function addFindingToPanel(
+  panelId: number,
+  finding: Omit<NewLabFinding, "panelId" | "createdAt">,
+): Promise<number> {
+  const panel = await getPanel(panelId);
+  if (!panel) throw new Error(`Panel ${panelId} not found`);
+  markSearchIndexStale();
+  const [inserted] = await db
+    .insert(labFinding)
+    .values({ ...finding, panelId })
+    .returning({ id: labFinding.id });
+  return inserted.id;
 }
 
 // ── duplicate detection (re-import guard) ──────────────────────────────────

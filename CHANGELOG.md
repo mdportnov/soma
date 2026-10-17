@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Threshold lab results keep their operator.** A report value like "<5.6"
+  used to be saved as an exact 5.6 — the extraction prompt told the model to
+  drop the "<". Results now store the operator and the value as printed, show
+  "<0.5" everywhere (panel, review, lists, comparison, CSV, doctor PDF, the
+  assistant and the MCP server), draw hollow on the trend chart, and are flagged
+  only when even the bound is out of range. A threshold is never treated as a
+  change from or to an exact value. The operator can be corrected on the import
+  review screen and in the result editor ("<0.5", "≥90").
+- **The lab's own reference range is kept.** The range printed next to each
+  result is stored and shown beside Soma's range, including risk-category
+  ranges. Flags still use Soma's range, one policy across labs.
+- **Urinalysis rows land on urine markers.** On Russian-language reports a bare
+  "Глюкоза" or "Лейкоциты" under the urine header was matched to blood glucose
+  or the blood white-cell count. Rows are now tagged with their specimen and
+  urine rows matched inside urinalysis only, marked for review.
+- **Fewer "unit?" rows.** Field-of-view units ("в п/зр", "/HPF"), eGFR written
+  "мл/мин/1,73кв.м", unitless specific gravity, and urine glucose and ketones
+  in mmol/L now convert. eGFR (CKD-EPI), relative density, ketone bodies and
+  squamous epithelium are recognised.
+
 ## [0.11.0] — 2026-10-05
 
 ### Added
